@@ -12,7 +12,7 @@ export class SplitScreenRenderer {
   constructor(canvas, hudRoot) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2)); // phones: cap for performance
     this.renderer.autoClear = false;
     this.hud = new HUD(hudRoot);
     this.cams = [];

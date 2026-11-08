@@ -244,6 +244,7 @@ export class RaceSession {
         }
       }
     }
+    if (this.input) this.input.autoGas = this.state === 'RACING';
     this.rank();
     for (const k of this.karts) k.update(dt, ctx);
     this.items.update(dt);

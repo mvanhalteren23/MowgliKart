@@ -23,7 +23,30 @@ export class InputManager {
     addEventListener('keydown', (e) => this._down(e));
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
+    this.autoGas = false; this.touch = null;
+    this._initTouch();
   }
+
+  /** On-screen controls for phones/tablets (player 1). Gas is automatic once the race is running (not during the push-start). */
+  _initTouch() {
+    if (!(('ontouchstart' in window) || navigator.maxTouchPoints > 0)) return;
+    document.body.classList.add('touch');
+    const held = { left: false, right: false, gas: false, brake: false, hop: false, item: false, weapon: false, shield: false };
+    const root = document.createElement('div'); root.id = 'touch'; root.className = 'hidden';
+    const defs = [['left', '◀', 'steer l'], ['right', '▶', 'steer r'], ['hop', 'DRIFT<small>hop · trick</small>', 'act big'], ['gas', 'GAS', 'act mid'], ['brake', 'BRAKE', 'act small'],
+      ['item', '🎁', 'act sm2 i1'], ['weapon', '⚔', 'act sm2 i2'], ['shield', '🛡', 'act sm2 i3']];
+    for (const [name, label, cls] of defs) {
+      const b = document.createElement('button'); b.className = 'tb ' + cls; b.innerHTML = label; b.dataset.t = name; b.setAttribute('aria-label', name);
+      const down = (e) => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); if (!held[name] && this.latch[0][name] !== undefined) this.latch[0][name] = true; held[name] = true; b.classList.add('on'); };
+      const up = (e) => { e.preventDefault(); held[name] = false; b.classList.remove('on'); };
+      b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+      root.appendChild(b);
+    }
+    document.body.appendChild(root);
+    root.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.touch = { held, root };
+  }
+  showTouch(on) { this.touch?.root.classList.toggle('hidden', !on); }
 
   _down(e) {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Slash', 'Enter'].includes(e.code) && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLSelectElement)) {
@@ -75,6 +98,13 @@ export class InputManager {
       brake = Math.max(brake, gp.buttons[6]?.value ?? 0);
       for (const a of ACTIONS) hold[a] = hold[a] || this.padHeld[i][a];
     }
+    if (i === 0 && this.touch) {
+      const t = this.touch.held;
+      steer += (t.right ? 1 : 0) - (t.left ? 1 : 0);
+      throttle = Math.max(throttle, t.gas || (this.autoGas && !t.brake) ? 1 : 0);
+      brake = Math.max(brake, t.brake ? 1 : 0);
+      for (const a of ACTIONS) hold[a] = hold[a] || t[a];
+    }
     out.steer = Math.max(-1, Math.min(1, steer));
     out.throttle = throttle; out.brake = brake;
     for (const a of ACTIONS) {
@@ -87,6 +117,7 @@ export class InputManager {
   /** Peek without consuming (HUD / start-sequence rhythm button). */
   throttleHeld(i) {
     const m = KEYMAPS[i], gp = this.pads()[i];
+    if (i === 0 && this.touch?.held.gas) return true;
     return (m && this.keys.has(m.up)) || (gp && ((gp.buttons[7]?.value ?? 0) > 0.3 || gp.buttons[0]?.pressed)) || false;
   }
 }

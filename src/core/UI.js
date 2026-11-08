@@ -80,7 +80,7 @@ export class UI {
       const cardHtml = (c, k, h, i) => `<button class="card ${c.category} ${chosen.get(h.id) === k ? 'picked' : sel.get(h.id) === k && !chosen.has(h.id) ? 'focus' : ''} ${chosen.has(h.id) && chosen.get(h.id) !== k ? 'dim' : ''}" data-h="${h.id}" data-k="${k}">
           <div class="chip">${CAT[c.category][1]}</div><div class="cat">${CAT[c.category][0]}:</div><h3>${c.name}</h3>
           <div class="big">${c.icon}</div><p>${c.desc}</p><div class="bars">${bars(c.id)}</div>
-          <div class="tagline">${c.tag}</div>${chosen.get(h.id) === k ? '<div class="sel">SELECTED</div>' : ''}
+          <div class="tagline">${c.tag}</div>${chosen.get(h.id) === k ? '<div class="selbadge">SELECTED</div>' : ''}
           <kbd>${i < 2 ? (i ? ['8', '9', '0'][k] : String(k + 1)) : '◀ ▶ + A'}</kbd></button>`;
       const build = (h) => `${h.stats.map((id) => STAT_BOOSTS[id].icon).join(' ') || '—'} &nbsp;|&nbsp; ${h.weapon ? WEAPONS[h.weapon.id].icon + ' Lv' + h.weapon.level : 'no weapon'} &nbsp;|&nbsp; ${h.shield ? SHIELDS[h.shield.id].icon + ' Lv' + h.shield.level : 'no shield'}`;
       const tracker = `<div class="tracker"><div class="tl">4-RACE CIRCUIT<br>PROGRESS TRACKER</div><div class="nodes">${TRACK_ORDER.map((id, k) => `<div class="node ${k < circuit.stage ? 'done' : k === circuit.stage ? 'cur' : 'lock'}"><i>${k < circuit.stage ? '✔' : k === circuit.stage ? k + 1 : '🔒'}</i><b>${TRACKS[id].name.toUpperCase()}</b>${k === circuit.stage ? `<small>STAGE ${k + 1}</small>` : ''}</div>`).join('<div class="link"></div>')}</div>

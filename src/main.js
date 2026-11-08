@@ -26,6 +26,8 @@ const ui = new UI(document.getElementById('ui'), input);
 const pauseEl = document.getElementById('pause');
 const game = window.__game = { renderer, audio, session: null, circuit: null, errors: [] };
 addEventListener('error', (e) => game.errors.push(String(e.message)));
+const goFullscreen = () => { try { if (document.fullscreenElement == null) document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {}); screen.orientation?.lock?.('landscape').catch(() => {}); } catch { /* optional */ } };
+if (matchMedia('(pointer: coarse)').matches) addEventListener('pointerdown', goFullscreen, { once: true });
 let audioLoaded = false;
 for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { audio.ensure(); if (!audioLoaded && audio.ctx) { audioLoaded = true; audio.loadFiles(assets); } }, { once: false });
 
@@ -33,6 +35,7 @@ for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { audio.
 function playRace(session, humans) {
   return new Promise((resolve) => {
     renderer.setPlayers(Math.max(1, humans));
+    document.body.classList.add('racing'); input.showTouch(true);
     session.audio = audio;
     audio.setFocus(session.humans[0] ?? null);
     let finishedAt = null;
@@ -44,6 +47,7 @@ function playRace(session, humans) {
         renderer.render(session, dt || 1 / 60);
         audio.updateEngine(session.humans[0], session.state === 'RACING');
         if (session.done) {
+          input.showTouch(false); document.body.classList.remove('racing');
           finishedAt ??= performance.now();
           if (performance.now() - finishedAt > (AUTO ? 300 : 1800)) { loop.stop(); audio.updateEngine(null, false); resolve(session.results); }
         }

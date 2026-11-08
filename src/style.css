@@ -105,7 +105,7 @@ details { margin-top: 14px; } summary { cursor: pointer; opacity: .85; } .ctl { 
 .card .big { font-size: 54px; line-height: 1.1; filter: drop-shadow(0 4px 4px #0008); } .card p { margin: 2px 0 6px; font-size: 11px; opacity: .85; line-height: 1.25; min-height: 2.6em; }
 .bars { display: grid; gap: 3px; background: #0007; border-radius: 8px; padding: 5px 7px; } .bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; font-weight: 800; } .bar i { display: flex; gap: 2px; } .bar u { width: 13px; height: 8px; background: #ffffff25; border-radius: 2px; } .bar u.on { background: var(--cc); box-shadow: 0 0 5px var(--cc); }
 .tagline { font-size: 10px; opacity: .75; margin-top: 5px; letter-spacing: .04em; }
-.sel { position: absolute; right: -6px; top: 36%; transform: rotate(-8deg); background: var(--cc); color: #fff; font-weight: 900; font-size: 15px; padding: 1px 10px; border-radius: 6px; border: 2px solid #fff; text-shadow: 0 2px 0 #0008; }
+.selbadge { position: absolute; right: -6px; top: 36%; transform: rotate(-8deg); background: var(--cc); color: #fff; font-weight: 900; font-size: 15px; padding: 1px 10px; border-radius: 6px; border: 2px solid #fff; text-shadow: 0 2px 0 #0008; }
 .card kbd { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); font-size: 11px; background: #000a; border-radius: 6px; padding: 1px 8px; }
 .tracker { display: flex; align-items: center; justify-content: center; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
 .tracker .tl { font-size: 12px; font-weight: 900; line-height: 1.15; text-shadow: 0 2px 0 #000; } .nodes { display: flex; align-items: center; } .link { width: 70px; height: 5px; background: #3a4660; } .node.done + .link { background: #ffd23a; }
@@ -151,3 +151,22 @@ details { margin-top: 14px; } summary { cursor: pointer; opacity: .85; } .ctl { 
 .loading { text-align: center; } .spin { width: 54px; height: 54px; border: 6px solid #fff3; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 12px; } @keyframes spin { to { transform: rotate(360deg); } }
 #pause { position: fixed; inset: 0; display: grid; place-items: center; font-size: 6vw; font-weight: 900; background: #0008; font-style: italic; }
 @media (max-width: 760px) { .draftgrid.n2, .draftgrid.n3, .draftgrid.n4 { grid-template-columns: 1fr; } .card .big { font-size: 34px; } .card p, .tagline { display: none; } }
+
+/* ---------- touch / phone ---------- */
+html, body { touch-action: none; overscroll-behavior: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+#ui { touch-action: pan-y; }
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+.tb { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; border: .6vmin solid #fff9; background: #101830aa; color: #fff; font: 900 4.2vmin/1 'Trebuchet MS', system-ui, sans-serif; backdrop-filter: blur(2px); display: grid; place-items: center; text-align: center; padding: 0; box-shadow: 0 .8vmin 1.6vmin #0007; }
+.tb small { display: block; font-size: 1.9vmin; opacity: .85; font-weight: 700; }
+.tb.on { background: #ffd23acc; color: #111; transform: scale(.94); }
+.tb.steer { width: 24vmin; height: 24vmin; bottom: 5vmin; font-size: 9vmin; border-radius: 6vmin; } .tb.steer.l { left: 3vmin; } .tb.steer.r { left: 30vmin; }
+.tb.big { width: 24vmin; height: 24vmin; right: 3vmin; bottom: 5vmin; background: #ff3d71cc; } .tb.mid { width: 17vmin; height: 17vmin; right: 30vmin; bottom: 4vmin; background: #22c55ecc; } .tb.small { width: 12vmin; height: 12vmin; right: 31vmin; bottom: 24vmin; font-size: 2.6vmin; background: #ef4444cc; }
+.tb.sm2 { width: 13vmin; height: 13vmin; bottom: 32vmin; font-size: 6vmin; } .tb.i1 { right: 3vmin; } .tb.i2 { right: 17vmin; } .tb.i3 { right: 31vmin; bottom: 38vmin; display: none; }
+body.touch .tb.i3 { display: grid; right: 45vmin; bottom: 32vmin; }
+body.touch .dial { right: auto; left: 50%; bottom: auto; top: 1.5cqh; transform: translateX(-50%); width: 24cqmin; }
+body.touch .hud-bc { bottom: 1cqh; gap: 1cqmin; } body.touch .slot { width: 10cqmin; height: 10cqmin; } body.touch .slot .ic { font-size: 6cqmin; line-height: 10cqmin; }
+body.touch .hud-bl { display: none; }
+#rotate { display: none; position: fixed; inset: 0; z-index: 50; background: #0e1220f2; place-items: center; text-align: center; font-size: 22px; font-weight: 800; }
+#rotate div { font-size: 90px; } #rotate p { font-size: 20px; }
+@media (orientation: portrait) { body.touch.racing #rotate { display: grid; } }
+@media (max-height: 520px) { #ui { align-items: start; } .panel { padding: 12px 14px; } h1 { font-size: 34px; } .go { padding: 8px; font-size: 17px; } .card .big { font-size: 30px; } .card p, .tagline { display: none; } .card h3 { font-size: 12px; } }
