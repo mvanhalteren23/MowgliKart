@@ -46,6 +46,11 @@ scripts/mac/pico.sh launch      # start the client (it also becomes the Home lau
 `pico.sh status | stop | reboot | logs [serial]` are also available (`status` shows installed / running / battery per headset).
 
 ## 4. Run an event
+Two ways to start a game, both supported at the same time:
+- **Operator picks:** tick the headsets + **P1**, choose the game, **LAUNCH**.
+- **Player 1 picks (from their headset):** tick the headsets + **P1**, click **Form group (P1 picks)**. Player 1 sees a menu in the lobby: touchpad up/down to choose the game/map, **trigger** to start it for the whole group. After a game, Player 1's *Return To Hub* button brings the group back to the lobby so they can pick the next map.
+
+Step by step:
 1. `scripts/mac/run_master.sh` (or open the .app). Click **Allow** for incoming connections and **Local Network** access.
    It starts the server, LAN discovery and the content server automatically.
 2. Headsets appear in the list within a few seconds with battery and state.
@@ -67,3 +72,6 @@ scripts/mac/pico.sh launch      # start the client (it also becomes the Home lau
 | "Discovery advertising failed" | A second master is already running (UDP 47777 in use). |
 | Catalog download 404 | File not under `~/MowgliKart/ServerData/Android/`; open `http://<mac-ip>:8080/Android/<file>` in a browser to test. |
 | Reboot/Shutdown ignored | ToBService not bound on that headset (needs PUI enterprise APIs); see log for `ToBService bound`. |
+
+## Tests
+`docs/TESTING.md` explains the automated test-suites (`bash tests/run_logic_tests.sh`, `bash tests/run_net_tests.sh`) and the first-run hardware checklist.

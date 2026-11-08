@@ -33,6 +33,14 @@ namespace LegacyVR.KartRacing.Networking
         [SyncVar] public bool IsPlayerOneLeader;
         [SyncVar] public int AssignedGridSlot;
 
+        /// <summary>Game modules Player 1 may choose from in the lobby menu (set by the Mac via TargetSetLobbyRole).</summary>
+        public string[] AvailableModuleIds { get; private set; } = new string[0];
+
+        /// <summary>True while this headset sits in the lobby and belongs to a group (waiting for Player 1 to pick).</summary>
+        public bool IsInLobbyGroup => CurrentSessionId >= 0 && !_hasLoadedAddressableScene && !_isTransitioningScene;
+
+        public bool IsTransitioning => _isTransitioningScene;
+
         private readonly HashSet<string> _loadedCatalogUrls = new HashSet<string>();
         private AsyncOperationHandle<SceneInstance> _currentSceneHandle;
         private bool _hasLoadedAddressableScene;
@@ -235,6 +243,30 @@ namespace LegacyVR.KartRacing.Networking
             }
         }
 
+        /// <summary>
+        /// The Mac assigns (or clears) this headset's group + Player 1 role while it is in the lobby.
+        /// </summary>
+        [TargetRpc]
+        public void TargetSetLobbyRole(NetworkConnection target, int sessionId, bool isLeader, string[] gameModuleIds)
+        {
+            CurrentSessionId = sessionId;
+            IsPlayerOneLeader = isLeader;
+            AvailableModuleIds = gameModuleIds ?? new string[0];
+        }
+
+        /// <summary>Player 1 chooses the game / map for the whole group from the lobby menu.</summary>
+        public void RequestLaunch(string gameModuleId)
+        {
+            if (!isLocalPlayer || !IsPlayerOneLeader || CurrentSessionId < 0 || string.IsNullOrEmpty(gameModuleId))
+                return;
+
+            NetworkClient.Send(new LeaderLaunchRequestMessage
+            {
+                SessionId = CurrentSessionId,
+                GameModuleId = gameModuleId
+            });
+        }
+
         public void RequestLeaderSessionCommand(byte commandType)
         {
             if (!isLocalPlayer || !IsPlayerOneLeader)
@@ -272,8 +304,8 @@ namespace LegacyVR.KartRacing.Networking
                 Pico3DoFKartCameraRig.Instance.BindToLocalKart(null);
             }
 
-            CurrentSessionId = -1;
-            IsPlayerOneLeader = false;
+            // CurrentSessionId / IsPlayerOneLeader are deliberately kept: the group stays together in the lobby and the
+            // Mac re-sends the role (TargetSetLobbyRole) right after this call.
 
             AsyncOperation hubLoad = SceneManager.LoadSceneAsync(HubSceneName, LoadSceneMode.Single);
             while (hubLoad != null && !hubLoad.isDone)

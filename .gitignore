@@ -11,3 +11,5 @@
 *.aab
 .vs/
 .idea/
+bin/
+obj/

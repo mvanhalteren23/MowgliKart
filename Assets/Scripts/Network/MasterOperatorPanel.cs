@@ -208,6 +208,11 @@ namespace LegacyVR.KartRacing.Networking
             GUILayout.FlexibleSpace();
 
             GUI.enabled = NetworkServer.active && _selectedMacs.Count > 0;
+            if (GUILayout.Button("Form group (P1 picks)", GUILayout.Width(170), GUILayout.Height(28)))
+            {
+                FormGroup(manager);
+            }
+
             if (GUILayout.Button("LAUNCH", GUILayout.Width(120), GUILayout.Height(28)))
             {
                 Launch(manager, modules[_selectedModuleIndex]);
@@ -215,6 +220,25 @@ namespace LegacyVR.KartRacing.Networking
             GUI.enabled = true;
 
             GUILayout.EndHorizontal();
+        }
+
+        /// <summary>Puts the ticked headsets in a group without starting a game; Player 1 then chooses the game from their headset.</summary>
+        private void FormGroup(MasterKartNetworkManager manager)
+        {
+            if (!int.TryParse(_sessionIdText, out int sessionId) || sessionId < 0)
+            {
+                _status = "Session ID must be a non-negative number.";
+                return;
+            }
+
+            List<string> macs = _selectedMacs.OrderBy(m => m, System.StringComparer.OrdinalIgnoreCase).ToList();
+            string leader = _selectedMacs.Contains(_leaderMac) ? _leaderMac : macs[0];
+
+            manager.FormLobbyGroup(sessionId, macs, leader);
+            _status = $"Group {sessionId} formed with {macs.Count} headset(s); Player 1 ({leader}) picks the game.";
+
+            nextSessionId = sessionId + 1;
+            _sessionIdText = nextSessionId.ToString();
         }
 
         private void Launch(MasterKartNetworkManager manager, GameModuleDescriptor module)
@@ -306,10 +330,16 @@ namespace LegacyVR.KartRacing.Networking
                 GUILayout.BeginHorizontal();
                 GUILayout.Label($"  Session {s.SessionId}: {s.GameModuleId} | {s.MemberMacAddresses.Count} headsets | avatars {s.SpawnedSessionAvatars.Count} | leader {s.LeaderMacAddress}");
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Return to hub", GUILayout.Width(110)))
+                if (GUILayout.Button("Group to lobby", GUILayout.Width(110)))
                 {
                     manager.ReturnSessionToHub(s.SessionId);
-                    _status = $"Session {s.SessionId} returned to hub.";
+                    _status = $"Session {s.SessionId} returned to the lobby (group kept; Player 1 can pick again).";
+                }
+
+                if (GUILayout.Button("Disband", GUILayout.Width(80)))
+                {
+                    manager.DisbandSession(s.SessionId);
+                    _status = $"Session {s.SessionId} disbanded.";
                 }
                 GUILayout.EndHorizontal();
             }

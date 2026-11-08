@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main, ccr-ae304029-0cau81]
-    paths: ['Assets/**', 'Packages/**', 'ProjectSettings/**', 'scripts/ci/**', '.github/workflows/build.yml']
+    paths: ['Assets/**', 'Packages/**', 'ProjectSettings/**', 'scripts/ci/**', 'tests/**', '.github/workflows/build.yml']
 
 concurrency:
   group: build-${{ github.ref }}
@@ -23,10 +23,23 @@ jobs:
           mcs -out:/tmp/picochecks.exe -r:System.Xml.dll scripts/ci/PicoChecksCli.cs Assets/Editor/PicoProjectChecks.cs
           mono /tmp/picochecks.exe "$GITHUB_WORKSPACE"
 
+  # No Unity licence needed: runs the project's real scripts against in-memory Unity/Mirror/Pico fakes (257 checks) and
+  # Mirror's real KCP transport with 8 clients over real UDP sockets.
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mono compiler
+        run: sudo apt-get update && sudo apt-get install -y mono-mcs mono-runtime libmono-system-core4.0-cil libmono-system-xml4.0-cil
+      - name: Logic tests (Mac server, headset connect, Player 1, discovery, kiosk, camera, operator panel)
+        run: bash tests/run_logic_tests.sh
+      - name: Real-socket KCP test (1 server + 8 clients)
+        run: bash tests/run_net_tests.sh
+
   # Needs repository secrets UNITY_LICENSE (contents of the .ulf), UNITY_EMAIL, UNITY_PASSWORD.
   # Without them the job still passes and prints how to enable it.
   build:
-    needs: preflight
+    needs: [preflight, tests]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

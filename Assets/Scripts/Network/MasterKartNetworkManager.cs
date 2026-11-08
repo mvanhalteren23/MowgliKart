@@ -50,6 +50,8 @@ namespace LegacyVR.KartRacing.Networking
         public KartClientDispatcher Dispatcher;
         public NetworkIdentity SpawnedAvatar;
         public double LastSeenRealtime;
+        /// <summary>Set when a headset that already belonged to a group re-registers (Wi-Fi blip); cleared once its state is re-sent.</summary>
+        public bool NeedsResync;
     }
 
     [Serializable]
@@ -222,6 +224,7 @@ namespace LegacyVR.KartRacing.Networking
             NetworkServer.RegisterHandler<ClientSceneReadyMessage>(OnServerReceiveClientSceneReady, false);
             NetworkServer.RegisterHandler<LeaderSessionCommandMessage>(OnServerReceiveLeaderCommand, false);
             NetworkServer.RegisterHandler<DeviceStatusMessage>(OnServerReceiveDeviceStatus, false);
+            NetworkServer.RegisterHandler<LeaderLaunchRequestMessage>(OnServerReceiveLeaderLaunch, false);
 
             Debug.Log($"[MasterServer] Started for up to {maxConnections} headsets at {sendRate} Hz tick rate. Registered Game Modules: {_modulesById.Count}");
         }
@@ -242,6 +245,7 @@ namespace LegacyVR.KartRacing.Networking
             if (_registryByConnId.TryGetValue(conn.connectionId, out RegisteredHeadsetRecord record))
             {
                 record.Dispatcher = dispatcher;
+                TryResyncReturningHeadset(record);
             }
         }
 
@@ -249,31 +253,90 @@ namespace LegacyVR.KartRacing.Networking
         {
             if (_registryByConnId.TryGetValue(conn.connectionId, out RegisteredHeadsetRecord record))
             {
-                Debug.Log($"[MasterServer] Headset Disconnected: MAC={record.MacAddress}, SN={record.SerialNumber}");
-
-                // A re-registered headset may already own a newer record under the same MAC; only drop our own.
-                if (_registryByMac.TryGetValue(record.MacAddress, out RegisteredHeadsetRecord current) && current == record)
-                {
-                    _registryByMac.Remove(record.MacAddress);
-                }
-
                 _registryByConnId.Remove(conn.connectionId);
-                OnHeadsetDisconnected?.Invoke(record.MacAddress);
+
+                if (record.ConnectionId != conn.connectionId)
+                {
+                    // A Wi-Fi blip: the headset already re-registered on a NEW connection and this is the old socket
+                    // finally timing out. The record belongs to the live connection, so it must stay.
+                    Debug.Log($"[MasterServer] Stale connection {conn.connectionId} closed for MAC={record.MacAddress}; headset is already back on connection {record.ConnectionId}.");
+                }
+                else
+                {
+                    Debug.Log($"[MasterServer] Headset Disconnected: MAC={record.MacAddress}, SN={record.SerialNumber}");
+
+                    if (_registryByMac.TryGetValue(record.MacAddress, out RegisteredHeadsetRecord current) && current == record)
+                    {
+                        _registryByMac.Remove(record.MacAddress);
+                    }
+
+                    OnHeadsetDisconnected?.Invoke(record.MacAddress);
+                }
             }
 
             base.OnServerDisconnect(conn);
         }
 
+        /// <summary>
+        /// A headset that reconnected (new player object on its side) lost its lobby role / game scene state.
+        /// In the lobby: re-send the group + Player 1 role. If it was mid-game its kart was destroyed with the old
+        /// connection, so send it back to the lobby; the group is kept and Player 1 can relaunch.
+        /// </summary>
+        private void TryResyncReturningHeadset(RegisteredHeadsetRecord record)
+        {
+            if (!record.NeedsResync || record.Dispatcher == null || record.Connection == null)
+                return;
+
+            record.NeedsResync = false;
+
+            if (!_activeSessions.ContainsKey(record.AssignedSessionId))
+            {
+                record.AssignedSessionId = -1;
+                record.IsPlayerOneLeader = false;
+                return;
+            }
+
+            if (record.IsSceneLoadedAndReady)
+            {
+                DestroyHeadsetAvatar(record);
+                record.IsSceneLoadedAndReady = false;
+                record.AssignedGameModuleId = "Hub";
+                record.ActiveSceneKey = "HubScene";
+                record.Dispatcher.TargetReturnToHub(record.Connection);
+            }
+
+            SendLobbyRole(record);
+            Debug.Log($"[MasterServer] Restored group state for reconnected headset {record.MacAddress} (session {record.AssignedSessionId}, leader={record.IsPlayerOneLeader}).");
+        }
+
+        /// <summary>
+        /// Android 6+ hides the real Wi-Fi MAC (02:00:00:00:00:00) and some ROMs return nothing, so two headsets could
+        /// otherwise collapse into ONE registry record. Falls back to the serial number, then to the connection id.
+        /// </summary>
+        public static string BuildHeadsetKey(string mac, string serial, int connectionId)
+        {
+            string m = string.IsNullOrWhiteSpace(mac) ? string.Empty : mac.Trim().ToUpperInvariant();
+            bool bogus = m.Length == 0 || m == "UNKNOWN_MAC" || m == "02:00:00:00:00:00" || m == "00:00:00:00:00:00";
+            if (!bogus) return m;
+
+            if (!string.IsNullOrWhiteSpace(serial)) return "SN_" + serial.Trim().ToUpperInvariant();
+            return $"CONN_{connectionId}";
+        }
+
         private void OnServerReceiveDeviceRegistration(NetworkConnectionToClient conn, DeviceRegistrationMessage msg)
         {
-            string macKey = string.IsNullOrWhiteSpace(msg.MacAddress)
-                ? $"CONN_{conn.connectionId}"
-                : msg.MacAddress.Trim().ToUpperInvariant();
+            string macKey = BuildHeadsetKey(msg.MacAddress, msg.SerialNumber, conn.connectionId);
 
+            bool returning = false;
             if (!_registryByMac.TryGetValue(macKey, out RegisteredHeadsetRecord record))
             {
                 record = new RegisteredHeadsetRecord();
                 _registryByMac[macKey] = record;
+            }
+            else
+            {
+                // Same headset registering again (reconnect): remember if it was part of a group so its state can be restored.
+                returning = record.AssignedSessionId >= 0;
             }
 
             record.ConnectionId = conn.connectionId;
@@ -285,12 +348,12 @@ namespace LegacyVR.KartRacing.Networking
             record.ActiveSceneKey = msg.CurrentLoadedSceneKey;
             record.LastSeenRealtime = Time.realtimeSinceStartupAsDouble;
 
-            if (conn.identity != null)
-            {
-                record.Dispatcher = conn.identity.GetComponent<KartClientDispatcher>();
-            }
+            // Never keep the previous connection's dispatcher: its TargetRpcs would go to a dead player object.
+            record.Dispatcher = conn.identity != null ? conn.identity.GetComponent<KartClientDispatcher>() : null;
+            if (returning) record.NeedsResync = true;
 
             _registryByConnId[conn.connectionId] = record;
+            TryResyncReturningHeadset(record);
 
             Debug.Log($"[MasterServer] Registered Headset #{_registryByMac.Count}/{MaxHeadsets} | MAC={record.MacAddress} | SN={record.SerialNumber} | Model={record.DeviceModel} | Battery={record.BatteryPercent}%");
             OnHeadsetRegistered?.Invoke(record);
@@ -409,6 +472,8 @@ namespace LegacyVR.KartRacing.Networking
                     continue;
                 }
 
+                RemoveFromOtherSessions(mac, sessionId);
+
                 bool isLeader = string.Equals(mac, session.LeaderMacAddress, StringComparison.OrdinalIgnoreCase);
                 int gridSlot = i;
 
@@ -458,8 +523,107 @@ namespace LegacyVR.KartRacing.Networking
         }
 
         /// <summary>
-        /// Sends every headset of a session back to the always-resident HubScene and clears its avatars.
-        /// Triggered from the operator panel or by the Player 1 "Return To Hub" button.
+        /// Forms a group in the lobby WITHOUT launching a game. Player 1 then picks the game / map from the lobby menu
+        /// on their own headset (LeaderLaunchRequestMessage). The operator can still launch from the Mac as well.
+        /// </summary>
+        [Server]
+        public void FormLobbyGroup(int sessionId, List<string> selectedMacAddresses, string leaderMacAddress)
+        {
+            if (selectedMacAddresses == null || selectedMacAddresses.Count == 0)
+                return;
+
+            if (_activeSessions.TryGetValue(sessionId, out RaceSessionGroup previous))
+            {
+                DestroySessionAvatars(previous);
+            }
+
+            string leader = string.IsNullOrWhiteSpace(leaderMacAddress)
+                ? selectedMacAddresses[0].Trim().ToUpperInvariant()
+                : leaderMacAddress.Trim().ToUpperInvariant();
+
+            var session = new RaceSessionGroup
+            {
+                SessionId = sessionId,
+                GameModuleId = "Hub",
+                AddressableSceneKey = string.Empty,
+                LeaderMacAddress = leader,
+                MemberMacAddresses = new List<string>(selectedMacAddresses.Count)
+            };
+
+            _activeSessions[sessionId] = session;
+
+            for (int i = 0; i < selectedMacAddresses.Count; i++)
+            {
+                string mac = selectedMacAddresses[i].Trim().ToUpperInvariant();
+                if (!_registryByMac.TryGetValue(mac, out RegisteredHeadsetRecord record) || record.Connection == null)
+                    continue;
+
+                RemoveFromOtherSessions(mac, sessionId);
+                DestroyHeadsetAvatar(record);
+
+                record.AssignedSessionId = sessionId;
+                record.AssignedGameModuleId = "Hub";
+                record.IsPlayerOneLeader = string.Equals(mac, leader, StringComparison.OrdinalIgnoreCase);
+                record.AssignedGridSlot = i;
+                record.IsSceneLoadedAndReady = false;
+                session.MemberMacAddresses.Add(mac);
+
+                SendLobbyRole(record);
+            }
+        }
+
+        private string[] ModuleIds()
+        {
+            var ids = new List<string>(_modulesById.Count);
+            foreach (GameModuleDescriptor m in registeredGameModules)
+            {
+                if (m != null && !string.IsNullOrWhiteSpace(m.GameModuleId)) ids.Add(m.GameModuleId.Trim());
+            }
+            return ids.ToArray();
+        }
+
+        [Server]
+        private void SendLobbyRole(RegisteredHeadsetRecord record)
+        {
+            if (record.Dispatcher != null && record.Connection != null)
+            {
+                record.Dispatcher.TargetSetLobbyRole(record.Connection, record.AssignedSessionId, record.IsPlayerOneLeader, ModuleIds());
+            }
+        }
+
+        /// <summary>
+        /// A headset can only belong to one group: drop it from any other group's member list, and forget groups that
+        /// end up with nobody in them (otherwise empty sessions pile up in the operator panel).
+        /// </summary>
+        private void RemoveFromOtherSessions(string mac, int keepSessionId)
+        {
+            List<int> emptied = null;
+            foreach (KeyValuePair<int, RaceSessionGroup> kv in _activeSessions)
+            {
+                if (kv.Key == keepSessionId)
+                    continue;
+
+                kv.Value.MemberMacAddresses.RemoveAll(m => string.Equals(m, mac, StringComparison.OrdinalIgnoreCase));
+                if (kv.Value.MemberMacAddresses.Count == 0)
+                {
+                    if (emptied == null) emptied = new List<int>();
+                    emptied.Add(kv.Key);
+                }
+            }
+
+            if (emptied == null)
+                return;
+
+            foreach (int id in emptied)
+            {
+                DestroySessionAvatars(_activeSessions[id]);
+                _activeSessions.Remove(id);
+            }
+        }
+
+        /// <summary>
+        /// Sends a whole group back to the always-resident HubScene and clears its avatars. The group (and its Player 1)
+        /// stays together so Player 1 can immediately pick the next game from the lobby menu.
         /// </summary>
         [Server]
         public void ReturnSessionToHub(int sessionId)
@@ -468,19 +632,50 @@ namespace LegacyVR.KartRacing.Networking
                 return;
 
             DestroySessionAvatars(session);
-            ReturnHeadsetsToHub(session.MemberMacAddresses);
+            session.GameModuleId = "Hub";
+            session.AddressableSceneKey = string.Empty;
+
+            foreach (string mac in session.MemberMacAddresses)
+            {
+                if (!_registryByMac.TryGetValue(mac, out RegisteredHeadsetRecord record))
+                    continue;
+
+                DestroyHeadsetAvatar(record);
+                record.AssignedGameModuleId = "Hub";
+                record.IsSceneLoadedAndReady = false;
+                record.ActiveSceneKey = "HubScene";
+
+                if (record.Dispatcher != null && record.Connection != null)
+                {
+                    record.Dispatcher.TargetReturnToHub(record.Connection);
+                    SendLobbyRole(record); // re-arms the lobby menu on Player 1
+                }
+            }
+        }
+
+        /// <summary>Ends the group entirely (headsets go back to the plain lobby with no Player 1).</summary>
+        [Server]
+        public void DisbandSession(int sessionId)
+        {
+            if (!_activeSessions.TryGetValue(sessionId, out RaceSessionGroup session))
+                return;
+
+            DestroySessionAvatars(session);
+            ReturnHeadsetsToHub(new List<string>(session.MemberMacAddresses));
             _activeSessions.Remove(sessionId);
         }
 
+        /// <summary>Sends individual headsets to the lobby and removes them from their group.</summary>
         [Server]
         public void ReturnHeadsetsToHub(IEnumerable<string> macAddresses)
         {
-            // Copy first: callers may pass session.MemberMacAddresses, which we do not mutate, but be defensive.
             foreach (string rawMac in new List<string>(macAddresses))
             {
-                if (!_registryByMac.TryGetValue(rawMac.Trim().ToUpperInvariant(), out RegisteredHeadsetRecord record))
+                string mac = rawMac.Trim().ToUpperInvariant();
+                if (!_registryByMac.TryGetValue(mac, out RegisteredHeadsetRecord record))
                     continue;
 
+                RemoveFromOtherSessions(mac, int.MinValue);
                 DestroyHeadsetAvatar(record);
                 record.AssignedSessionId = -1;
                 record.AssignedGameModuleId = "Hub";
@@ -491,6 +686,7 @@ namespace LegacyVR.KartRacing.Networking
                 if (record.Dispatcher != null && record.Connection != null)
                 {
                     record.Dispatcher.TargetReturnToHub(record.Connection);
+                    record.Dispatcher.TargetSetLobbyRole(record.Connection, -1, false, new string[0]);
                 }
             }
         }
@@ -572,6 +768,31 @@ namespace LegacyVR.KartRacing.Networking
             {
                 session.SpawnedSessionAvatars.Add(avatarIdentity);
             }
+        }
+
+        /// <summary>Player 1 picked a game/map in the lobby menu: launch it for the whole group.</summary>
+        private void OnServerReceiveLeaderLaunch(NetworkConnectionToClient conn, LeaderLaunchRequestMessage msg)
+        {
+            if (!_registryByConnId.TryGetValue(conn.connectionId, out RegisteredHeadsetRecord sender) || !sender.IsPlayerOneLeader)
+            {
+                Debug.LogWarning($"[MasterServer] Rejected launch request from non-leader connectionId={conn.connectionId}");
+                return;
+            }
+
+            if (sender.AssignedSessionId != msg.SessionId || !_activeSessions.TryGetValue(msg.SessionId, out RaceSessionGroup session))
+            {
+                Debug.LogWarning($"[MasterServer] Rejected launch request for session {msg.SessionId} (leader belongs to {sender.AssignedSessionId}).");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(msg.GameModuleId) || !_modulesById.ContainsKey(msg.GameModuleId.Trim()))
+            {
+                Debug.LogWarning($"[MasterServer] Rejected launch request: unknown game module '{msg.GameModuleId}'.");
+                return;
+            }
+
+            Debug.Log($"[MasterServer] Player 1 ({sender.MacAddress}) launched '{msg.GameModuleId}' for session {msg.SessionId}.");
+            DispatchGameModuleSession(msg.SessionId, msg.GameModuleId, new List<string>(session.MemberMacAddresses), session.LeaderMacAddress);
         }
 
         private void OnServerReceiveLeaderCommand(NetworkConnectionToClient conn, LeaderSessionCommandMessage msg)

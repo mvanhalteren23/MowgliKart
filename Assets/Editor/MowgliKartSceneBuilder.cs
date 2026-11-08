@@ -113,6 +113,16 @@ namespace LegacyVR.KartRacing.EditorTools
             text.fontSize = 60;
             label.AddComponent<HubStatusDisplay>(); // replaces the placeholder with live connection / kiosk / battery info
 
+            // Player 1's game picker, below the status text.
+            var menu = new GameObject("LeaderMenu", typeof(TextMesh));
+            menu.transform.position = new Vector3(0f, 0.2f, 3f);
+            var menuText = menu.GetComponent<TextMesh>();
+            menuText.anchor = TextAnchor.UpperCenter;
+            menuText.alignment = TextAlignment.Center;
+            menuText.characterSize = 0.08f;
+            menuText.fontSize = 60;
+            menu.AddComponent<HubLeaderMenu>();
+
             EditorSceneManager.SaveScene(scene, HubPath);
         }
 

@@ -57,6 +57,16 @@ namespace LegacyVR.KartRacing.Networking
     }
 
     /// <summary>
+    /// Sent by the Player 1 headset from the lobby menu to choose which game / map the whole group plays next.
+    /// The server re-validates that the sender is the leader of that session before launching anything.
+    /// </summary>
+    public struct LeaderLaunchRequestMessage : NetworkMessage
+    {
+        public int SessionId;
+        public string GameModuleId;
+    }
+
+    /// <summary>
     /// Sent by the designated "Player 1" headset to control in-game session UI (e.g., countdown trigger).
     /// </summary>
     public struct LeaderSessionCommandMessage : NetworkMessage
