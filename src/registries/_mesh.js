@@ -57,7 +57,7 @@ export function makeGenericKart(THREE, o = {}) {
   const root = new THREE.Group();
   root.add(box(THREE, 1.1, 0.34, 2.0, body, [0, -0.28, 0]));
   root.add(box(THREE, 0.9, 0.5, 0.5, trim, [0, 0.05, 0.55]));
-  for (const k of Object.keys(WHEEL_MOUNTS)) root.add(wheel(THREE, `Wheel_${k}`, WHEEL_MOUNTS[k], 0x222222, WHEEL_R));
+  for (const k of Object.keys(WHEEL_MOUNTS)) root.add(o.wheelFn ? o.wheelFn(THREE, `Wheel_${k}`, WHEEL_MOUNTS[k]) : wheel(THREE, `Wheel_${k}`, WHEEL_MOUNTS[k], 0x222222, WHEEL_R));
   root.add(box(THREE, 0.08, 0.5, 1.2, trim, [-0.62, -0.1, 0.1], 'Cosmetic_Panel_L'));
   root.add(box(THREE, 0.08, 0.5, 1.2, trim, [0.62, -0.1, 0.1], 'Cosmetic_Panel_R'));
   root.add(box(THREE, 1.0, 0.1, 0.5, o.accent ?? 0xffcc00, [0, 0.62, 0.85], 'Cosmetic_Roof_Spoiler'));

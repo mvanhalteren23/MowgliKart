@@ -77,8 +77,8 @@ export class DraftScene {
     this.camera.aspect = aspect;
     this.camera.fov = aspect < 1.3 ? 55 : 38;
     const cx = this.pods.length === 1 ? 2.6 : 0;
-    this.camera.position.set(cx, 3.2 + w * 0.2, 15 + w * 2.4);
-    this.camera.lookAt(cx, -2.6 - w * 0.3, 0); // aim low so the kart sits in the open upper half, above the cards
+    this.camera.position.set(cx, 2.4 + w * 0.15, 11.5 + w * 2.0);
+    this.camera.lookAt(cx, -3.4 - w * 0.4, 0); // aim low so the karts sit in the open upper area above the cards
     this.camera.updateProjectionMatrix();
   }
   dispose() { this.scene.traverse((o) => { o.geometry?.dispose?.(); const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); }); }); }

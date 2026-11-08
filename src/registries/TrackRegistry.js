@@ -1,4 +1,5 @@
 import { box, cyl, cone, sphere } from './_mesh.js';
+import { ball, limb } from './_detail.js';
 
 /**
  * Regional cartoon hazards. `behavior` drives ObstacleManager:
@@ -9,12 +10,21 @@ import { box, cyl, cone, sphere } from './_mesh.js';
  *  hop    - bouncing lateral hops across the road
  */
 function critter(THREE, o) {
-  const g = new THREE.Group();
-  const s = o.size ?? 1;
-  g.add(sphere(THREE, 0.55 * s, o.body, [0, 0.6 * s, 0]));
-  g.add(sphere(THREE, 0.34 * s, o.head ?? o.body, [0, 1.35 * s, 0]));
-  g.add(sphere(THREE, 0.07 * s, 0x111111, [-0.12 * s, 1.42 * s, -0.28 * s], 6));
-  g.add(sphere(THREE, 0.07 * s, 0x111111, [0.12 * s, 1.42 * s, -0.28 * s], 6));
+  const g = new THREE.Group(), s = o.size ?? 1, skin = o.head ?? o.body;
+  g.add(ball(THREE, 0.55 * s, o.body, [0, 0.7 * s, 0], [1, 1.12, 0.92], 22));
+  g.add(ball(THREE, 0.37 * s, skin, [0, 1.5 * s, 0], [1, 1, 1], 22));
+  for (const x of [-1, 1]) {
+    g.add(ball(THREE, 0.085 * s, 0xffffff, [x * 0.14 * s, 1.56 * s, -0.3 * s], [1, 1.1, 0.6], 12));
+    g.add(ball(THREE, 0.045 * s, 0x111111, [x * 0.14 * s, 1.56 * s, -0.35 * s], [1, 1, 0.6], 8));
+    g.add(limb(THREE, [x * 0.5 * s, 1.0 * s, 0], [x * 0.7 * s, 0.55 * s, -0.12 * s], 0.11 * s, o.body));   // arms
+    g.add(ball(THREE, 0.1 * s, skin, [x * 0.72 * s, 0.5 * s, -0.14 * s], [1, 1, 1], 10));                   // hands
+    g.add(limb(THREE, [x * 0.22 * s, 0.35 * s, 0], [x * 0.24 * s, 0.0, -0.05 * s], 0.13 * s, o.body));      // legs
+    g.add(ball(THREE, 0.15 * s, 0x2a2024, [x * 0.24 * s, 0.0, -0.12 * s], [1, 0.6, 1.4], 10));              // feet
+    g.add(ball(THREE, 0.12 * s, skin, [x * 0.3 * s, 1.82 * s, 0.02], [1, 1, 0.6], 10));                     // ears
+  }
+  g.add(ball(THREE, 0.06 * s, 0xd98a7a, [0, 1.46 * s, -0.37 * s], [1, 0.9, 0.9], 10));                      // nose
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.1 * s, 0.014 * s, 6, 16, Math.PI), new THREE.MeshToonMaterial({ color: 0x5a1a20 }));
+  mouth.position.set(0, 1.36 * s, -0.34 * s); mouth.rotation.z = Math.PI; g.add(mouth);
   if (o.extra) o.extra(THREE, g, s);
   return g;
 }
@@ -66,6 +76,7 @@ export const OBSTACLES = {
 };
 
 const sweep = (d, dir, len = 420, turn = 150) => ({ d, dir, len, turn });
+const bend = (d, dir, turn = 90, len = 300) => ({ d, dir, len, turn }); // medium sweepers between the hairpins
 const SHORT_LEN = 440;
 
 /**
@@ -76,8 +87,8 @@ export const TRACKS = {
   whistler_run: {
     id: 'whistler_run', stage: 1, milestone: 1, name: 'Whistler Ski Run', length: 4500, seed: 11,
     open: true, width: 44, grooveHalf: 9, // open-slope: 18 m groomed groove + powder & trees either side
-    startHeight: 720, pitch: [5, 9.5], gentle: 0.0016,
-    sweepers: [sweep(1000, -1), sweep(2200, 1), sweep(3400, -1)],
+    startHeight: 760, pitch: [-1.5, 16], gentle: 0.0042, hills: { mean: 7.5, a1: 6.5, l1: 330, a2: 3.2, l2: 150 },
+    sweepers: [bend(300, 1, 75, 260), sweep(1000, -1), bend(1650, 1, 100), sweep(2200, 1), bend(2850, -1, 100), sweep(3400, -1), bend(3950, 1, 75, 260)],
     jumps: [450, 820, 1650, 1950, 2800, 3150, 3950, 4250],
     shortcuts: [
       { id: 'lodge_roof_a', name: 'Alpine Lodge Rooftop', dEntry: 1000 - 10, dExit: 1000 - 10 + SHORT_LEN },
@@ -92,8 +103,8 @@ export const TRACKS = {
   },
   san_diego_streets: {
     id: 'san_diego_streets', stage: 2, milestone: 2, name: 'San Diego Streets', length: 4500, seed: 23,
-    startHeight: 420, pitch: [4, 8.5], gentle: 0.0018,
-    sweepers: [sweep(900, 1), sweep(2100, -1), sweep(3300, 1)],
+    startHeight: 520, pitch: [-1, 15], gentle: 0.0046, hills: { mean: 6.8, a1: 6, l1: 300, a2: 3.4, l2: 140 },
+    sweepers: [bend(260, -1, 80, 260), sweep(900, 1), bend(1550, -1, 100), sweep(2100, -1), bend(2750, 1, 100), sweep(3300, 1), bend(3900, -1, 75, 260)],
     jumps: [380, 700, 1600, 1850, 2750, 3000, 3900, 4200],
     shortcuts: [
       { id: 'boardwalk_rail_a', name: 'Boardwalk Stair-Handrail Grind', dEntry: 900 - 10, dExit: 900 - 10 + SHORT_LEN },
@@ -108,8 +119,8 @@ export const TRACKS = {
   },
   great_wall_sprint: {
     id: 'great_wall_sprint', stage: 3, milestone: 2, name: 'Great Wall Sprint', length: 4500, seed: 37,
-    startHeight: 560, pitch: [4.5, 9], gentle: 0.0014,
-    sweepers: [sweep(1050, -1), sweep(2250, 1), sweep(3450, -1)],
+    startHeight: 640, pitch: [-1, 16], gentle: 0.004, hills: { mean: 7.2, a1: 6.5, l1: 340, a2: 3, l2: 155 },
+    sweepers: [bend(330, 1, 75, 260), sweep(1050, -1), bend(1700, 1, 100), sweep(2250, 1), bend(2900, -1, 100), sweep(3450, -1), bend(4000, 1, 70, 240)],
     jumps: [420, 780, 1700, 1980, 2850, 3200, 4000, 4300],
     shortcuts: [
       { id: 'watchtower_a', name: 'Watchtower Battlement', dEntry: 1050 - 10, dExit: 1050 - 10 + SHORT_LEN },
@@ -124,8 +135,8 @@ export const TRACKS = {
   },
   zoo_rampage: {
     id: 'zoo_rampage', stage: 4, milestone: 2, name: 'Zoo Rampage', length: 4500, seed: 53,
-    startHeight: 380, pitch: [4, 8], gentle: 0.002,
-    sweepers: [sweep(950, 1), sweep(2150, -1), sweep(3350, 1)],
+    startHeight: 520, pitch: [-1.5, 15], gentle: 0.0048, hills: { mean: 6.8, a1: 6, l1: 290, a2: 3.4, l2: 135 },
+    sweepers: [bend(280, -1, 80, 260), sweep(950, 1), bend(1600, -1, 100), sweep(2150, -1), bend(2800, 1, 100), sweep(3350, 1), bend(3950, -1, 70, 240)],
     jumps: [400, 760, 1600, 1900, 2800, 3100, 3950, 4250],
     shortcuts: [
       { id: 'hippo_bridge_a', name: 'Hippo-Back River Bridge', dEntry: 950 - 10, dExit: 950 - 10 + SHORT_LEN },

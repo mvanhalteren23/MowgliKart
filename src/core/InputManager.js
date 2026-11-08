@@ -23,9 +23,34 @@ export class InputManager {
     addEventListener('keydown', (e) => this._down(e));
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
-    this.autoGas = false; this.touch = null;
+    this.autoGas = false; this.touch = null; this.touchWanted = false;
+    this.padListeners = new Set();
+    // hot-plug: browsers only expose a pad after its first button press, so the event is the cue to refresh the UI
+    addEventListener('gamepadconnected', (e) => { this.flash(`🎮 Controller ${e.gamepad.index + 1} connected`); this._padChanged(); });
+    addEventListener('gamepaddisconnected', (e) => { this.flash(`🎮 Controller ${e.gamepad.index + 1} disconnected`); this._padChanged(); });
     this._initTouch();
   }
+
+  _padChanged() { this._applyTouch(); for (const f of this.padListeners) f(this.padCount()); }
+  onPadChange(fn) { this.padListeners.add(fn); return () => this.padListeners.delete(fn); }
+  padCount() { return Math.min(4, this.pads().length); }
+  /** Small transient message (controller connected, etc.). */
+  flash(text) {
+    let el = document.getElementById('flash');
+    if (!el) { el = document.createElement('div'); el.id = 'flash'; document.body.appendChild(el); }
+    el.textContent = text; el.classList.add('on'); clearTimeout(this._ft);
+    this._ft = setTimeout(() => el.classList.remove('on'), 2200);
+  }
+  /** Rumble a pad (Chrome/Edge/Android) or buzz the phone for player 1 when no pad is attached. */
+  rumble(i, strong = 0.6, weak = 0.6, ms = 180) {
+    const gp = this.pads()[i];
+    try {
+      if (gp?.vibrationActuator?.playEffect) gp.vibrationActuator.playEffect('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: strong, weakMagnitude: weak });
+      else if (gp?.hapticActuators?.[0]?.pulse) gp.hapticActuators[0].pulse(strong, ms);
+      else if (i === 0 && this.touch && navigator.vibrate) navigator.vibrate(ms);
+    } catch { /* haptics are best-effort */ }
+  }
+  _applyTouch() { this.touch?.root.classList.toggle('hidden', !this.touchWanted || this.padCount() > 0); }
 
   /** On-screen controls for phones/tablets (player 1). Gas is automatic once the race is running (not during the push-start). */
   _initTouch() {
@@ -46,7 +71,7 @@ export class InputManager {
     root.addEventListener('contextmenu', (e) => e.preventDefault());
     this.touch = { held, root };
   }
-  showTouch(on) { this.touch?.root.classList.toggle('hidden', !on); }
+  showTouch(on) { this.touchWanted = on; this._applyTouch(); }
 
   _down(e) {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Slash', 'Enter'].includes(e.code) && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLSelectElement)) {
@@ -75,7 +100,7 @@ export class InputManager {
       const edge = (name, val) => { if (val && !this.padPrev[i][name]) this.menuEdges.push({ player: i, name }); this.padPrev[i][name] = val; };
       edge('left', b(14) || (gp.axes[0] ?? 0) < -0.6);
       edge('right', b(15) || (gp.axes[0] ?? 0) > 0.6);
-      edge('confirm', b(0));
+      edge('confirm', b(0)); edge('up', b(12) || (gp.axes[1] ?? 0) < -0.6); edge('down', b(13) || (gp.axes[1] ?? 0) > 0.6); edge('start', b(9));
     });
   }
 
@@ -91,8 +116,12 @@ export class InputManager {
     }
     const gp = this.pads()[i];
     if (gp) {
-      const ax = gp.axes[GAMEPAD.axis] ?? 0;
-      if (Math.abs(ax) > 0.12) steer = Math.abs(ax) > Math.abs(steer) ? ax : steer;
+      let ax = gp.axes[GAMEPAD.axis] ?? 0;
+      if (gp.mapping !== 'standard' && Math.abs(ax) < 0.05 && gp.axes.length > 6) ax = gp.axes[0]; // odd mappings: first stick axis
+      // d-pad also steers (some phones' pads report it as buttons 14/15)
+      if (gp.buttons[14]?.pressed) ax = -1; else if (gp.buttons[15]?.pressed) ax = 1;
+      const dz = 0.1, adj = Math.abs(ax) < dz ? 0 : Math.sign(ax) * (Math.abs(ax) - dz) / (1 - dz); // dead-zone + rescale for smooth analogue steering
+      if (adj !== 0) steer = Math.abs(adj) > Math.abs(steer) ? adj : steer;
       const rt = gp.buttons[7]?.value ?? 0;
       throttle = Math.max(throttle, rt, gp.buttons[0]?.pressed ? 1 : 0);
       brake = Math.max(brake, gp.buttons[6]?.value ?? 0);

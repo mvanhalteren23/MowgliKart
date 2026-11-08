@@ -171,6 +171,11 @@ body.touch .hud-bl { display: none; }
 @media (orientation: portrait) { body.touch.racing #rotate { display: grid; } }
 @media (max-height: 520px) { #ui { align-items: start; } .panel { padding: 12px 14px; } h1 { font-size: 34px; } .go { padding: 8px; font-size: 17px; } .card .big { font-size: 30px; } .card p, .tagline { display: none; } .card h3 { font-size: 12px; } }
 
-.warn { background: radial-gradient(ellipse at center, transparent 40%, #ff1a3a88 100%); animation: warnp .7s infinite alternate; }
+.warn { background: radial-gradient(ellipse at center, transparent 40%, #ff1a3a88 100%); }
+.warn.on { animation: warnp .7s infinite alternate; }
 .warn b { position: absolute; left: 0; right: 0; top: 32%; text-align: center; font-size: 4.4cqmin; font-style: italic; color: #fff; text-shadow: 0 .5cqmin 0 #8a0a22, 0 0 2cqmin #ff2a4a; }
 @keyframes warnp { from { opacity: .55 } to { opacity: 1 } }
+
+#flash { position: fixed; left: 50%; top: 14px; transform: translate(-50%, -80px); z-index: 60; background: #101830ee; border: 2px solid #35d65f; color: #fff; font-weight: 800; padding: 8px 16px; border-radius: 99px; transition: transform .25s; pointer-events: none; }
+#flash.on { transform: translate(-50%, 0); }
+.padrow .padok { color: #35d65f; font-weight: 800; }

@@ -71,6 +71,12 @@ Everything is procedural; swap in AI-generated `.glb` models via ASSET_PIPELINE.
 - **Graphics**: Ultra tier adds ambient occlusion + 4K shadows; snow normal-maps, ski-carving trails, animated gondola lift, richer trees, soft spray (all disabled on Low).
 - See [ROADMAP.md](ROADMAP.md) for the path from MVP to a full game.
 
+## Detail, tracks & controllers (latest)
+- **Yeti** now throws on a scripted arc and always lands you on the groomed groove on the first throw, then applies the obstacle penalty once.
+- **Tracks** are windier and hillier: rolling crests/dips (pitch -2.5 deg .. +17 deg), extra medium bends between the hairpins, jump kickers nudged onto straights, and a geometry check (no road crosses another).
+- **Detailed models** (procedural, until real `.glb` assets arrive): kids with faces/helmets/goggles/hair, wire-basket grocery cart with twin firework rockets, plank-built coop with a hen, tread-block tyres, shaggier yeti, limbed critters.
+- **Controllers**: up to 4 pads (Xbox/PlayStation/Switch Pro/generic) on PC, Mac, Android and iOS; hot-plug, auto-adds players, A/d-pad in menus, rumble + phone haptics, touch controls hide when a pad is connected.
+
 ## Status vs. the spec
 Implemented: everything in spec §3–§6 as a vertical slice — all four tracks (procedural seeded splines with sweepers, banking, 8 jump kickers and 3 shortcuts each), 4-race circuit & draft,
 push-start/judges, hop/drift/mini-turbo FSM, trick boost, slipstream, piecemeal shedding + duct-tape snap-back, 4 weapons (with level upgrades), 3 shields, 4 stat boosts with γ diminishing returns, 3 mystery items,

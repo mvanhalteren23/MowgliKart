@@ -10,21 +10,21 @@ export function buildYeti() {
   const g = new THREE.Group(), fur = T(0xf1f6ff), shade = T(0xc7d4e6), dark = T(0x232a3a);
   const part = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); return m; };
   const body = new THREE.Group(); body.position.y = 2.1; g.add(body);
-  const torso = part(new THREE.SphereGeometry(1.2, 14, 10), fur, 0, 0.4, 0); torso.scale.set(1.15, 1.35, 0.98); body.add(torso);
-  body.add(part(new THREE.SphereGeometry(0.85, 12, 8), shade, 0, -0.25, -0.25));
-  for (let i = 0; i < 14; i++) { // shaggy fur tufts
-    const a = (i / 14) * 6.28, tuft = part(new THREE.ConeGeometry(0.28, 0.8, 5), fur, Math.cos(a) * 1.25, 0.2 + (i % 3) * 0.55, Math.sin(a) * 1.0);
+  const torso = part(new THREE.SphereGeometry(1.2, 28, 20), fur, 0, 0.4, 0); torso.scale.set(1.15, 1.35, 0.98); body.add(torso);
+  body.add(part(new THREE.SphereGeometry(0.85, 22, 14), shade, 0, -0.25, -0.25));
+  for (let i = 0; i < 46; i++) { // shaggy fur tufts
+    const a = (i / 46) * 6.28 * 3, tuft = part(new THREE.ConeGeometry(0.22, 0.75, 6), i % 2 ? fur : shade, Math.cos(a) * 1.22, -0.5 + (i % 7) * 0.32, Math.sin(a) * 0.98);
     tuft.rotation.set(Math.sin(a) * 1.0, 0, -Math.cos(a) * 1.0); body.add(tuft);
   }
   const head = new THREE.Group(); head.position.set(0, 2.15, -0.35); body.add(head);
-  head.add(part(new THREE.SphereGeometry(0.72, 14, 10), fur, 0, 0, 0));
+  head.add(part(new THREE.SphereGeometry(0.72, 26, 18), fur, 0, 0, 0));
   const face = part(new THREE.SphereGeometry(0.5, 12, 8), dark, 0, -0.04, -0.42); face.scale.set(1.15, 0.95, 0.5); head.add(face);
   const eyeM = new THREE.MeshBasicMaterial({ color: 0x7fe3ff });
   head.add(part(new THREE.SphereGeometry(0.1, 8, 6), eyeM, -0.22, 0.1, -0.6), part(new THREE.SphereGeometry(0.1, 8, 6), eyeM, 0.22, 0.1, -0.6));
   const mouth = part(new THREE.BoxGeometry(0.5, 0.2, 0.1), T(0x6a1020), 0, -0.25, -0.62); head.add(mouth);
   for (const x of [-0.18, -0.06, 0.06, 0.18]) head.add(part(new THREE.ConeGeometry(0.05, 0.16, 4), T(0xffffff), x, -0.18, -0.64));
   head.add(part(new THREE.ConeGeometry(0.2, 0.55, 5), fur, -0.5, 0.62, 0.0), part(new THREE.ConeGeometry(0.2, 0.55, 5), fur, 0.5, 0.62, 0.0)); // brow tufts
-  const limb = (x, y, len, r, mat) => { const p = new THREE.Group(); p.position.set(x, y, 0); const m = part(new THREE.CylinderGeometry(r, r * 0.85, len, 8), mat, 0, -len / 2, 0); p.add(m); return p; };
+  const limb = (x, y, len, r, mat) => { const p = new THREE.Group(); p.position.set(x, y, 0); const m = part(new THREE.CylinderGeometry(r, r * 0.85, len, 16), mat, 0, -len / 2, 0); p.add(m); return p; };
   const armL = limb(-1.45, 0.95, 1.9, 0.38, fur), armR = limb(1.45, 0.95, 1.9, 0.38, fur);
   for (const a of [armL, armR]) { a.add(part(new THREE.SphereGeometry(0.5, 10, 8), shade, 0, -1.95, 0)); for (let i = -1; i <= 1; i++) a.add(part(new THREE.ConeGeometry(0.1, 0.35, 4), T(0xe8e2d0), i * 0.22, -2.4, -0.1)); body.add(a); }
   const legL = limb(-0.6, 2.1, 2.0, 0.42, fur), legR = limb(0.6, 2.1, 2.0, 0.42, fur);
@@ -86,8 +86,14 @@ export class YetiManager {
       } else if (y.state === 'throw') {
         const hand = new V(0, 4.4, 0).add(pos).addScaledVector(new V(-Math.sin(y.facing), 0, -Math.cos(y.facing)), 1.5);
         if (k.grab) k.grab.pos.copy(hand);
-        if (y.t > 1.0 && k.grab) this.release(y);
-        if (y.t > 1.8) { y.state = 'leave'; y.t = 0; }
+        if (y.t > 1.0 && k.grab) this.beginFly(y);
+      } else if (y.state === 'fly') { // scripted arc: guaranteed to land on the groomed groove
+        const f = y.fly; f.t += dt;
+        const u = Math.min(1, f.t / f.dur), e = u * u * (3 - 2 * u) * 0.35 + u * 0.65;
+        if (k.grab) { k.grab.pos.lerpVectors(f.from, f.to, e); k.grab.pos.y += Math.sin(u * Math.PI) * f.height; }
+        pos.y += 0; y.facing = Math.atan2(-(f.to.x - pos.x), -(f.to.z - pos.z));
+        if (u >= 1 && !f.landed) { f.landed = true; this.land(y); }
+        if (f.t > f.dur + 0.8) { y.state = 'leave'; y.t = 0; }
       } else { // leave
         y.speed = 11; pos.addScaledVector(new V(-to.x, 0, -to.z), 10 * dt); y.facing = Math.atan2(to.x, to.z);
         y.gone += dt; y.mesh.scale.setScalar(Math.max(0.0001, 1.0 - Math.max(0, y.gone - 2.2) * 0.9));
@@ -124,16 +130,22 @@ export class YetiManager {
     }
   }
 
-  release(y) {
+  /** Wind-up finished: hurl the kart on a scripted arc to a spot on the groomed groove (cannot clip trees or fall short). */
+  beginFly(y) {
+    const k = y.kart, { track } = this.s;
+    const side = Math.sign(k.lat) || 1, fr = track.atDist(Math.min(track.finishD - 40, k.d + 10));
+    const to = fr.P.clone().addScaledVector(fr.B, side * track.grooveHalf * 0.55).addScaledVector(fr.N, 2.3);
+    y.state = 'fly'; y.fly = { t: 0, dur: 1.9, from: k.pos.clone(), to, height: 10 };
+    this.s.sfx('whoosh', k); k.emit('thrown');
+  }
+
+  land(y) {
     const k = y.kart, { track } = this.s, fr = track.atDist(k.d);
-    const side = Math.sign(k.lat) || 1, VY = 15, T = (2 * VY) / 14, target = track.grooveHalf; // high lob: clears the tree line
-    const vh = Math.max(9, (Math.abs(k.lat) - target) / T);
-    const toC = fr.B.clone().multiplyScalar(-side).setY(0).normalize();
-    const m = new THREE.Matrix4().makeBasis(fr.B, fr.N, fr.T.clone().negate()), q = new THREE.Quaternion().setFromRotationMatrix(m);
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(fr.B, fr.N, fr.T.clone().negate()));
     k.grab = null; k.oob = false; k.oobT = 0; k.yetiPenalty = true;
     k.body.setRotation(q, true); k.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    k.body.setLinvel({ x: toC.x * vh + fr.T.x * 4, y: VY, z: toC.z * vh + fr.T.z * 4 }, true);
-    k.t.stun = 0.4; k.emit('thrown');
+    k.body.setLinvel({ x: fr.T.x * 7, y: -3, z: fr.T.z * 7 }, true);
+    k.t.stun = 0.3;
     this.s.fx.burst(k.pos, 26, 8, '#ffffff', 0.9, 4);
   }
 

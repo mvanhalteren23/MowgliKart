@@ -1,4 +1,4 @@
-import { sphere, cyl, box } from './_mesh.js';
+import { detailedKid } from './_detail.js';
 
 // 12 cartoon kid racers. mods are +/-5% (speed, weight, driftCharge).
 const ROSTER = [
@@ -22,18 +22,7 @@ for (const [id, name, helmet, skin, bark, speed, weight, driftCharge] of ROSTER)
     id, name, helmet: '#' + helmet.toString(16).padStart(6, '0'), skin: '#' + skin.toString(16).padStart(6, '0'),
     bark, mods: { speed, weight, driftCharge },
     assetPrompt: `Cartoon kid racer "${name}" seated pose, oversized ${helmet.toString(16)} helmet with goggles, big grin, soapbox derby jumpsuit, glossy toon style, low poly, origin at seat.`,
-    proceduralFallback(THREE) {
-      const g = new THREE.Group();
-      g.add(box(THREE, 0.5, 0.5, 0.35, helmet, [0, 0.05, 0]));
-      g.add(sphere(THREE, 0.3, skin, [0, 0.55, 0]));
-      const h = sphere(THREE, 0.34, helmet, [0, 0.62, 0.02]);
-      h.scale.set(1, 0.85, 1);
-      g.add(h);
-      g.add(box(THREE, 0.5, 0.14, 0.1, 0x222222, [0, 0.58, -0.28])); // goggles
-      g.add(cyl(THREE, 0.07, 0.07, 0.5, helmet, [-0.3, 0.1, -0.3], [Math.PI / 2.5, 0, 0], 6));
-      g.add(cyl(THREE, 0.07, 0.07, 0.5, helmet, [0.3, 0.1, -0.3], [Math.PI / 2.5, 0, 0], 6));
-      return g;
-    },
+    proceduralFallback(THREE) { return detailedKid(THREE, CHARACTERS[id]); },
   };
 }
 export const CHARACTER_IDS = Object.keys(CHARACTERS);

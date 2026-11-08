@@ -338,7 +338,11 @@ export class KartController {
     if (this.d > this.maxD) this.maxD = this.d;
     if (this.grounded && this.lastGround === 'road' && Math.abs(loc.lat) < track.width / 2 - 1) this.lastSafeD = this.d;
     // fall detection (off the deck / off the world)
-    if (this.airTime > 2.3 && this.vel.y < -24) this._respawn(ctx, this.lastGround === 'deck', 'fell');
+    if (this.airTime > 2.3 && this.vel.y < -24) {
+      // only a real fall if there is nothing to land on: long hill-top jumps still have road/terrain below
+      const below = this.physics.castRay(this.pos.x, this.pos.y, this.pos.z, 0, -1, 0, 70, 1, this.body);
+      if (!below || this.airTime > 7) this._respawn(ctx, this.lastGround === 'deck', 'fell');
+    }
     if (this.pos.y < -2000) this._respawn(ctx, false, 'void');
     // stuck (pinned against a wall / wedged): auto-respawn after ~4 s of full throttle going nowhere
     if (!this.finished && !this.controlLocked && this.input.throttle > 0.5 && this.speed < 1.2 && ctx.time > 6) this.stuckT = (this.stuckT ?? 0) + dt; else this.stuckT = 0;

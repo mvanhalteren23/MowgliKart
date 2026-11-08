@@ -25,6 +25,8 @@ export class UI {
         kids: ['barnaby', 'chloe', 'max', 'zoe'],
       };
       const el = this.show('', 'screen lobby');
+      let pads = this.input.padCount();
+      if (pads > st.players) st.players = Math.min(4, pads);
       const render = () => {
         const rows = Array.from({ length: st.players }, (_, i) => `
           <div class="prow" style="--pc:${PCOL[i]}">
@@ -37,6 +39,7 @@ export class UI {
             <h1>MOWGLI<span>KART</span></h1>
             <p class="tag">Downhill Soapbox Circuit · 4-Race Roguelite Draft Cup</p>
             <div class="row"><b>Players</b> ${[1, 2, 3, 4].map((n) => `<button class="pill ${st.players === n ? 'sel' : ''}" data-n="${n}">${n}P</button>`).join('')}<em>+ ${8 - st.players} AI → 8 racers</em></div>
+            <div class="row padrow"><b>🎮 Controllers</b> ${pads ? `<span class="padok">${pads} connected</span> — P1${pads > 1 ? '–P' + pads : ''} use pad${pads > 1 ? 's' : ''} (keyboard still works)` : '<em>none yet — press any button on a controller (USB / Bluetooth) to wake it</em>'}${pads && st.players < pads ? `<button class="pill" data-usepads>Use ${pads} players</button>` : ''}</div>
             <div class="row"><b>Graphics</b> ${['ultra', 'high', 'low'].map((q) => `<button class="pill ${st.quality === q ? 'sel' : ''}" data-q="${q}">${q[0].toUpperCase() + q.slice(1)}</button>`).join('')}<em>Ultra = +ambient occlusion · 4K shadows · High = shadows, bloom, speed blur (1P) · Low = none</em></div>
             ${rows}
             <label class="chk"><input type="checkbox" ${st.autoShield ? 'checked' : ''} data-auto> Auto-Shield assist (reactive counter-measure when a charged shield cell is held)</label>
@@ -44,7 +47,7 @@ export class UI {
             <details><summary>Controls</summary>
               <table class="ctl"><tr><th></th><th>P1</th><th>P2</th><th>Gamepad</th></tr>
               <tr><td>Steer / Throttle / Brake</td><td>A D / W / S</td><td>← → / ↑ / ↓</td><td>L-stick / R2·A / L2</td></tr>
-              <tr><td>Hop · Drift · Trick · Push-start</td><td>Space</td><td>Enter</td><td>R1</td></tr>
+              <tr><td colspan="4" class="note">Controllers: up to 4 pads (Xbox / PlayStation / Switch Pro / generic) on PC, Mac, Android and iPhone. Menus: ◀ ▶ change players, A start/select.</td></tr><tr><td>Hop · Drift · Trick · Push-start</td><td>Space</td><td>Enter</td><td>R1</td></tr>
               <tr><td>Use Mystery Item</td><td>Left Shift</td><td>Right Shift</td><td>L1</td></tr>
               <tr><td>Fire Circuit Weapon</td><td>E</td><td>/</td><td>X</td></tr>
               <tr><td>Activate Circuit Shield</td><td>Q</td><td>.</td><td>B / Y</td></tr></table>
@@ -52,6 +55,7 @@ export class UI {
             </details>
           </div>`;
         el.querySelectorAll('[data-n]').forEach((b) => (b.onclick = () => { st.players = +b.dataset.n; render(); }));
+        el.querySelector('[data-usepads]')?.addEventListener('click', () => { st.players = Math.min(4, pads); render(); });
         el.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { st.quality = b.dataset.q; try { localStorage.setItem('mk_q', st.quality); } catch { /* private mode */ } render(); }));
         el.querySelectorAll('[data-kart]').forEach((b) => (b.onclick = () => { st.karts[+b.dataset.p] = b.dataset.kart; render(); }));
         el.querySelectorAll('[data-kid]').forEach((s) => (s.onchange = () => { st.kids[+s.dataset.kid] = s.value; }));
@@ -59,6 +63,18 @@ export class UI {
         el.querySelector('[data-go]').onclick = () => { this.clear(); resolve({ ...st, karts: st.karts.slice(0, st.players), kids: st.kids.slice(0, st.players) }); };
       };
       render();
+      // controllers can join/leave while in the lobby; A starts the cup, d-pad changes players
+      this.cleanup.push(this.input.onPadChange((n) => { if (n > pads && n > st.players) st.players = Math.min(4, n); pads = n; render(); }));
+      const timer = setInterval(() => {
+        this.input.poll();
+        const n = this.input.padCount(); if (n !== pads) { pads = n; render(); }
+        for (const e of this.input.menuEdges) {
+          if (e.name === 'confirm' || e.name === 'start') { el.querySelector('[data-go]')?.click(); return; }
+          if (e.name === 'right' && st.players < 4) { st.players++; render(); }
+          if (e.name === 'left' && st.players > 1) { st.players--; render(); }
+        }
+      }, 120);
+      this.cleanup.push(() => clearInterval(timer));
     });
   }
 

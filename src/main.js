@@ -37,6 +37,8 @@ function playRace(session, humans) {
     renderer.setPlayers(Math.max(1, humans));
     document.body.classList.add('racing'); input.showTouch(true);
     session.audio = audio;
+    const HAPTIC = { hit: [0.9, 0.6, 220], impact: [0.8, 0.5, 160], miniTurbo: [0.35, 0.8, 220], boost: [0.2, 0.4, 140], slingshot: [0.3, 0.6, 260], trickLanded: [0.5, 0.5, 180], grabbed: [1, 1, 500], yetiSlam: [1, 0.8, 420], oob: [0.3, 0.9, 320], blocked: [0.3, 0.3, 90], pickup: [0.1, 0.3, 80] };
+    session.haptic = (i, type) => { const h = HAPTIC[type]; if (h) input.rumble(i, ...h); };
     audio.setFocus(session.humans[0] ?? null);
     let finishedAt = null;
     const loop = new GameLoop({

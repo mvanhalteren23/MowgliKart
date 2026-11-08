@@ -328,6 +328,7 @@ export class RaceSession {
     for (let i = 0; i < this.karts.length; i++) {
       const k = this.karts[i], vis = this.visuals[i];
       for (const e of k.events) {
+        if (k.isHuman && this.haptic) this.haptic(k.index, e.type);
         switch (e.type) {
           case 'impact': case 'shed':
             if (vis.damage.detachNextPart(k.vel)) { this.sfx('crash', k); this.fx.burst(k.pos, 10, 6, '#ffcc66', 0.5, 8); }

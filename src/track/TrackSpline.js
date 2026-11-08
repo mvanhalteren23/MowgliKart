@@ -188,7 +188,7 @@ export function generateCenterline(def) {
   const ph = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28];
   const [pMin, pMax] = def.pitch;
   const kappaAt = (d) => {
-    let k = def.gentle * (0.7 * Math.sin((d / 520) * 6.283 + ph[0]) + 0.3 * Math.sin((d / 230) * 6.283 + ph[1]));
+    let k = def.gentle * (0.55 * Math.sin((d / 520) * 6.283 + ph[0]) + 0.3 * Math.sin((d / 230) * 6.283 + ph[1]) + 0.25 * Math.sin((d / 135) * 6.283 + ph[2]));
     for (const s of def.sweepers) {
       if (d >= s.d && d <= s.d + s.len) {
         const u = (d - s.d) / s.len;
@@ -203,7 +203,10 @@ export function generateCenterline(def) {
   const pts = [pos.clone()];
   for (let d = 0; d < L; d += step) {
     psi += kappaAt(d + step / 2) * step;
-    const pitchDeg = pMin + (pMax - pMin) * (0.5 + 0.5 * Math.sin((d / 700) * 6.283 + ph[2]));
+    const H = def.hills; // rolling crests and dips (radius of curvature stays > ~180 m so karts stay planted at speed)
+    const pitchDeg = H
+      ? Math.min(pMax, Math.max(pMin, H.mean + H.a1 * Math.sin((d / H.l1) * 6.283 + ph[2]) + H.a2 * Math.sin((d / H.l2) * 6.283 + ph[0])))
+      : pMin + (pMax - pMin) * (0.5 + 0.5 * Math.sin((d / 700) * 6.283 + ph[2]));
     const blend = smoothstep(0, 90, d) * (1 - 0.7 * smoothstep(L - 250, L - 40, d));
     const pitch = ((2 + (pitchDeg - 2) * blend) * Math.PI) / 180;
     pos.x += Math.sin(psi) * Math.cos(pitch) * step;
@@ -212,6 +215,7 @@ export function generateCenterline(def) {
     const dn = d + step;
     if (Math.round(dn) % every === 0 || dn >= L) pts.push(pos.clone());
   }
+  pts.kappaAt = kappaAt;
   return pts;
 }
 
@@ -384,7 +388,9 @@ export class TrackSpline {
     this.path = new CurvePath(this.points);
     this.length = this.path.length;
     this.finishD = this.length - 90; // 90 m of flat run-out to brake after the line
-    this.jumpRamps = def.jumps.map((lipD, i) => ({ id: i, lipD, startD: lipD - RAMP_LEN, zoneD: lipD - TRICK_ZONE, minLat: -Infinity, maxLat: Infinity, pathId: 'main' }));
+    const kap = this.points.kappaAt ?? (() => 0);
+    const nudge = (d) => { for (let k = 0; k < 12 && Math.abs(kap(d)) > 0.0026; k++) d += (k % 2 ? -1 : 1) * 20 * (1 + (k >> 1)); return d; }; // kickers sit on straights
+    this.jumpRamps = def.jumps.map(nudge).map((lipD, i) => ({ id: i, lipD, startD: lipD - RAMP_LEN, zoneD: lipD - TRICK_ZONE, minLat: -Infinity, maxLat: Infinity, pathId: 'main' }));
     const rampH = (d) => {
       for (const r of this.jumpRamps) if (d >= r.startD && d < r.lipD) return (d - r.startD) * RAMP_SLOPE;
       return 0;
