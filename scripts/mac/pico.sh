@@ -6,6 +6,8 @@
 #   pico.sh install [apk]          install/update the client on every headset (parallel)
 #   pico.sh launch | stop          start / force-stop the kart client on every headset
 #   pico.sh reboot                 reboot every headset
+#   pico.sh uninstall              LAST RESORT: remove the client (frees a headset stuck in kiosk mode)
+#   pico.sh status                 per-headset: client installed? running? battery?
 #   pico.sh logs [serial]          stream filtered logcat (Unity/Mirror/Pico kiosk)
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 require_adb
@@ -29,6 +31,14 @@ each_headset() { # usage: each_headset <function> ; runs in parallel and waits
 do_install() { local out; out="$(adb -s "$1" install -r -g "$APK" 2>&1 | tail -1)"; echo "[$1] $out"; [[ "$out" == *Success* ]]; }
 do_launch()  { adb -s "$1" shell am start -n "$PACKAGE/$ACTIVITY" >/dev/null && echo "[$1] launched"; }
 do_stop()    { adb -s "$1" shell am force-stop "$PACKAGE" && echo "[$1] stopped"; }
+do_uninstall() { adb -s "$1" shell am force-stop "$PACKAGE" >/dev/null 2>&1; adb -s "$1" uninstall "$PACKAGE" >/dev/null 2>&1 && echo "[$1] uninstalled (Pico launcher restored)" || echo "[$1] uninstall failed (not installed?)"; }
+do_status() {
+  local installed running battery
+  installed="$(adb -s "$1" shell pm list packages "$PACKAGE" | grep -c "$PACKAGE" || true)"
+  running="$(adb -s "$1" shell pidof "$PACKAGE" 2>/dev/null | tr -d '\r' || true)"
+  battery="$(adb -s "$1" shell dumpsys battery 2>/dev/null | awk '/level:/{print $2}' | tr -d '\r')"
+  echo "[$1] installed=$([[ "$installed" -gt 0 ]] && echo yes || echo no) running=$([[ -n "$running" ]] && echo yes || echo no) battery=${battery:-?}%"
+}
 do_reboot()  { adb -s "$1" reboot && echo "[$1] rebooting"; }
 
 cmd="${1:-help}"; shift || true
@@ -48,6 +58,8 @@ case "$cmd" in
   launch) each_headset do_launch ;;
   stop)   each_headset do_stop ;;
   reboot) each_headset do_reboot ;;
+  uninstall) read -r -p "Remove the kart client from ALL attached headsets? [y/N] " ans; [[ "$ans" == y* ]] || exit 0; each_headset do_uninstall ;;
+  status) each_headset do_status ;;
   logs)   s="${1:-$(adb_serials | head -1)}"; adb -s "$s" logcat -v time Unity:I Mirror:I PicoKioskController:I '*:S' ;;
-  *) sed -n '2,10p' "$0" ;;
+  *) sed -n '2,12p' "$0" ;;
 esac

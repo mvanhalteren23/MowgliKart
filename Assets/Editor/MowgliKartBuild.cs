@@ -4,6 +4,7 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
 using UnityEditor.AddressableAssets.Settings;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -47,7 +48,7 @@ namespace LegacyVR.KartRacing.EditorTools
             PlayerSettings.runInBackground = true;
             PlayerSettings.macOS.buildNumber = "1";
 
-            return Build(BuildTarget.StandaloneOSX, MacOutput, MowgliKartSceneBuilder.MasterPath);
+            return Build(BuildTarget.StandaloneOSX, ResolveOutput(MacOutput, "MowgliKartMaster.app"), MowgliKartSceneBuilder.MasterPath);
         }
 
         private static BuildReport BuildWindows()
@@ -64,9 +65,34 @@ namespace LegacyVR.KartRacing.EditorTools
         {
             EnsureScenes();
             ApplyPicoAndroidSettings();
+
+            // Fail fast, with a readable list, instead of producing an APK that silently misbehaves on the headset.
+            if (!MowgliKartPicoValidator.ValidateForBuild())
+            {
+                throw new BuildFailedException("Pico setup validation failed; see the [MowgliKart] errors above.");
+            }
+
             BuildAddressablesContent();
 
-            return Build(BuildTarget.Android, ApkOutput, MowgliKartSceneBuilder.BootPath, MowgliKartSceneBuilder.HubPath);
+            return Build(BuildTarget.Android, ResolveOutput(ApkOutput, "MowgliKartClient.apk"), MowgliKartSceneBuilder.BootPath, MowgliKartSceneBuilder.HubPath);
+        }
+
+        /// <summary>CI runners (game-ci) pass -customBuildPath; honour it, otherwise use the default under Builds/.</summary>
+        private static string ResolveOutput(string defaultPath, string fileName)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] != "-customBuildPath")
+                    continue;
+
+                string custom = args[i + 1];
+                return custom.EndsWith(Path.GetExtension(fileName), StringComparison.OrdinalIgnoreCase)
+                    ? custom
+                    : Path.Combine(custom, fileName);
+            }
+
+            return defaultPath;
         }
 
         /// <summary>The Pico G1/G2 settings from the architecture blueprint, applied through the public API so the

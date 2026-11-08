@@ -318,6 +318,14 @@ namespace LegacyVR.KartRacing.Networking
                     RunDeviceAction(Pvr_UnitySDKAPI.PBS_DeviceControlEnum.DEVICE_CONTROL_SHUTDOWN);
                     break;
 
+                case DeviceCommandType.ExitKiosk:
+                    if (PicoKioskController.Instance != null) PicoKioskController.Instance.ReleaseKiosk();
+                    break;
+
+                case DeviceCommandType.EnterKiosk:
+                    if (PicoKioskController.Instance != null) PicoKioskController.Instance.EnterKiosk();
+                    break;
+
                 default:
                     Debug.LogWarning($"[KartClientDispatcher] Unknown device command {command}");
                     break;

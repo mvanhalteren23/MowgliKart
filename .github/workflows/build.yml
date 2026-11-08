@@ -1,0 +1,88 @@
+name: Build Pico client and Mac master
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, ccr-ae304029-0cau81]
+    paths: ['Assets/**', 'Packages/**', 'ProjectSettings/**', 'scripts/ci/**', '.github/workflows/build.yml']
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # No Unity licence needed: validates the Pico manifest, SDK version, forbidden packages, physics/network settings.
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mono compiler
+        run: sudo apt-get update && sudo apt-get install -y mono-mcs mono-runtime libmono-system-xml4.0-cil
+      - name: Run Pico pre-flight checks
+        run: |
+          mcs -out:/tmp/picochecks.exe -r:System.Xml.dll scripts/ci/PicoChecksCli.cs Assets/Editor/PicoProjectChecks.cs
+          mono /tmp/picochecks.exe "$GITHUB_WORKSPACE"
+
+  # Needs repository secrets UNITY_LICENSE (contents of the .ulf), UNITY_EMAIL, UNITY_PASSWORD.
+  # Without them the job still passes and prints how to enable it.
+  build:
+    needs: preflight
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: Android
+            method: LegacyVR.KartRacing.EditorTools.MowgliKartBuild.BuildPicoClientCli
+          - target: StandaloneOSX
+            method: LegacyVR.KartRacing.EditorTools.MowgliKartBuild.BuildMacMasterCli
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+    steps:
+      - name: Licence check
+        if: env.UNITY_LICENSE == ''
+        run: |
+          echo "::notice::Unity build skipped: add repository secrets UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD (see docs/MAC_QUICKSTART.md, 'Cloud builds')."
+
+      - uses: actions/checkout@v4
+        if: env.UNITY_LICENSE != ''
+
+      - uses: actions/cache@v4
+        if: env.UNITY_LICENSE != ''
+        with:
+          path: Library
+          key: Library-${{ matrix.target }}-${{ hashFiles('Packages/manifest.json', 'ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: Library-${{ matrix.target }}-
+
+      - uses: game-ci/unity-builder@v4
+        if: env.UNITY_LICENSE != ''
+        with:
+          unityVersion: 2020.3.48f1
+          targetPlatform: ${{ matrix.target }}
+          buildMethod: ${{ matrix.method }}
+          versioning: None
+          allowDirtyBuild: true
+
+      # upload-artifact drops Unix permissions, so tar the Mac app (the player binary must stay executable).
+      - name: Package Mac app
+        if: env.UNITY_LICENSE != '' && matrix.target == 'StandaloneOSX'
+        run: |
+          app="$(find build -maxdepth 3 -name '*.app' -type d | head -1)"
+          test -n "$app"
+          tar -C "$(dirname "$app")" -czf MowgliKartMaster-macOS.tar.gz "$(basename "$app")"
+
+      - uses: actions/upload-artifact@v4
+        if: env.UNITY_LICENSE != '' && matrix.target == 'Android'
+        with:
+          name: MowgliKartClient-apk
+          path: build/**/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: env.UNITY_LICENSE != '' && matrix.target == 'StandaloneOSX'
+        with:
+          name: MowgliKartMaster-macOS
+          path: MowgliKartMaster-macOS.tar.gz
+          if-no-files-found: error

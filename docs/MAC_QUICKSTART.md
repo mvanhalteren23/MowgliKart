@@ -27,7 +27,15 @@ Mac (MowgliKartMaster.app)                     Pico headsets (PUI 3 / Android 8.
 Outputs: `Builds/macOS/MowgliKartMaster.app`, `Builds/Android/MowgliKartClient.apk`.
 (Apple-silicon Macs run the 2020.3 player through Rosetta; use Unity 2021.2+ if you want a native arm64 player.)
 
+## 2b. Cloud builds (no Unity on your Mac)
+The repo has a GitHub Actions workflow (`.github/workflows/build.yml`). The *preflight* job always runs (no licence needed) and
+validates the Pico manifest, SDK version, banned packages (OpenXR / picoxr / Netcode) and the physics/network settings.
+The *build* job produces `MowgliKartClient.apk` and `MowgliKartMaster-macOS.tar.gz` as downloadable artifacts once you add
+three repository secrets: `UNITY_LICENSE` (contents of your Unity personal `.ulf` licence), `UNITY_EMAIL`, `UNITY_PASSWORD`
+(see game.ci docs, "Activation"). Untar the Mac app and run `xattr -dr com.apple.quarantine MowgliKartMaster.app`.
+
 ## 3. Put the client on the headsets (up to 8)
+First-time headset preparation: `docs/PICO_PROVISIONING.md`.
 Enable USB debugging on each headset (Settings > About > tap PUI version ~8x > Developer options), plug them in, then:
 ```
 scripts/mac/pico.sh devices     # see them
@@ -35,14 +43,14 @@ scripts/mac/pico.sh install     # installs/updates all of them in parallel
 scripts/mac/pico.sh wifi        # optional: adb over Wi-Fi, then unplug the cables
 scripts/mac/pico.sh launch      # start the client (it also becomes the Home launcher after first run)
 ```
-`pico.sh stop | reboot | logs [serial]` are also available.
+`pico.sh status | stop | reboot | logs [serial]` are also available (`status` shows installed / running / battery per headset).
 
 ## 4. Run an event
 1. `scripts/mac/run_master.sh` (or open the .app). Click **Allow** for incoming connections and **Local Network** access.
    It starts the server, LAN discovery and the content server automatically.
 2. Headsets appear in the list within a few seconds with battery and state.
 3. Tick the headsets for a game, tick **P1** for the leader, pick the game, **LAUNCH**.
-4. During play: **Recenter view**, **Return to hub** (selection or a whole session), **Reboot / Shut down** (tick *Arm power* first).
+4. During play: **Recenter view**, **Return to hub** (selection or a whole session), **Reboot / Shut down** (tick *Arm power* first), **Release kiosk / Re-lock kiosk** for servicing.
 
 ## 5. Adding new games without rebuilding the APK
 1. In a second Unity project build Addressables for **Android**; copy the output into `~/MowgliKart/ServerData/Android/`

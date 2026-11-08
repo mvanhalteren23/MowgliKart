@@ -26,6 +26,9 @@ namespace LegacyVR.KartClient.SystemService
         [SerializeField] private string routerPassword = "KartServer5GHzPassword";
 
         public bool IsToBServiceBound { get; private set; }
+
+        /// <summary>True after the operator released the headset for servicing; the lock-down is not re-applied until EnterKiosk().</summary>
+        public bool KioskReleased { get; private set; }
         public string CachedMacAddress { get; private set; }
         public string CachedSerialNumber { get; private set; }
 
@@ -86,8 +89,56 @@ namespace LegacyVR.KartClient.SystemService
             IsToBServiceBound = true;
             Debug.Log($"[PicoKioskController] ToBService bound with status: {status}");
 
-            ApplyKioskLockdown();
+            if (!KioskReleased)
+            {
+                ApplyKioskLockdown();
+            }
+
             QueryHardwareIdentifiersViaToB();
+        }
+
+        /// <summary>
+        /// Servicing escape hatch (operator button "Release kiosk"): stops being the Home launcher and gives the
+        /// Home / Back / Volume / Power keys back so staff can reach the Pico launcher and Settings.
+        /// </summary>
+        public void ReleaseKiosk()
+        {
+            if (!IsToBServiceBound)
+            {
+                Debug.LogWarning("[PicoKioskController] ReleaseKiosk ignored: ToBService is not bound. Use `scripts/mac/pico.sh uninstall` as a last resort.");
+                return;
+            }
+
+            KioskReleased = true;
+
+            Pvr_UnitySDKAPI.ToBService.UPvr_SetAPPAsHome(PBS_SwitchEnum.S_OFF, Application.identifier);
+
+            Pvr_UnitySDKAPI.ToBService.UPvr_PropertySetHomeKey(
+                PBS_HomeEventEnum.SINGLE_CLICK, PBS_HomeFunctionEnum.VALUE_HOME_GO_TO_HOME,
+                success => Debug.Log($"[PicoKioskController] Home single-click restored: {success}"));
+            Pvr_UnitySDKAPI.ToBService.UPvr_PropertySetHomeKey(
+                PBS_HomeEventEnum.DOUBLE_CLICK, PBS_HomeFunctionEnum.VALUE_HOME_RECENTER,
+                success => Debug.Log($"[PicoKioskController] Home double-click restored: {success}"));
+            Pvr_UnitySDKAPI.ToBService.UPvr_PropertySetHomeKey(
+                PBS_HomeEventEnum.LONG_PRESS, PBS_HomeFunctionEnum.VALUE_HOME_GO_TO_SETTING,
+                success => Debug.Log($"[PicoKioskController] Home long-press restored: {success}"));
+
+            Pvr_UnitySDKAPI.ToBService.UPvr_EnableBackKey();
+            Pvr_UnitySDKAPI.ToBService.UPvr_EnableVolumeKey();
+            Pvr_UnitySDKAPI.ToBService.UPvr_PropertyDisablePowerKey(
+                true, true,
+                code => Debug.Log($"[PicoKioskController] Power key restored: {code}"));
+        }
+
+        /// <summary>Re-applies the full kiosk lock-down after servicing (operator button "Re-lock kiosk").</summary>
+        public void EnterKiosk()
+        {
+            KioskReleased = false;
+
+            if (IsToBServiceBound)
+            {
+                ApplyKioskLockdown();
+            }
         }
 
         private void ApplyKioskLockdown()

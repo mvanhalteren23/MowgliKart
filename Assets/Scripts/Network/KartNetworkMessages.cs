@@ -28,7 +28,9 @@ namespace LegacyVR.KartRacing.Networking
     {
         RecenterView = 1,
         Reboot = 2,
-        Shutdown = 3
+        Shutdown = 3,
+        ExitKiosk = 4,
+        EnterKiosk = 5
     }
 
     /// <summary>

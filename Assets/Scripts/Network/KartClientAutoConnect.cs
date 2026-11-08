@@ -23,7 +23,14 @@ namespace LegacyVR.KartRacing.Networking
         private NetworkDiscovery _discovery;
         private Uri _foundServer;
 
+        public static KartClientAutoConnect Instance { get; private set; }
+
         public string Status { get; private set; } = "Idle";
+
+        private void Awake()
+        {
+            Instance = this;
+        }
 
         private void Start()
         {

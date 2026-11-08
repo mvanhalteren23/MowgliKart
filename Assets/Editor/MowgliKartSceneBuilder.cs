@@ -111,6 +111,7 @@ namespace LegacyVR.KartRacing.EditorTools
             text.alignment = TextAlignment.Center;
             text.characterSize = 0.1f;
             text.fontSize = 60;
+            label.AddComponent<HubStatusDisplay>(); // replaces the placeholder with live connection / kiosk / battery info
 
             EditorSceneManager.SaveScene(scene, HubPath);
         }

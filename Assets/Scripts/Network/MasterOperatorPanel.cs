@@ -50,7 +50,7 @@ namespace LegacyVR.KartRacing.Networking
             }
 
             GUI.matrix = Matrix4x4.Scale(new Vector3(uiScale, uiScale, 1f));
-            GUILayout.BeginArea(new Rect(12, 12, 820, Screen.height / uiScale - 24), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(12, 12, 900, Screen.height / uiScale - 24), GUI.skin.box);
 
             DrawServerBar(manager);
             DrawNetworkInfo(manager);
@@ -256,6 +256,18 @@ namespace LegacyVR.KartRacing.Networking
             {
                 manager.ReturnHeadsetsToHub(_selectedMacs.ToList());
                 _status = $"Return-to-hub sent to {_selectedMacs.Count} headset(s).";
+            }
+
+            if (GUILayout.Button("Release kiosk", GUILayout.Width(110)))
+            {
+                int n = manager.SendDeviceCommand(_selectedMacs.ToList(), DeviceCommandType.ExitKiosk);
+                _status = $"Kiosk released on {n} headset(s) (Home/Back/Volume/Power work again).";
+            }
+
+            if (GUILayout.Button("Re-lock kiosk", GUILayout.Width(110)))
+            {
+                int n = manager.SendDeviceCommand(_selectedMacs.ToList(), DeviceCommandType.EnterKiosk);
+                _status = $"Kiosk re-locked on {n} headset(s).";
             }
 
             GUILayout.FlexibleSpace();
