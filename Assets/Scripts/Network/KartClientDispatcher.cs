@@ -22,6 +22,11 @@ namespace LegacyVR.KartRacing.Networking
     {
         public const string LeaderControlUiTag = "LeaderControlUI";
 
+        /// <summary>The always-resident lobby scene (Build Settings). Persistent systems live in BootScene, never here.</summary>
+        public const string HubSceneName = "HubScene";
+
+        private const float HeartbeatSeconds = 5f;
+
         public static KartClientDispatcher LocalInstance { get; private set; }
 
         [SyncVar] public int CurrentSessionId = -1;
@@ -32,12 +37,37 @@ namespace LegacyVR.KartRacing.Networking
         private AsyncOperationHandle<SceneInstance> _currentSceneHandle;
         private bool _hasLoadedAddressableScene;
         private bool _isTransitioningScene;
+        private string _currentSceneKey = HubSceneName;
 
         public override void OnStartLocalPlayer()
         {
             base.OnStartLocalPlayer();
             LocalInstance = this;
             DontDestroyOnLoad(gameObject);
+            StartCoroutine(HeartbeatRoutine());
+        }
+
+        /// <summary>Live battery / scene telemetry for the operator panel.</summary>
+        private IEnumerator HeartbeatRoutine()
+        {
+            var wait = new WaitForSecondsRealtime(HeartbeatSeconds);
+            while (true)
+            {
+                yield return wait;
+
+                if (!NetworkClient.isConnected)
+                    continue;
+
+                float raw = SystemInfo.batteryLevel;
+                NetworkClient.Send(new DeviceStatusMessage
+                {
+                    MacAddress = PicoKioskController.Instance != null
+                        ? PicoKioskController.Instance.CachedMacAddress
+                        : SystemInfo.deviceUniqueIdentifier,
+                    BatteryPercent = raw < 0f ? 100 : Mathf.RoundToInt(Mathf.Clamp01(raw) * 100f),
+                    CurrentLoadedSceneKey = _hasLoadedAddressableScene ? _currentSceneKey : HubSceneName
+                });
+            }
         }
 
         /// <summary>
@@ -162,6 +192,7 @@ namespace LegacyVR.KartRacing.Networking
 
                 _currentSceneHandle = loadHandle;
                 _hasLoadedAddressableScene = true;
+                _currentSceneKey = addressableSceneKey;
 
                 ConfigureInGameLeaderUI(isLeader);
 
@@ -214,6 +245,96 @@ namespace LegacyVR.KartRacing.Networking
                 SessionId = CurrentSessionId,
                 CommandType = commandType
             });
+        }
+
+        /// <summary>
+        /// Operator (or Player 1) sent this headset back to the lobby: free the Addressable scene bundle,
+        /// unbind the camera from the kart and load the resident HubScene.
+        /// </summary>
+        [TargetRpc]
+        public void TargetReturnToHub(NetworkConnection target)
+        {
+            if (_isTransitioningScene)
+                return;
+
+            StartCoroutine(ReturnToHubRoutine());
+        }
+
+        private IEnumerator ReturnToHubRoutine()
+        {
+            _isTransitioningScene = true;
+
+            ThreadPriority previousPriority = Application.backgroundLoadingPriority;
+            Application.backgroundLoadingPriority = ThreadPriority.Low;
+
+            if (Pico3DoFKartCameraRig.Instance != null)
+            {
+                Pico3DoFKartCameraRig.Instance.BindToLocalKart(null);
+            }
+
+            CurrentSessionId = -1;
+            IsPlayerOneLeader = false;
+
+            AsyncOperation hubLoad = SceneManager.LoadSceneAsync(HubSceneName, LoadSceneMode.Single);
+            while (hubLoad != null && !hubLoad.isDone)
+            {
+                yield return null;
+            }
+
+            // The Single-mode load already unloaded the Addressable scene; drop its bundle reference.
+            if (_hasLoadedAddressableScene && _currentSceneHandle.IsValid())
+            {
+                Addressables.Release(_currentSceneHandle);
+            }
+
+            _hasLoadedAddressableScene = false;
+            _currentSceneKey = HubSceneName;
+
+            yield return Resources.UnloadUnusedAssets();
+            System.GC.Collect();
+
+            Application.backgroundLoadingPriority = previousPriority;
+            _isTransitioningScene = false;
+        }
+
+        /// <summary>Operator-issued hardware / view commands from the Mac master.</summary>
+        [TargetRpc]
+        public void TargetDeviceCommand(NetworkConnection target, byte command)
+        {
+            switch ((DeviceCommandType)command)
+            {
+                case DeviceCommandType.RecenterView:
+                    if (Pico3DoFKartCameraRig.Instance != null)
+                    {
+                        Pico3DoFKartCameraRig.Instance.RecenterView();
+                    }
+                    break;
+
+                case DeviceCommandType.Reboot:
+                    RunDeviceAction(Pvr_UnitySDKAPI.PBS_DeviceControlEnum.DEVICE_CONTROL_REBOOT);
+                    break;
+
+                case DeviceCommandType.Shutdown:
+                    RunDeviceAction(Pvr_UnitySDKAPI.PBS_DeviceControlEnum.DEVICE_CONTROL_SHUTDOWN);
+                    break;
+
+                default:
+                    Debug.LogWarning($"[KartClientDispatcher] Unknown device command {command}");
+                    break;
+            }
+        }
+
+        private static void RunDeviceAction(Pvr_UnitySDKAPI.PBS_DeviceControlEnum action)
+        {
+            if (PicoKioskController.Instance == null || !PicoKioskController.Instance.IsToBServiceBound)
+            {
+                Debug.LogWarning($"[KartClientDispatcher] {action} ignored: ToBService is not bound on this headset.");
+                return;
+            }
+
+            Pvr_UnitySDKAPI.ToBService.UPvr_ControlSetDeviceAction(
+                action,
+                code => Debug.Log($"[KartClientDispatcher] {action} result: {code}"));
         }
 
         [TargetRpc]

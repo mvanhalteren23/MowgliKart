@@ -16,13 +16,14 @@ using LegacyVR.KartRacing.Networking;
 namespace LegacyVR.KartRacing.EditorTools
 {
     /// <summary>
-    /// Tools > MowgliKart > Build Scenes: generates HubScene (Android thin client), MasterScene (Windows operator)
+    /// Tools > MowgliKart > Build Scenes: generates BootScene + HubScene (Android thin client), MasterScene (Mac/Windows operator)
     /// and an Addressable Track01 scene, so no scene has to be hand-authored. Safe to re-run (overwrites the three scenes).
     /// </summary>
     public static class MowgliKartSceneBuilder
     {
-        private const string HubPath = "Assets/Scenes/HubScene.unity";
-        private const string MasterPath = "Assets/Scenes/MasterScene.unity";
+        public const string BootPath = "Assets/Scenes/BootScene.unity";
+        public const string HubPath = "Assets/Scenes/HubScene.unity";
+        public const string MasterPath = "Assets/Scenes/MasterScene.unity";
         private const string TrackPath = "Assets/Scenes/Tracks/Track01.unity";
 
         private const string PvrSdkPrefab = "Assets/PicoMobileSDK/Pvr_UnitySDK/Prefabs/Pvr_UnitySDK.prefab";
@@ -37,28 +38,32 @@ namespace LegacyVR.KartRacing.EditorTools
             Directory.CreateDirectory("Assets/Scenes/Tracks");
             BuildTrack();
             BuildMaster();
+            BuildBoot();
             BuildHub();
 
             EditorBuildSettings.scenes = new[]
             {
-                new EditorBuildSettingsScene(HubPath, true),     // index 0: the APK boots into the hub
-                new EditorBuildSettingsScene(MasterPath, true),  // index 1: Windows master server
+                new EditorBuildSettingsScene(BootPath, true),    // index 0: persistent Pico systems, then loads the hub
+                new EditorBuildSettingsScene(HubPath, true),     // index 1: lobby, also the Return-To-Hub target
+                new EditorBuildSettingsScene(MasterPath, true),  // index 2: Mac/Windows master (not included in the APK)
             };
 
             AssetDatabase.SaveAssets();
-            Debug.Log("[MowgliKart] Scenes built. Track01 is Addressable; HubScene=0, MasterScene=1 in Build Settings.");
+            Debug.Log("[MowgliKart] Scenes built. Track01 is Addressable; BootScene=0, HubScene=1, MasterScene=2.");
         }
 
-        // ------------------------------------------------------------------ Hub (Pico thin client)
-        private static void BuildHub()
+        // ------------------------------------------------------------------ Boot (Pico thin client, persistent systems)
+        private static void BuildBoot()
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             GameObject pvr = InstantiatePrefab(PvrSdkPrefab);
             pvr.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            pvr.AddComponent<PersistAcrossScenes>();
 
-            // Controller prefab (contains PvrController0/1) - same hierarchy level handling as the Pico docs.
+            // Controller prefab (contains PvrController0/1). Persistent so steering keeps working in every track.
             GameObject controllers = InstantiatePrefab(ControllerManagerPrefab);
+            controllers.AddComponent<PersistAcrossScenes>();
 
             // The decoupled rig: lives on the Pvr_UnitySDK root, never parented to a kart.
             Pico3DoFKartCameraRig rig = pvr.GetComponent<Pico3DoFKartCameraRig>();
@@ -75,15 +80,42 @@ namespace LegacyVR.KartRacing.EditorTools
             var kiosk = new GameObject("PicoKioskController");
             kiosk.AddComponent<PicoKioskController>();
 
+            // NetworkManager prefab also carries Mirror's NetworkDiscovery used to find the Mac.
             InstantiatePrefab(NetworkManagerPrefab);
 
-            // Keep the editor happy about unused locals while still documenting intent.
-            Debug.Assert(controllers != null);
+            // Zero-UI connection logic: discover the Mac on the LAN and keep reconnecting.
+            var connect = new GameObject("KartClientAutoConnect");
+            connect.AddComponent<KartClientAutoConnect>();
+            connect.AddComponent<PersistAcrossScenes>();
+
+            new GameObject("BootLoader").AddComponent<BootLoader>();
+
+            EditorSceneManager.SaveScene(scene, BootPath);
+        }
+
+        // ------------------------------------------------------------------ Hub (lobby + Return-To-Hub target)
+        private static void BuildHub()
+        {
+            // Deliberately contains NO persistent systems: it is re-loaded on every Return-To-Hub.
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            var light = new GameObject("Directional Light", typeof(Light));
+            light.GetComponent<Light>().type = LightType.Directional;
+            light.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+
+            var label = new GameObject("HubLabel", typeof(TextMesh));
+            label.transform.position = new Vector3(0f, 1.6f, 3f);
+            var text = label.GetComponent<TextMesh>();
+            text.text = "MowgliKart\nWaiting for the operator...";
+            text.anchor = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignment.Center;
+            text.characterSize = 0.1f;
+            text.fontSize = 60;
 
             EditorSceneManager.SaveScene(scene, HubPath);
         }
 
-        // ------------------------------------------------------------------ Master (Windows operator)
+        // ------------------------------------------------------------------ Master (Mac/Windows operator)
         private static void BuildMaster()
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -95,8 +127,9 @@ namespace LegacyVR.KartRacing.EditorTools
 
             InstantiatePrefab(NetworkManagerPrefab);
 
-            var panel = new GameObject("MasterOperatorPanel");
-            panel.AddComponent<MasterOperatorPanel>();
+            var root = new GameObject("MasterControl");
+            root.AddComponent<MasterBootstrap>();
+            root.AddComponent<MasterOperatorPanel>();
 
             EditorSceneManager.SaveScene(scene, MasterPath);
         }

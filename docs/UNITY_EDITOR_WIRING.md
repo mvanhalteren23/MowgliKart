@@ -2,11 +2,12 @@
 
 ## Fast path: let Unity build the scenes
 After the project opens and compiles: **Tools > MowgliKart > Build Scenes**. This generates
-`Assets/Scenes/HubScene.unity` (Pvr rig + controllers + camera rig with references assigned + PicoKioskController +
-NetworkManager prefab), `Assets/Scenes/MasterScene.unity` (NetworkManager + `MasterOperatorPanel`), and
-`Assets/Scenes/Tracks/Track01.unity` (ground, 3 BoostPads, 13 grid markers, disabled `LeaderControlUI` canvas with
+`Assets/Scenes/BootScene.unity` (Pvr rig + controllers + camera rig with references assigned + PicoKioskController +
+NetworkManager prefab + `KartClientAutoConnect`, all DontDestroyOnLoad; then loads) `HubScene` (lobby / Return-To-Hub target),
+`Assets/Scenes/MasterScene.unity` (NetworkManager + `MasterBootstrap` + `MasterOperatorPanel`), and
+`Assets/Scenes/Tracks/Track01.unity` (ground, 3 BoostPads, 8 grid markers, disabled `LeaderControlUI` canvas with
 Start/Pause/Return buttons) already marked Addressable under key `Assets/Scenes/Tracks/Track01.unity`. It also sets Build
-Settings (Hub = 0, Master = 1). The manual list below is what that command automates, kept for reference/verification.
+Settings (Boot = 0, Hub = 1, Master = 2; the APK uses Boot+Hub, the Mac app uses Master only). The manual list below is what that command automates, kept for reference/verification.
 
 ## Windows operator (MasterScene)
 Press Play (or build a Windows Standalone with MasterScene): **Start Server**, wait for headsets to appear, tick the group,
@@ -24,7 +25,7 @@ but Mirror v96 and Addressables 1.19.19 are happiest on 2020.3+).
 2. `Pico3DoFKartCameraRig` on the `Pvr_UnitySDK` root: assign `pvrSdkRootTransform` (the root) and `pvrHeadTransform` (its `Head` child). Do NOT parent it to any kart.
 3. `PvrController0` (child of Pvr_UnitySDK) + `ControllerManager` prefab from `Assets/PicoMobileSDK/Pvr_Controller`.
 4. Empty GameObject named exactly **`PicoKioskController`** with `PicoKioskController` (name matters: it is passed to `UPvr_SetUnityObjectName`).
-5. `Assets/Prefabs/Network/MasterKartNetworkManager.prefab` (already wired to the dispatcher + kart prefabs, KcpTransport, 20 Hz, 13 conns).
+5. `Assets/Prefabs/Network/MasterKartNetworkManager.prefab` (already wired to the dispatcher + kart prefabs, KcpTransport, NetworkDiscovery, 20 Hz, 8 conns).
    Set `networkAddress` to the Windows laptop's LAN IP on the Android build.
 **Windows master scene**: same NetworkManager prefab + your operator UI calling `DispatchGameModuleSession(...)`. No Pvr rig needed.
 
@@ -48,3 +49,5 @@ but Mirror v96 and Addressables 1.19.19 are happiest on 2020.3+).
 - PUI 3 is new enough that `ToBService` should be available: expect the main kiosk path (not the `UPvr_GetDeviceSN` / wlan0 fallback) on device. Check the log for `ToBService bound with status`. If `pico_advance_interface` features are refused, the app may need to be whitelisted/signed for enterprise APIs per Pico's ToB docs.
 - Auto-boot comes from the HOME launcher role (`UPvr_SetAPPAsHome`). The `BOOT_COMPLETED` filter on the activity is ignored by Android (only a `<receiver>` gets that broadcast); add a small BroadcastReceiver only if the HOME role does not start the app after a cold boot.
 - Android 8.x requires runtime prompts for the storage permissions; Addressables uses app-private cache, so denying them is harmless.
+
+See `docs/MAC_QUICKSTART.md` for building and running the Mac master app.

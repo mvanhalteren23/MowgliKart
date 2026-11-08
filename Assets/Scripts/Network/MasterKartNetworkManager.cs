@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Mirror;
 using LegacyVR.KartClient.SystemService;
+using LegacyVR.KartRacing.Networking.Local;
 
 namespace LegacyVR.KartRacing.Networking
 {
@@ -48,6 +49,7 @@ namespace LegacyVR.KartRacing.Networking
         public bool IsSceneLoadedAndReady;
         public KartClientDispatcher Dispatcher;
         public NetworkIdentity SpawnedAvatar;
+        public double LastSeenRealtime;
     }
 
     [Serializable]
@@ -57,8 +59,8 @@ namespace LegacyVR.KartRacing.Networking
         public string GameModuleId;
         public string AddressableSceneKey;
         public string LeaderMacAddress;
-        public List<string> MemberMacAddresses = new List<string>(13);
-        public List<NetworkIdentity> SpawnedSessionAvatars = new List<NetworkIdentity>(13);
+        public List<string> MemberMacAddresses = new List<string>(MasterKartNetworkManager.MaxHeadsets);
+        public List<NetworkIdentity> SpawnedSessionAvatars = new List<NetworkIdentity>(MasterKartNetworkManager.MaxHeadsets);
     }
 
     /// <summary>
@@ -67,7 +69,14 @@ namespace LegacyVR.KartRacing.Networking
     /// </summary>
     public class MasterKartNetworkManager : NetworkManager
     {
-        public const int MaxHeadsets = 13;
+        /// <summary>Maximum simultaneous headsets controlled from the Mac master.</summary>
+        public const int MaxHeadsets = 8;
+
+        /// <summary>Port of the built-in Addressables content server (LocalContentServer).</summary>
+        public const int ContentServerPort = 8080;
+
+        /// <summary>Token an operator can put in a module's RemoteCatalogUrl; replaced by the Mac's LAN IP at dispatch time.</summary>
+        public const string ServerIpToken = "{SERVER_IP}";
         public const int KinematicSendRateHz = 20;
 
         public static new MasterKartNetworkManager singleton => (MasterKartNetworkManager)NetworkManager.singleton;
@@ -103,6 +112,25 @@ namespace LegacyVR.KartRacing.Networking
         public IReadOnlyDictionary<int, RaceSessionGroup> ActiveSessions => _activeSessions;
         public int RegisteredHeadsetCount => _registryByMac.Count;
 
+        /// <summary>Mac LAN address used to fill {SERVER_IP} in remote catalog URLs. Override from the UI if auto-detection picks the wrong NIC.</summary>
+        public string ServerLanAddress
+        {
+            get => string.IsNullOrEmpty(_lanOverride) ? (_lanCached ?? (_lanCached = LanAddress.GetPrimaryIPv4())) : _lanOverride;
+            set => _lanOverride = value;
+        }
+
+        private string _lanOverride;
+        private string _lanCached;
+
+        public void RefreshLanAddress() => _lanCached = LanAddress.GetPrimaryIPv4();
+
+        /// <summary>Replaces {SERVER_IP} so a module can ship a catalog URL that works on whatever network the Mac is on.</summary>
+        public string ResolveCatalogUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return string.Empty;
+            return url.Replace(ServerIpToken, ServerLanAddress ?? "127.0.0.1");
+        }
+
         public event Action<RegisteredHeadsetRecord> OnHeadsetRegistered;
         public event Action<string> OnHeadsetDisconnected;
         public event Action<int, string> OnHeadsetSceneReady;
@@ -121,7 +149,7 @@ namespace LegacyVR.KartRacing.Networking
         }
 
         /// <summary>
-        /// Snapdragon 820 budget: 20 Hz tick, 13 headsets, 110 ms snapshot interpolation buffer (2.2 x 50 ms).
+        /// Snapdragon 820 budget: 20 Hz tick, 8 headsets, 110 ms snapshot interpolation buffer (2.2 x 50 ms).
         /// Applied in code as well as on the prefab so the values can never silently drift.
         /// </summary>
         private void ApplyKinematicNetworkSettings()
@@ -193,6 +221,7 @@ namespace LegacyVR.KartRacing.Networking
             NetworkServer.RegisterHandler<DeviceRegistrationMessage>(OnServerReceiveDeviceRegistration, false);
             NetworkServer.RegisterHandler<ClientSceneReadyMessage>(OnServerReceiveClientSceneReady, false);
             NetworkServer.RegisterHandler<LeaderSessionCommandMessage>(OnServerReceiveLeaderCommand, false);
+            NetworkServer.RegisterHandler<DeviceStatusMessage>(OnServerReceiveDeviceStatus, false);
 
             Debug.Log($"[MasterServer] Started for up to {maxConnections} headsets at {sendRate} Hz tick rate. Registered Game Modules: {_modulesById.Count}");
         }
@@ -254,6 +283,7 @@ namespace LegacyVR.KartRacing.Networking
             record.DeviceModel = msg.DeviceModel;
             record.BatteryPercent = msg.BatteryPercent;
             record.ActiveSceneKey = msg.CurrentLoadedSceneKey;
+            record.LastSeenRealtime = Time.realtimeSinceStartupAsDouble;
 
             if (conn.identity != null)
             {
@@ -264,6 +294,16 @@ namespace LegacyVR.KartRacing.Networking
 
             Debug.Log($"[MasterServer] Registered Headset #{_registryByMac.Count}/{MaxHeadsets} | MAC={record.MacAddress} | SN={record.SerialNumber} | Model={record.DeviceModel} | Battery={record.BatteryPercent}%");
             OnHeadsetRegistered?.Invoke(record);
+        }
+
+        private void OnServerReceiveDeviceStatus(NetworkConnectionToClient conn, DeviceStatusMessage msg)
+        {
+            if (!_registryByConnId.TryGetValue(conn.connectionId, out RegisteredHeadsetRecord record))
+                return;
+
+            record.BatteryPercent = msg.BatteryPercent;
+            record.ActiveSceneKey = msg.CurrentLoadedSceneKey;
+            record.LastSeenRealtime = Time.realtimeSinceStartupAsDouble;
         }
 
         #endregion
@@ -293,7 +333,7 @@ namespace LegacyVR.KartRacing.Networking
                 leaderMacAddress,
                 module.AddressableSceneKey,
                 module.GameModuleId,
-                module.RemoteCatalogUrl,
+                ResolveCatalogUrl(module.RemoteCatalogUrl),
                 module.CameraTrackingMode
             );
         }
@@ -382,7 +422,7 @@ namespace LegacyVR.KartRacing.Networking
                 record.Dispatcher.TargetLoadAddressableScene(
                     record.Connection,
                     addressableSceneKey,
-                    remoteCatalogUrl ?? string.Empty,
+                    ResolveCatalogUrl(remoteCatalogUrl),
                     gameModuleId,
                     sessionId,
                     isLeader,
@@ -415,6 +455,65 @@ namespace LegacyVR.KartRacing.Networking
             }
 
             record.SpawnedAvatar = null;
+        }
+
+        /// <summary>
+        /// Sends every headset of a session back to the always-resident HubScene and clears its avatars.
+        /// Triggered from the operator panel or by the Player 1 "Return To Hub" button.
+        /// </summary>
+        [Server]
+        public void ReturnSessionToHub(int sessionId)
+        {
+            if (!_activeSessions.TryGetValue(sessionId, out RaceSessionGroup session))
+                return;
+
+            DestroySessionAvatars(session);
+            ReturnHeadsetsToHub(session.MemberMacAddresses);
+            _activeSessions.Remove(sessionId);
+        }
+
+        [Server]
+        public void ReturnHeadsetsToHub(IEnumerable<string> macAddresses)
+        {
+            // Copy first: callers may pass session.MemberMacAddresses, which we do not mutate, but be defensive.
+            foreach (string rawMac in new List<string>(macAddresses))
+            {
+                if (!_registryByMac.TryGetValue(rawMac.Trim().ToUpperInvariant(), out RegisteredHeadsetRecord record))
+                    continue;
+
+                DestroyHeadsetAvatar(record);
+                record.AssignedSessionId = -1;
+                record.AssignedGameModuleId = "Hub";
+                record.IsPlayerOneLeader = false;
+                record.IsSceneLoadedAndReady = false;
+                record.ActiveSceneKey = "HubScene";
+
+                if (record.Dispatcher != null && record.Connection != null)
+                {
+                    record.Dispatcher.TargetReturnToHub(record.Connection);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Pushes a hardware/view command (recenter, reboot, shutdown) to the chosen headsets.
+        /// </summary>
+        [Server]
+        public int SendDeviceCommand(IEnumerable<string> macAddresses, DeviceCommandType command)
+        {
+            int sent = 0;
+            foreach (string rawMac in macAddresses)
+            {
+                if (_registryByMac.TryGetValue(rawMac.Trim().ToUpperInvariant(), out RegisteredHeadsetRecord record) &&
+                    record.Dispatcher != null && record.Connection != null)
+                {
+                    record.Dispatcher.TargetDeviceCommand(record.Connection, (byte)command);
+                    sent++;
+                }
+            }
+
+            Debug.Log($"[MasterServer] Sent {command} to {sent} headset(s).");
+            return sent;
         }
 
         private void OnServerReceiveClientSceneReady(NetworkConnectionToClient conn, ClientSceneReadyMessage msg)
@@ -486,6 +585,13 @@ namespace LegacyVR.KartRacing.Networking
             if (senderRecord.AssignedSessionId != msg.SessionId ||
                 !_activeSessions.TryGetValue(msg.SessionId, out RaceSessionGroup session))
                 return;
+
+            // Command 3 changes server state (avatars, registry), so the server executes it instead of just relaying it.
+            if (msg.CommandType == 3)
+            {
+                ReturnSessionToHub(msg.SessionId);
+                return;
+            }
 
             foreach (string mac in session.MemberMacAddresses)
             {

@@ -22,6 +22,26 @@ namespace LegacyVR.KartRacing.Networking
     }
 
     /// <summary>
+    /// Operator-initiated headset commands pushed from the Mac master to a headset via [TargetRpc].
+    /// </summary>
+    public enum DeviceCommandType : byte
+    {
+        RecenterView = 1,
+        Reboot = 2,
+        Shutdown = 3
+    }
+
+    /// <summary>
+    /// Heartbeat sent by every headset every few seconds so the operator sees live battery / scene state.
+    /// </summary>
+    public struct DeviceStatusMessage : NetworkMessage
+    {
+        public string MacAddress;
+        public int BatteryPercent;
+        public string CurrentLoadedSceneKey;
+    }
+
+    /// <summary>
     /// Sent by a Pico client to the Master Server when Addressables.LoadSceneAsync completes.
     /// </summary>
     public struct ClientSceneReadyMessage : NetworkMessage

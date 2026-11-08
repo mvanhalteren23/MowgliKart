@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 3001}
   - component: {fileID: 3002}
   - component: {fileID: 3003}
+  - component: {fileID: 3004}
   m_Layer: 0
   m_Name: MasterKartNetworkManager
   m_TagString: Untagged
@@ -53,7 +54,7 @@ MonoBehaviour:
   onlineScene: 
   transport: {fileID: 3003}
   networkAddress: localhost
-  maxConnections: 13
+  maxConnections: 8
   disconnectInactiveConnections: 0
   disconnectInactiveTimeout: 60
   authenticator: {fileID: 0}
@@ -101,3 +102,24 @@ MonoBehaviour:
   NoDelay: 1
   Interval: 10
   FastResend: 2
+--- !u!114 &3004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c761308e733c51245b2e8bb4201f46dc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableActiveDiscovery: 1
+  BroadcastAddress: 
+  serverBroadcastListenPort: 47777
+  ActiveDiscoveryInterval: 3
+  transport: {fileID: 3003}
+  OnServerFound:
+    m_PersistentCalls:
+      m_Calls: []
+  secretHandshake: 4815162342
