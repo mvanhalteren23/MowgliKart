@@ -1,1 +1,68 @@
-# MowgliKart
+# Mowgli Kart — Red Bull-style Soapbox Downhill Racer
+
+A browser 3D arcade downhill kart racer (Three.js r187 + Rapier3D WASM physics + Vite) built from [`SPEC.md`](SPEC.md):
+a **4-race roguelite Draft Cup**, Mario Kart-style hop-drift mini-turbos and jump tricks, Soapbox push-starts judged by a
+celebrity panel, cosmetic part shedding with duct-tape repair, janky elevated shortcuts, slipstream drafting, and local
+**1–4 player split-screen** against up to 7 AI (8 racers total).
+
+```bash
+npm install
+npm run dev          # http://localhost:5173
+npm run build        # production bundle in dist/
+npm run sim          # headless 8-AI race (node scripts/sim.mjs [track_id|cup])
+npm run validate-assets && npm run gen-pipeline   # AI-asset tooling, see ASSET_PIPELINE.md
+```
+Add `?auto=1&players=N` to the URL for an attract/test mode where human karts drive themselves (add `&stay=1` to stop after race 1).
+
+## How to play
+1. **Lobby** — pick 1–4 players, a kart (Rocket Grocery Kart / Motorized Chicken Coop) and a kid for each.
+2. **Pre-race draft** — each race you pick **one of three** dealt cards: a stacking *Stat Boost*, a rechargeable *Weapon*, or a rechargeable *Shield*
+   (picking a weapon/shield you already own levels it up). AI racers draft by persona (Balanced Hybrid, Defensive Sprinter, Offensive Brawler, Adaptive Counter).
+3. **Summit push-start** — during `3… 2… 1…` tap **Hop/Trick** inside the green zone to raise the Judges' Scorecard (6.0 → 10.0); hold **Throttle only in the last 0.35 s** for a Rocket Start
+   (≥ 9.0 = 1.40× for 1.6 s, ≥ 7.5 = 1.20× for 1.0 s). Holding throttle from before 3.0 s = *Blown Gasket* stall.
+4. **Race** — drift (hop, then hold) to charge blue/orange/pink mini-turbos, hit ramps and tap Trick right at the lip, slipstream rivals for a slingshot, grab Mystery Boxes,
+   take the risky **elevated shortcuts** (hairpins only; need ≈ top speed or a trick/nitro boost to clear the gap — miss and you drop onto the road with 0.65× mud drag).
+5. **Standings** — points 15/12/10/8/6/4/2/1 per race, four races, best total wins the Cup.
+
+| | P1 | P2 | Gamepad |
+|---|---|---|---|
+| Steer / Throttle / Brake | A D / W / S | ← → / ↑ / ↓ | L-stick / R2·A / L2 |
+| Hop · Drift · Trick · Push-start | Space | Enter | R1 |
+| Mystery item | Left Shift | Right Shift | L1 |
+| Circuit weapon | E | / | X |
+| Circuit shield | Q | . | B / Y |
+
+Draft: P1 `1/2/3`, P2 `8/9/0`, or mouse / pad (◀ ▶ + A). `M` mute, `P` pause.
+
+## Architecture (matches the spec's module layout)
+```
+src/core/        GameLoop (60 Hz fixed step), CircuitManager (4-race cup + draft), StartSequence (judges/push-start),
+                 SplitScreenRenderer (+HUD), InputManager, AssetManager, AudioManager, RaceSession (one race), UI, FX
+src/physics/     PhysicsWorld (Rapier, collision groups, event queue), RaycastSuspension (4-wheel spring/damper + tyre friction)
+src/controllers/ KartController (engine, slope assist, hop/drift FSM, tricks, slipstream), DamageModel, KartVisual, AIController
+src/track/       TrackSpline (Catmull-Rom, Frenet+banking, arc-length LUT, kickers, shortcut branches), ObstacleManager
+src/items/       ItemManager (weapon + shield + pickup slots, projectiles, hazards)
+src/registries/  Karts, Characters, Tracks (+obstacles), Items, CircuitDraft (stats/weapons/shields): pure data + procedural fallbacks
+```
+Content is data-driven: every registry entry carries a `proceduralFallback(THREE)` builder, so the game is fully playable with **no external assets**.
+Drop `.glb` files in `public/assets/models/` (see [ASSET_PIPELINE.md](ASSET_PIPELINE.md)) and `npm run validate-assets` to swap them in.
+
+## Status vs. the spec
+Implemented: everything in spec §3–§6 as a vertical slice — all four tracks (procedural seeded splines with sweepers, banking, 8 jump kickers and 3 shortcuts each), 4-race circuit & draft,
+push-start/judges, hop/drift/mini-turbo FSM, trick boost, slipstream, piecemeal shedding + duct-tape snap-back, 4 weapons (with level upgrades), 3 shields, 4 stat boosts with γ diminishing returns, 3 mystery items,
+12 kids, 12 karts registered (2 playable), 12 region obstacles, 8-racer AI with whiskers/shortcut/slipstream/combat/draft personas, split-screen with the 91°→108° FOV and (0, 3.4, 7.8) chase camera.
+
+Decisions & deviations (so nothing is a surprise):
+- **Rapier is pinned to 0.14.0.** 0.21 changes trimesh/CCD behaviour enough to wedge karts on the shortcut kicker; retune before upgrading. Three is r187.
+- **Arcade gravity 14 m/s²** (suspension constants are as specified: k = 18 000, c = 2 400, L_rest 0.45, R 0.25). The damper impulse is capped per step and rays reach 0.18 m past the spring range (grounded-detection margin) — both needed for stable landings at 60 Hz.
+- **Jump kickers** are 18° wedges on a downhill road, so the net launch angle is ≈ 11°. Shortcut kickers are 25°. Trick window is exactly −0.20 s / +0.12 s around the lip (+ Pogo-Shock bonus).
+- **Janky shortcuts** (spec §3.1.4): inside lane of each hairpin; solid kicker → 24 m gap → 4.2 m elevated plank. The speed gate is *physical* (≈ 0.93 v_top clears it; nitro/trick also work) rather than a scripted check. Chord savings are 18–27 % of the arc (spec: ~28 %). Missing the plank lands you on the road below with the 0.65× / 2 s mud drag.
+- **Stat "+0.38 m/s equivalents"** are converted against a 23.5 m/s reference (jump +1.6 %; drift charge +5 % rate).
+- **Camera FOV**: 91°/108° is applied as the *16:9-reference* FOV; wide 2-player strips keep the same horizontal FOV instead of fisheyeing.
+- **3-player 4th quadrant** is a live 2-D minimap + standings (canvas), not a separate 3-D camera.
+- **Not modelled**: pit-crew meshes pushing the kart (the judges, scorecards, gauge and launch are), kart-specific voice barks (ids are registered; audio is synthesised placeholders), the 10 expansion karts are data-only (`playable: false`).
+- **Balance**: constants follow the spec; I did *not* re-run its Monte Carlo. Headless sims (`npm run sim`) give ≈ 180 s solo laps and 200–250 s in an 8-kart pack (collisions + weapon hits), vs. the spec's 177 s average.
+
+## Verification done
+`npm run build` clean; Node simulations (full 8-AI races on all tracks, the 4-race Cup with drafting); headless-Chromium runs of the real UI (lobby → draft → 1/2/3/4-player races) with zero console errors,
+real keyboard control, and a GLB hot-swap round-trip. Physics regression helpers live in `scripts/sim.mjs`.

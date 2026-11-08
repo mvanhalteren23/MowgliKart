@@ -1,0 +1,21 @@
+{
+  "name": "mowgli-kart",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "validate-assets": "node scripts/validate-assets.js",
+    "sim": "node scripts/sim.mjs",
+    "gen-pipeline": "node scripts/gen-pipeline.js"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.14.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
