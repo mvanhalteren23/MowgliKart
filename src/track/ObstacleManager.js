@@ -18,7 +18,7 @@ export class ObstacleManager {
   spawn(def) {
     const { track, physics, assets } = this.s;
     const rnd = mulberry32(def.seed * 7919 + 13);
-    const half = track.width / 2 - 1.8;
+    const half = Math.min(track.width / 2 - 1.8, track.grooveHalf + 5);
     for (const [typeId, count] of def.obstacles) {
       const T = OBSTACLES[typeId];
       for (let i = 0; i < count; i++) {

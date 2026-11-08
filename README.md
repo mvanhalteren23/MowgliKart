@@ -55,6 +55,16 @@ HUD: rainbow arc speedometer, circular minimap (shortcuts in yellow), bold rank,
 Draft: a 3D garage backdrop showing each drafting player's kart + kid, glowing colour-coded stat/weapon/shield cards with rating bars, and the 4-race progress tracker.
 Everything is procedural; swap in AI-generated `.glb` models via ASSET_PIPELINE.md for the fully illustrated look.
 
+## Open-slope Whistler + graphics layer
+- **Whistler is now an open slope**: a 44 m corridor with an 18 m groomed groove (fast) and moguly **powder** either side (≈20 % slower, less grip), bounded by snowbanks.
+  ~300 individually **collidable trees** sit in the powder (≥ 9 m apart so there's always a gap, kept clear of ramps and shortcut decks); hitting one stops/bounces you and sheds parts.
+  The other three tracks keep the curbed road. (`def.open`, `TrackSpline._buildOpenMeshes`, `PhysicsWorld.addTree`, surface tag `powder`.)
+- **Graphics (Lobby → Graphics High/Low)**: real-time sun shadows that follow the player, bloom + colour grade + vignette + **speed blur on boosts** (single-player),
+  procedural sky with sun glow and drifting clouds, falling snow, wind-swaying trees, soft snow/dust spray off the wheels, cinematic orbit camera during the countdown,
+  camera that never clips trunks or crowns. Multiplayer uses shadows but not the post-processing chain (it renders each viewport directly).
+- **Animation**: kids lean and look into corners, bob with speed and celebrate at the finish; chassis rolls into turns and drifts; trees sway.
+- Tuned for desktop GPUs; "Low" disables shadows and post-processing.
+
 ## Status vs. the spec
 Implemented: everything in spec §3–§6 as a vertical slice — all four tracks (procedural seeded splines with sweepers, banking, 8 jump kickers and 3 shortcuts each), 4-race circuit & draft,
 push-start/judges, hop/drift/mini-turbo FSM, trick boost, slipstream, piecemeal shedding + duct-tape snap-back, 4 weapons (with level upgrades), 3 shields, 4 stat boosts with γ diminishing returns, 3 mystery items,

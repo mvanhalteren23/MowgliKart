@@ -181,7 +181,7 @@ export class KartController {
 
     // ---- suspension + tyre friction
     const slick = this.t.oil > 0 && !this.shieldImmuneOil;
-    const gripMul = M.gripMul * (this.t.gripLoss > 0 ? 0.8 : 1);
+    const gripMul = M.gripMul * (this.t.gripLoss > 0 ? 0.8 : 1) * (this.onPowder ? 0.9 : 1);
     this.suspension.update(dt, { pos: this.pos, quat: this.quat, vel: this.vel, ang: _w, com, up: this.up, right: this.right },
       { grip: gripMul, driftRear: this.fsm === FSM.DRIFTING, oil: slick });
     const sus = this.suspension;
@@ -214,6 +214,8 @@ export class KartController {
     const nitro = this.hasNitro;
     let vEff = this.vtop * this.boostMult;
     if (this.t.mud > 0 && !nitro) vEff *= 0.65;
+    this.onPowder = sus.tag === 'powder';
+    if (this.onPowder && !nitro) vEff *= 0.8; // deep powder is slower than the groomed groove
     if (this.t.foam > 0) vEff *= 0.4;
     if (this.finished) vEff *= 0.5;
     if (this.t.stall > 0) vEff *= 0.45; // blown-gasket start
@@ -350,7 +352,7 @@ export class KartController {
   }
   _onLanding(ctx, n, prevTag, track) {
     // Missed the plank: dropped from the shortcut kicker/deck back onto the road below -> deep-snow/mud drag (2.0 s)
-    if (prevTag === 'deck' && this.lastGround === 'road' && !this.hasNitro) {
+    if (prevTag === 'deck' && this.lastGround !== 'deck' && !this.hasNitro) {
       const sc = track.shortcutAt(this.d);
       if (sc && this.d < sc.dExit - 8) { this.t.mud = 2.0; this.emit('mud'); }
     }

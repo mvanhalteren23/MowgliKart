@@ -12,7 +12,8 @@ import { ObstacleManager } from '../track/ObstacleManager.js';
 import { StartSequence, COUNTDOWN } from './StartSequence.js';
 import { ParticleSystem } from './FX.js';
 import { DRIFT_TIERS } from '../controllers/KartController.js';
-import { buildScenery, buildMountains, buildRampOverlays, terrainMaterial } from '../track/Scenery.js';
+import { buildScenery, buildMountains, buildRampOverlays, terrainMaterial, powderMaterial, wind } from '../track/Scenery.js';
+import { makeSky, Snowfall } from './Atmosphere.js';
 import { applyToon } from './Toon.js';
 
 const V = THREE.Vector3;
@@ -39,7 +40,8 @@ export class RaceSession {
    * @param racers [{ id, name, isHuman, humanIndex, kartId, charId, persona, build, weapon, shield, skill }]
    *               in grid order (pole first)
    */
-  constructor({ physics, assets, trackId, racers, seed = 1, input = null, laps = 1, cup = { race: 1, of: 4 }, autoShield = false }) {
+  constructor({ physics, assets, trackId, racers, seed = 1, input = null, laps = 1, cup = { race: 1, of: 4 }, autoShield = false, quality = 'high' }) {
+    this.quality = quality;
     this.physics = physics; this.assets = assets; this.input = input;
     this.def = TRACKS[trackId];
     this.track = new TrackSpline(this.def);
@@ -48,6 +50,9 @@ export class RaceSession {
     this.autoShield = autoShield;
     this.scene = new THREE.Scene();
     this.fx = new ParticleSystem(this.scene);
+    this.fxSoft = new ParticleSystem(this.scene, 3500, 0.9, true); // soft snow spray (normal-blended, alpha fade)
+    this.fx.soft = this.fxSoft;
+    this.fx.dust = '#f4f9ff';
     this.time = 0; this.raceTime = 0;
     this.state = 'COUNTDOWN';
     this.messages = []; this.sfxQueue = [];
@@ -65,8 +70,22 @@ export class RaceSession {
     buildScenery(this);
     this._buildJudges();
     assets.loadSkybox?.(trackId).then((tex) => { if (tex) { this.scene.background = tex; this.sky.visible = false; } });
+    for (const t of this.trees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 1.25 * t.scale, 3.5); // trunk + low boughs
     applyToon(this.scene);
+    this.markShadows();
     this.rank();
+  }
+
+  /** Everything solid casts and receives real-time shadows (sky, mountains, particles and outline hulls excluded). */
+  markShadows() {
+    const skip = new Set();
+    for (const g of [this.mountains, this.sky]) g?.traverse((o) => skip.add(o));
+    this.scene.traverse((o) => {
+      if (!o.isMesh || skip.has(o) || o.userData.outline || o.userData.noShadow) return;
+      const m = o.material;
+      if (m?.transparent || m?.isMeshBasicMaterial || m?.isShaderMaterial) return;
+      o.castShadow = o.receiveShadow = true;
+    });
   }
 
   rand() { return this.rng(); }
@@ -93,6 +112,11 @@ export class RaceSession {
     const curbMat = new THREE.MeshToonMaterial({ vertexColors: true, side: THREE.DoubleSide });
     scene.add(new THREE.Mesh(toBufferGeometry(m.curbL), curbMat), new THREE.Mesh(toBufferGeometry(m.curbR), curbMat));
     scene.add(new THREE.Mesh(toBufferGeometry(m.terrain), terrainMaterial(th)));
+    if (m.powder) { // open slope: powder fields (slow) either side of the groomed groove
+      const pm = powderMaterial(th);
+      for (const p of m.powder) scene.add(new THREE.Mesh(toBufferGeometry(p), pm));
+      physics.addTrimesh(m.physicsPowder.positions, m.physicsPowder.indices, 'powder');
+    }
     // shortcut decks
     const deckTex = canvasTex(128, 128, (g, w, h) => {
       g.fillStyle = hex(th.deck); g.fillRect(0, 0, w, h);
@@ -123,21 +147,22 @@ export class RaceSession {
       pad.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(fr.B, fr.T.clone().negate(), fr.N));
       scene.add(pad);
     }
-    // lights, sky, fog
-    scene.add(new THREE.HemisphereLight(th.sky[0], th.ground, 1.9));
-    const sun = new THREE.DirectionalLight(0xfff4e0, 2.6); sun.position.set(300, 600, 200); scene.add(sun);
+    // lights, sky, fog, weather
+    scene.add(new THREE.HemisphereLight(th.sky[0], th.ground, 1.35));
+    this.sunDir = new V(300, 600, 200).normalize();
+    const sun = new THREE.DirectionalLight(0xfff1dc, 2.8); sun.position.copy(this.sunDir).multiplyScalar(250);
+    sun.castShadow = this.quality === 'high';
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 600 });
+    sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.45;
+    scene.add(sun, sun.target); this.sun = sun;
     scene.fog = new THREE.Fog(th.fog, 320, 1500);
-    this.mountains = buildMountains(th); scene.add(this.mountains);
+    this.mountains = buildMountains(th); this.mountains.userData.noShadow = true; scene.add(this.mountains);
     scene.background = new THREE.Color(th.sky[1]);
-    const skyMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color(th.sky[0]) }, bot: { value: new THREE.Color(th.sky[1]) } },
-      vertexShader: 'varying vec3 p; void main(){ p = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-      fragmentShader: 'varying vec3 p; uniform vec3 top; uniform vec3 bot; void main(){ float h = clamp(normalize(p).y*1.4+0.15,0.0,1.0); gl_FragColor = vec4(mix(bot, top, h), 1.0); }',
-    });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(2400, 24, 12), skyMat);
-    this.sky.renderOrder = -10;
+    this.sky = makeSky(th, this.sunDir);
     scene.add(this.sky);
+    this.snow = th.weather === 'snow' ? new Snowfall(scene) : null;
+    this.fx.dust = th.weather === 'snow' ? '#f4f9ff' : '#d8c6a0';
     // start line + finish arch
     const sf = track.atDist(58);
     const startLine = new THREE.Mesh(new THREE.PlaneGeometry(track.width, 1.6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
@@ -163,7 +188,7 @@ export class RaceSession {
     const { track, scene } = this;
     this.judges = [];
     const fr = track.atDist(42);
-    const base = fr.P.clone().addScaledVector(fr.B, track.width / 2 + 4.5);
+    const base = fr.P.clone().addScaledVector(fr.B, track.grooveHalf + 4.5);
     const table = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.9, 1.4), new THREE.MeshToonMaterial({ color: 0x7a1f1f }));
     table.position.copy(base).add(new V(0, 0.45, 0)); table.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(fr.B, new V(0, 1, 0), fr.T.clone().negate()));
     scene.add(table);
@@ -342,7 +367,14 @@ export class RaceSession {
     this.fx.update(dt);
     // keep the sky centred on the first human
     const f = this.humans[0] ?? this.karts[0];
-    if (f) { this.sky.position.copy(f.pos); this.mountains.position.set(f.pos.x, f.pos.y, f.pos.z); }
+    wind.value = this.time;
+    this.sky.material.uniforms.time.value = this.time;
+    this.fxSoft.update(dt);
+    if (f) {
+      this.sky.position.copy(f.pos); this.mountains.position.set(f.pos.x, f.pos.y, f.pos.z);
+      this.snow?.update(dt, f.pos);
+      this.sun.target.position.copy(f.pos); this.sun.position.copy(f.pos).addScaledVector(this.sunDir, 250); this.sun.target.updateMatrixWorld();
+    }
     if ((this._tc = (this._tc ?? 0) + 1) % 25 === 1) applyToon(this.scene);
   }
 

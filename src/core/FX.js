@@ -2,10 +2,12 @@ import * as THREE from 'three';
 
 /** Pooled additive point-sprite particle system (sparks, feathers, foam, smoke...). */
 export class ParticleSystem {
-  constructor(scene, max = 2500, size = 0.2) {
+  constructor(scene, max = 2500, size = 0.2, soft = false) {
+    this.soft = false; this.alpha = soft;
     this.max = max;
     this.pos = new Float32Array(max * 3);
-    this.col = new Float32Array(max * 3);
+    this.cs = soft ? 4 : 3;
+    this.col = new Float32Array(max * this.cs);
     this.vel = new Float32Array(max * 3);
     this.life = new Float32Array(max);
     this.maxLife = new Float32Array(max);
@@ -15,7 +17,7 @@ export class ParticleSystem {
     for (let i = 0; i < max; i++) this.pos[i * 3 + 1] = -99999;
     const g = new THREE.BufferGeometry();
     this.posAttr = new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
-    this.colAttr = new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage);
+    this.colAttr = new THREE.BufferAttribute(this.col, this.cs).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('position', this.posAttr);
     g.setAttribute('color', this.colAttr);
     // soft round sprite (falls back to square points without a DOM, e.g. in the headless sim)
@@ -28,7 +30,7 @@ export class ParticleSystem {
       map = new THREE.CanvasTexture(c);
     }
     this.points = new THREE.Points(g, new THREE.PointsMaterial({
-      size, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, map,
+      size, vertexColors: true, transparent: true, depthWrite: false, blending: soft ? THREE.NormalBlending : THREE.AdditiveBlending, sizeAttenuation: true, map,
     }));
     this.points.frustumCulled = false;
     scene.add(this.points);
@@ -55,11 +57,13 @@ export class ParticleSystem {
       if (this.life[i] <= 0) continue;
       this.life[i] -= dt;
       const o = i * 3;
-      if (this.life[i] <= 0) { this.pos[o + 1] = -99999; this.col[o] = this.col[o + 1] = this.col[o + 2] = 0; continue; }
+      const c = i * this.cs;
+      if (this.life[i] <= 0) { this.pos[o + 1] = -99999; this.col[c] = this.col[c + 1] = this.col[c + 2] = 0; if (this.alpha) this.col[c + 3] = 0; continue; }
       this.vel[o + 1] -= this.grav[i] * dt;
       this.pos[o] += this.vel[o] * dt; this.pos[o + 1] += this.vel[o + 1] * dt; this.pos[o + 2] += this.vel[o + 2] * dt;
       const f = this.life[i] / this.maxLife[i];
-      this.col[o] = this.base[o] * f; this.col[o + 1] = this.base[o + 1] * f; this.col[o + 2] = this.base[o + 2] * f;
+      if (this.alpha) { this.col[c] = this.base[o]; this.col[c + 1] = this.base[o + 1]; this.col[c + 2] = this.base[o + 2]; this.col[c + 3] = f * 0.75; }
+      else { this.col[c] = this.base[o] * f; this.col[c + 1] = this.base[o + 1] * f; this.col[c + 2] = this.base[o + 2] * f; }
     }
     this.posAttr.needsUpdate = true; this.colAttr.needsUpdate = true;
   }

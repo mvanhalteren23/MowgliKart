@@ -98,10 +98,11 @@ async function runCup(cfg) {
     const standings = circuit.standings();
     // race 1: random grid; afterwards the Cup leader takes pole
     const grid = circuit.stage === 0 ? shuffle(circuit.racers, rng) : standings;
+    renderer.quality = cfg.quality ?? 'high';
     const physics = await PhysicsWorld.create();
     await assets.preload([...new Set(grid.flatMap((r) => [r.kartId, r.charId]))]);
     const session = game.session = new RaceSession({
-      physics, assets, trackId: params.get('track') ?? circuit.trackId, seed: (rng() * 1e6) | 0, input, autoShield: cfg.autoShield,
+      physics, assets, trackId: params.get('track') ?? circuit.trackId, seed: (rng() * 1e6) | 0, input, autoShield: cfg.autoShield, quality: renderer.quality,
       cup: { race: circuit.raceNumber, of: 4 },
       racers: grid.map((r) => ({ ...r, build: r.build, weapon: r.weapon, shield: r.shield, stats: r.stats })),
     });
@@ -126,7 +127,7 @@ function shuffle(a, rnd) { const r = [...a]; for (let i = r.length - 1; i > 0; i
   await initRapier();
   await assets.init();
   for (;;) {
-    const cfg = AUTO ? { players: +(params.get('players') ?? 1), autoShield: false, karts: ['rocket_grocery_kart', 'chicken_coop', 'rocket_grocery_kart', 'chicken_coop'], kids: ['barnaby', 'chloe', 'max', 'zoe'] } : await ui.showLobby();
+    const cfg = AUTO ? { players: +(params.get('players') ?? 1), autoShield: false, quality: params.get('q') ?? 'high', karts: ['rocket_grocery_kart', 'chicken_coop', 'rocket_grocery_kart', 'chicken_coop'], kids: ['barnaby', 'chloe', 'max', 'zoe'] } : await ui.showLobby();
     if (AUTO) { cfg.karts = cfg.karts.slice(0, cfg.players); cfg.kids = cfg.kids.slice(0, cfg.players); }
     await runCup(cfg);
     if (AUTO) { game.autoDone = true; ui.show('<div class="loading"><p>Auto cup complete</p></div>', 'screen'); return; }

@@ -35,6 +35,15 @@ export class PhysicsWorld {
     return collider;
   }
 
+  /** Solid tree trunk (fixed cylinder on the OBSTACLE group so AI whiskers can see it). */
+  addTree(x, y, z, radius, halfH) {
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + halfH, z));
+    const cd = RAPIER.ColliderDesc.cylinder(halfH, radius).setFriction(0).setRestitution(0.35)
+      .setCollisionGroups(ig(GROUPS.OBSTACLE, GROUPS.KART | GROUPS.RAY));
+    const c = this.world.createCollider(cd, body);
+    this.owners.set(c.handle, { kind: 'tree' });
+  }
+
   addKart({ position, rotation, mass, comY, inertia, ref }) {
     const bd = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(position.x, position.y, position.z)

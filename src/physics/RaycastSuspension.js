@@ -40,6 +40,7 @@ export class RaycastSuspension {
   update(dt, s, o) {
     const b = this.body;
     this.count = 0; this.avgNormal.set(0, 0, 0); this.tag = null;
+    let deck = false, powder = 0;
     for (const w of this.wheels) {
       _p.copy(w.local).applyQuaternion(s.quat).add(s.pos);
       const hit = this.physics.castRay(_p.x, _p.y, _p.z, -s.up.x, -s.up.y, -s.up.z, L_MAX + GROUND_REACH, GROUPS.TRACK, b);
@@ -49,7 +50,7 @@ export class RaycastSuspension {
       this.count++;
       w.dist = Math.min(hit.toi, L_MAX);
       w.tag = hit.owner?.tag ?? 'road';
-      this.tag = this.tag === 'deck' || w.tag === 'deck' ? 'deck' : w.tag;
+      if (w.tag === 'deck') deck = true; else if (w.tag === 'powder') powder++;
       _n.set(hit.normal.x, hit.normal.y, hit.normal.z);
       if (_n.dot(s.up) < 0) _n.negate();
       w.normal.copy(_n);
@@ -83,6 +84,7 @@ export class RaycastSuspension {
       _pc.copy(_p).addScaledVector(s.up, COM_Y - w.local.y);
       b.applyImpulseAtPoint(_imp, _pc, true);
     }
+    if (this.count) this.tag = deck ? 'deck' : powder >= 2 ? 'powder' : 'road';
     if (this.count) this.avgNormal.multiplyScalar(1 / this.count).normalize();
     else this.avgNormal.copy(s.up);
     return this;

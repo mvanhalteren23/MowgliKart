@@ -75,6 +75,7 @@ const SHORT_LEN = 440;
 export const TRACKS = {
   whistler_run: {
     id: 'whistler_run', stage: 1, milestone: 1, name: 'Whistler Ski Run', length: 4500, seed: 11,
+    open: true, width: 44, grooveHalf: 9, // open-slope: 18 m groomed groove + powder & trees either side
     startHeight: 720, pitch: [5, 9.5], gentle: 0.0016,
     sweepers: [sweep(1000, -1), sweep(2200, 1), sweep(3400, -1)],
     jumps: [450, 820, 1650, 1950, 2800, 3150, 3950, 4250],
@@ -86,7 +87,7 @@ export const TRACKS = {
     obstacles: [['ski_jerry', 14], ['mascot_bear', 12], ['apres_tuber', 10]],
     theme: {
       sky: [0x4aa8ff, 0xdff2ff], fog: 0xdff2ff, ground: 0xf4f9ff, road: 0xdfe8f2, line: 0x6fa8dc,
-      deck: 0x8a5a2b, scenery: 'pine', curbA: 0xd32f2f, curbB: 0xffffff,
+      deck: 0x8a5a2b, scenery: 'pine', weather: 'snow', curbA: 0xd32f2f, curbB: 0xffffff,
     },
   },
   san_diego_streets: {

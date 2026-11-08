@@ -20,7 +20,7 @@ export class KartVisual {
     const seat = this.model.getObjectByName('Driver_Seat');
     const kid = assets.getCharacter(kart.character);
     if (seat) seat.add(kid); else { kid.position.set(0, 0.12, 0.25); this.model.add(kid); }
-    this.kid = kid;
+    this.kid = kid; this.kidY0 = kid.position.y;
     this.wheels = {};
     for (const k of ['FL', 'FR', 'RL', 'RR']) this.wheels[k] = this.model.getObjectByName(`Wheel_${k}`);
     addOutlines(this.model); addOutlines(kid); applyToon(this.root);
@@ -95,7 +95,15 @@ export class KartVisual {
     this.flip.rotation.y += (targetYaw - this.flip.rotation.y) * Math.min(1, 10 * dt);
     this.flip.rotation.x = k.trick.active ? -Math.PI * 2 * Math.min(1, k.trick.flipT / 0.65) : 0;
     // knocked-up tumble wobble
-    this.flip.rotation.z = k.t.spin > 0 || k.t.oil > 0 ? Math.sin(time * 18) * 0.12 : 0;
+    const sf = Math.min(1, k.speed / 18);
+    const roll = -k.input.steer * 0.07 * sf - (drifting ? k.drift.dir * 0.11 : 0);          // chassis leans into the turn
+    const tumble = k.t.spin > 0 || k.t.oil > 0 ? Math.sin(time * 18) * 0.12 : 0;
+    this.flip.rotation.z += (roll + tumble - this.flip.rotation.z) * Math.min(1, 9 * dt);
+    // kid: leans & looks into corners, bobs with speed, hops and spins when the race is won
+    const kd = this.kid;
+    kd.rotation.z += ((-k.input.steer * 0.38 * sf - (drifting ? k.drift.dir * 0.2 : 0)) - kd.rotation.z) * Math.min(1, 8 * dt);
+    kd.rotation.y += (((k.finished ? Math.sin(time * 6) * 0.9 : -k.input.steer * 0.3)) - kd.rotation.y) * Math.min(1, 8 * dt);
+    kd.position.y = this.kidY0 + (k.finished ? Math.abs(Math.sin(time * 9)) * 0.22 : Math.sin(time * 22) * 0.012 * sf + (k.trick.active ? 0.12 : 0));
 
     // wheels: suspension travel, spin, steer, comic wobble
     this.spin += (k.fwdSpeed * dt) / WHEEL_R;
@@ -142,6 +150,19 @@ export class KartVisual {
       this.shadow.scale.setScalar(f); this.shadow.material.opacity = 0.9 * f;
       this.shadow.rotateY(k.speed > 1 ? Math.atan2(-k.fwd.x, -k.fwd.z) : 0);
     } else this.shadow.visible = false;
+    // snow / dust spray off the rear wheels (heavier in powder)
+    if (fx.soft && k.grounded && k.speed > 7 && !k.finished) {
+      const n = k.onPowder ? 3 : drifting ? 2 : 1, col = fx.dust ?? '#f4f9ff';
+      for (const nm of ['RL', 'RR']) {
+        const w = this.wheels[nm]; if (!w) continue;
+        w.getWorldPosition(this.tmp);
+        for (let i = 0; i < n; i++) {
+          const r = k.onPowder ? 2.2 : 1.1;
+          fx.soft.emit(this.tmp.x + (Math.random() - 0.5) * 0.3, this.tmp.y - 0.1, this.tmp.z + (Math.random() - 0.5) * 0.3,
+            -k.vel.x * 0.1 + (Math.random() - 0.5) * r * 2, 0.8 + Math.random() * (k.onPowder ? 3.2 : 1.6), -k.vel.z * 0.1 + (Math.random() - 0.5) * r * 2, col, 0.45 + Math.random() * 0.5, 2.5);
+        }
+      }
+    }
     // drift sparks at rear wheels
     if (drifting && k.grounded) {
       const tier = k.drift.tier;

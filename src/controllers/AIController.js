@@ -48,7 +48,7 @@ export class AIController {
     if (this.activeShortcut) {
       const b = this.activeShortcut;
       // missed the plank (back on the road below): forget it and carry on along the main line
-      if (k.grounded && k.lastGround === 'road' && k.d > b.entryLipD + 3) { this.shortcut.set(b.id, false); this.activeShortcut = null; this._scHint = undefined; return this.update(dt, ctx); }
+      if (k.grounded && k.lastGround !== 'deck' && k.d > b.entryLipD + 3) { this.shortcut.set(b.id, false); this.activeShortcut = null; this._scHint = undefined; return this.update(dt, ctx); }
       const loc = b.frames.locate(k.pos, this._scHint ?? -1, 40, this._scLoc ??= {});
       this._scHint = loc.idx;
       if (loc.d > b.length - 4 || loc.dist2 > 1600 || k.d > b.dExit + 5) { this.activeShortcut = null; this._scHint = undefined; }

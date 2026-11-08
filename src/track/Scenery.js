@@ -1,10 +1,41 @@
 import * as THREE from 'three';
-import { mulberry32 } from './TrackSpline.js';
+import { mulberry32, moguls } from './TrackSpline.js';
 
 const V = THREE.Vector3;
 const hexs = (n) => '#' + n.toString(16).padStart(6, '0');
 const hasDOM = typeof document !== 'undefined';
 const M = (color, extra = {}) => new THREE.MeshToonMaterial({ color, ...extra });
+
+/** Shared wind clock (seconds); trees sway in the vertex shader, phase-shifted per instance. */
+export const wind = { value: 0 };
+function swayMat(color) {
+  const m = M(color);
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uWind = wind;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uWind;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+        float ph = instanceMatrix[3].x * 0.07 + instanceMatrix[3].z * 0.05;
+        #else
+        float ph = 0.0;
+        #endif
+        float hh = max(position.y * 0.5 + 1.0, 0.0);
+        transformed.x += sin(uWind * 1.5 + ph) * hh * 0.02;
+        transformed.z += cos(uWind * 1.2 + ph * 1.3) * hh * 0.014;`);
+  };
+  return m;
+}
+
+/** Powder-snow material for the off-piste zones of the open slope. */
+export function powderMaterial(theme) {
+  const map = tex(256, 256, (g, w, h) => {
+    g.fillStyle = '#f2f7ff'; g.fillRect(0, 0, w, h);
+    const r = mulberry32(8);
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(140,175,225,${r() * 0.12})`; g.fillRect(r() * w, r() * h, 3 + r() * 10, 2 + r() * 5); }
+    for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(255,255,255,${0.2 + r() * 0.5})`; g.fillRect(r() * w, r() * h, 2, 2); }
+  }, [2, 2]);
+  return new THREE.MeshToonMaterial({ color: map ? 0xffffff : 0xf2f7ff, map, side: THREE.DoubleSide });
+}
 
 function tex(w, h, draw, repeat) {
   if (!hasDOM) return null;
@@ -29,7 +60,7 @@ export function terrainMaterial(theme) {
 
 /** Instanced scatter helper: parts = [{geo, color, y, s?}], places `n` instances via fn(i)->{p, scale, rot} (or null). */
 function scatter(group, parts, n, fn) {
-  const meshes = parts.map((p) => { const m = new THREE.InstancedMesh(p.geo, M(p.color), n); m.frustumCulled = false; m.userData.outline = true; return m; });
+  const meshes = parts.map((p) => { const m = new THREE.InstancedMesh(p.geo, p.sway ? swayMat(p.color) : M(p.color), n); m.frustumCulled = false; m.userData.outline = true; m.castShadow = m.receiveShadow = true; return m; });
   const o = new THREE.Object3D();
   for (let i = 0; i < n; i++) {
     const a = fn(i);
@@ -60,6 +91,7 @@ function alongTrack(group, track, geo, color, spacing, lat, y, jitter = 0) {
 
 export function buildScenery(session) {
   const { track, def, scene } = session;
+  session.trees = [];
   const th = def.theme, rnd = mulberry32(def.seed * 31), hw = track.width / 2;
   const g = new THREE.Group(); scene.add(g);
   const place = (minOff, spread, pw = 1.5) => (i) => {
@@ -71,17 +103,45 @@ export function buildScenery(session) {
   const rock = new THREE.DodecahedronGeometry(1, 0);
 
   if (th.scenery === 'pine') {
-    // dense snow-capped fir forest + boulders + chalets
-    const layer = (r, h, y, color) => ({ geo: new THREE.ConeGeometry(r, h, 8), color, y });
-    scatter(g, [
+    // dense snow-capped fir forest + boulders + chalets; on the open slope also individually collidable trees in the powder
+    const open = track.open, edge = open ? hw + 5.5 : hw;
+    const gy = (off) => (open ? 3.1 - 0.16 * Math.max(0, off - edge) : -0.5 - 0.16 * (off - hw));
+    const placeF = (minOff, spread, pw = 1.5) => () => {
+      for (let t = 0; t < 40; t++) {
+        const d = rnd() * track.length, side = rnd() < 0.5 ? -1 : 1, off = edge + minOff + Math.pow(rnd(), pw) * spread;
+        const p = track.surface(d, side * off); p.y += gy(off);
+        if (nearDeck(p)) continue;
+        return { p, scale: 0.8 + rnd() * 1.4, rot: rnd() * 6.28 };
+      }
+      return null;
+    };
+    const nearDeck = (p) => track.shortcuts.some((sc) => { const P = sc.frames.P; for (let i = 0; i < P.length; i += 4) { const dx = P[i].x - p.x, dz = P[i].z - p.z; if (dx * dx + dz * dz < 110) return true; } return false; });
+    const layer = (r, h, y, color) => ({ geo: new THREE.ConeGeometry(r, h, 8), color, y, sway: true });
+    const parts = () => [
       { geo: new THREE.CylinderGeometry(0.3, 0.42, 1.8, 6), color: 0x6b4a2a, y: 0.9 },
       layer(2.5, 3.4, 3.2, 0x2a7a3c), layer(2.0, 3.0, 5.2, 0x328a45), layer(1.4, 2.6, 7.0, 0x3b9a50),
-      { geo: new THREE.ConeGeometry(2.1, 2.2, 8), color: 0xffffff, y: 3.9 }, { geo: new THREE.ConeGeometry(1.65, 2.0, 8), color: 0xffffff, y: 5.9 }, { geo: new THREE.ConeGeometry(1.1, 1.8, 8), color: 0xf4fbff, y: 7.7 },
-    ], 1500, place(4, 70, 1.35));
-    scatter(g, [{ geo: rock, color: 0x8b95a5, y: 0.2, sy: 0.6 }, { geo: new THREE.SphereGeometry(1, 8, 5), color: 0xffffff, y: 0.65, sy: 0.35, sx: 0.9 }], 120, place(3, 40));
+      { geo: new THREE.ConeGeometry(2.1, 2.2, 8), color: 0xffffff, y: 3.9, sway: true }, { geo: new THREE.ConeGeometry(1.65, 2.0, 8), color: 0xffffff, y: 5.9, sway: true }, { geo: new THREE.ConeGeometry(1.1, 1.8, 8), color: 0xf4fbff, y: 7.7, sway: true },
+    ];
+    scatter(g, parts(), open ? 2600 : 1500, placeF(open ? 2 : 4, open ? 95 : 70, 1.35));
+    scatter(g, [{ geo: rock, color: 0x8b95a5, y: 0.2, sy: 0.6 }, { geo: new THREE.SphereGeometry(1, 8, 5), color: 0xffffff, y: 0.65, sy: 0.35, sx: 0.9 }], 140, placeF(1, 50));
+    if (open) {
+      // trunks you have to steer between: rejection-sampled with >= 5.5 m spacing so there is always a gap
+      const gr = track.grooveHalf, trees = [];
+      const blocked = (d) => track.jumpRamps.some((r) => r.pathId === 'main' && d > r.startD - 35 && d < r.lipD + 60) || d < 150 || d > track.length - 160;
+      for (let tries = 0; tries < 9000 && trees.length < 300; tries++) {
+        const d = 150 + rnd() * (track.length - 310), lat = (rnd() < 0.5 ? -1 : 1) * (gr + 2 + Math.pow(rnd(), 0.8) * (hw - gr - 4.5));
+        if (blocked(d)) continue;
+        const p = track.surface(d, lat); p.y += moguls(d, lat, gr, hw);
+        if (nearDeck(p) || trees.some((t) => (t.p.x - p.x) ** 2 + (t.p.z - p.z) ** 2 < 84)) continue;
+        trees.push({ p, scale: 1.1 + rnd() * 0.9, rot: rnd() * 6.28 });
+      }
+      scatter(g, parts(), trees.length, (i) => trees[i]);
+      session.trees = trees;
+    }
     for (let i = 0; i < 16; i++) { // chalets on the slopes
-      const d = rnd() * track.length, side = rnd() < 0.5 ? -1 : 1, off = hw + 28 + rnd() * 40;
-      const p = track.surface(d, side * off); p.y = p.y - 0.5 - 0.16 * (off - hw);
+      const d = rnd() * track.length, side = rnd() < 0.5 ? -1 : 1, off = edge + 28 + rnd() * 40;
+      const p = track.surface(d, side * off); p.y += gy(off);
+      if (nearDeck(p)) continue;
       const c = new THREE.Group();
       const body = new THREE.Mesh(new THREE.BoxGeometry(6, 3.4, 5), M(0x9c6b3c)); body.position.y = 1.7; c.add(body);
       const roof = new THREE.Mesh(new THREE.ConeGeometry(5.2, 2.6, 4), M(0xf2f6ff)); roof.position.y = 4.6; roof.rotation.y = Math.PI / 4; roof.scale.set(1, 1, 0.85); c.add(roof);
@@ -134,7 +194,7 @@ export function buildMountains(theme) {
 
 /** Wooden kicker overlays (planks, side beams, lip face) so jump ramps read as ramps like the reference art. */
 export function buildRampOverlays(session, frames, deckMat) {
-  const { track, scene } = session, hw = track.width * 0.5 - 0.4;
+  const { track, scene } = session, hw = track.grooveHalf - 0.4;
   const pos = [], idx = [], uv = [];
   const wood = deckMat;
   for (const r of track.jumpRamps.filter((x) => x.pathId === 'main')) {

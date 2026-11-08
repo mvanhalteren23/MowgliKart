@@ -1,5 +1,33 @@
 import * as THREE from 'three';
+import { GROUPS } from '../physics/PhysicsWorld.js';
 import { HUD } from './HUD.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+
+/** Colour grade + vignette + radial speed blur (strength driven by boosts). Runs in linear space before OutputPass tone-mapping. */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, boost: { value: 0 }, vig: { value: 0.35 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: `
+    varying vec2 vUv; uniform sampler2D tDiffuse; uniform float boost; uniform float vig;
+    void main(){
+      vec2 c = vUv - 0.5; float r = length(c);
+      vec4 col = texture2D(tDiffuse, vUv);
+      if (boost > 0.01) {
+        vec3 acc = col.rgb; float n = 1.0;
+        for (int i = 1; i <= 8; i++) { float s = float(i) / 8.0; acc += texture2D(tDiffuse, vUv - c * s * boost * 0.14 * smoothstep(0.08, 0.6, r)).rgb; n += 1.0; }
+        col.rgb = acc / n;
+      }
+      float l = dot(col.rgb, vec3(0.299, 0.587, 0.114));
+      col.rgb = mix(vec3(l), col.rgb, 1.14);
+      col.rgb = (col.rgb - 0.5) * 1.12 + 0.5;
+      col.rgb *= 1.0 - smoothstep(0.42, 0.95, r) * vig;
+      gl_FragColor = col;
+    }`,
+};
 
 const V = THREE.Vector3;
 export const FOV_BASE = 91, FOV_BOOST = 108;           // SPEC 3.7.2 (+30% wide chase camera)
@@ -14,6 +42,9 @@ export class SplitScreenRenderer {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2)); // phones: cap for performance
     this.renderer.autoClear = false;
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.NeutralToneMapping; this.renderer.toneMappingExposure = 1.0;
+    this.quality = 'high'; this.fx = null; this.boostBlur = 0;
     this.hud = new HUD(hudRoot);
     this.cams = [];
     this.players = 0;
@@ -23,6 +54,7 @@ export class SplitScreenRenderer {
   setPlayers(n) {
     this.players = n;
     this.hud.build(n);
+    this.disposeFx();
     this.cams = Array.from({ length: n }, () => ({
       camera: new THREE.PerspectiveCamera(FOV_BASE, 16 / 9, 0.3, 3000), fov: FOV_BASE,
       fwd: new V(0, 0, -1), pos: new V(), init: false, look: new V(),
@@ -48,6 +80,7 @@ export class SplitScreenRenderer {
     this.lay = this.layout(W, H);
     if (this.hud.panels.length) this.hud.layout(this.lay.views, this.lay.mini);
     this.lay.views.forEach((v, i) => { const c = this.cams[i]; if (c) { c.camera.aspect = v.w / v.h; c.camera.updateProjectionMatrix(); } });
+    if (this.fx) { this.fx.composer.setPixelRatio(this.renderer.getPixelRatio()); this.fx.composer.setSize(W, H); }
   }
 
   _vFov(fov, aspect) {
@@ -56,7 +89,7 @@ export class SplitScreenRenderer {
     return Math.min(112, (2 * Math.atan(tanH / aspect) * 180) / Math.PI);
   }
 
-  _updateCam(c, kart, vis, dt) {
+  _updateCam(c, kart, vis, dt, session) {
     const pos = vis.root.position, k = 1 - Math.exp(-6 * dt);
     // desired heading: chassis forward blended with velocity direction (steady through spins / oil)
     const f = new V(0, 0, -1).applyQuaternion(vis.root.quaternion);
@@ -69,7 +102,28 @@ export class SplitScreenRenderer {
     const flat = new V(c.fwd.x, 0, c.fwd.z).normalize();
     const want = pos.clone().addScaledVector(flat, -CAM_OFFSET.z).addScaledVector(new V(0, 1, 0), CAM_OFFSET.y).addScaledVector(c.fwd, -0.0);
     if (c.fwd.y > 0) want.y -= c.fwd.y * 1.5; else want.y += -c.fwd.y * 2.0;
-    c.pos.lerp(want, 1 - Math.exp(-10 * dt));
+    // cinematic summit flyover during the countdown: orbit + pull back, settling behind the kart by DROP!
+    const seq = session?.state === 'COUNTDOWN' ? session.starts.get(kart.id) : null;
+    if (seq) {
+      const e = Math.max(0, 1 - seq.t / 2.9), ease = e * e * (3 - 2 * e), ang = ease * 2.3;
+      const dx = want.x - pos.x, dz = want.z - pos.z, ca = Math.cos(ang), sa = Math.sin(ang), grow = 1 + ease * 1.4;
+      want.x = pos.x + (dx * ca - dz * sa) * grow; want.z = pos.z + (dx * sa + dz * ca) * grow; want.y += ease * 9;
+    }
+    c.pos.lerp(want, 1 - Math.exp(-(seq ? 4 : 10) * dt));
+    if (session) { // never clip through a tree trunk: shorten the arm to just in front of the first hit
+      const o = pos.clone().add(new V(0, 1.6, 0)), dir = c.pos.clone().sub(o), len = dir.length();
+      dir.normalize();
+      const hit = session.physics.castRay(o.x, o.y, o.z, dir.x, dir.y, dir.z, len + 0.8, GROUPS.OBSTACLE, kart.body);
+      let L = hit && hit.owner?.kind === 'tree' ? Math.max(1.4, hit.toi - 0.9) : len;
+      // canopies are much wider than trunks: walk the arm in until the camera is outside every nearby crown
+      const near = (session.trees ?? []).filter((t) => (t.p.x - o.x) ** 2 + (t.p.z - o.z) ** 2 < 28 * 28);
+      const p = new V();
+      for (; L > 1.4; L -= 0.5) {
+        p.copy(o).addScaledVector(dir, L);
+        if (!near.some((t) => { const r = 2.7 * t.scale + 0.6; return (t.p.x - p.x) ** 2 + (t.p.z - p.z) ** 2 < r * r && p.y > t.p.y - 0.5 && p.y < t.p.y + 8.6 * t.scale; })) break;
+      }
+      c.pos.copy(o).addScaledVector(dir, L);
+    }
     c.camera.position.copy(c.pos);
     c.look.copy(pos).addScaledVector(c.fwd, CAM_LOOK).add(new V(0, 1.2, 0));
     c.camera.lookAt(c.look);
@@ -83,15 +137,32 @@ export class SplitScreenRenderer {
     if (kart.isBoosting) c.camera.position.add(new V((Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.05, 0));
   }
 
+  _ensureFx(session) {
+    if (this.fx?.session === session) return this.fx;
+    this.disposeFx();
+    const r = this.renderer, size = new THREE.Vector2(); r.getDrawingBufferSize(size);
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    const composer = new EffectComposer(r, rt);
+    const pass = new RenderPass(session.scene, this.cams[0].camera);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.16, 0.55, 1.02);
+    const grade = new ShaderPass(GradeShader);
+    composer.addPass(pass); composer.addPass(bloom); composer.addPass(grade); composer.addPass(new OutputPass());
+    composer.setPixelRatio(r.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
+    this.fx = { session, composer, pass, grade };
+    return this.fx;
+  }
+  disposeFx() { if (this.fx) { this.fx.composer.dispose(); this.fx = null; } }
+
   render(session, dt) {
     const r = this.renderer;
+    if (this.quality === 'high' && this.players === 1 && session.humans[0]) return this._renderPost(session, dt);
     r.setScissorTest(false); r.setClearColor(0x000000, 1); r.clear();
     r.setScissorTest(true);
     this.lay.views.forEach((v, i) => {
       const kart = session.humans[i], vis = session.visuals[session.karts.indexOf(kart)];
       if (!kart) return;
       const c = this.cams[i];
-      this._updateCam(c, kart, vis, dt);
+      this._updateCam(c, kart, vis, dt, session);
       r.setViewport(v.x, v.y, v.w, v.h); r.setScissor(v.x, v.y, v.w, v.h);
       r.render(session.scene, c.camera);
       this.hud.update(i, session);
@@ -101,6 +172,21 @@ export class SplitScreenRenderer {
       r.setViewport(m.x, m.y, m.w, m.h); r.setScissor(m.x, m.y, m.w, m.h); r.setClearColor(0x10131c, 1); r.clear();
       this.hud.updateMini(session);
     }
+    session.messages.length = 0;
+  }
+
+  /** Single-player pipeline: scene -> bloom -> grade/speed-blur/vignette -> tone-mapped output. */
+  _renderPost(session, dt) {
+    const r = this.renderer, kart = session.humans[0], vis = session.visuals[session.karts.indexOf(kart)];
+    const c = this.cams[0], fx = this._ensureFx(session);
+    this._updateCam(c, kart, vis, dt, session);
+    r.setScissorTest(false); r.setViewport(0, 0, innerWidth, innerHeight);
+    fx.pass.camera = c.camera;
+    const want = kart.isBoosting ? 1 : Math.min(0.25, kart.speed / 120);
+    this.boostBlur += (want - this.boostBlur) * Math.min(1, 6 * dt);
+    fx.grade.uniforms.boost.value = this.boostBlur;
+    fx.composer.render(dt);
+    this.hud.update(0, session);
     session.messages.length = 0;
   }
 }

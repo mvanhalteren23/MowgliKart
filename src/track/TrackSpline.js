@@ -217,7 +217,13 @@ export function generateCenterline(def) {
 
 /* ------------------------------------------------------------------ geometry builders */
 /** Extrude a cross-section (array of {lat, up}) along frames. Returns typed arrays. */
-export function buildRibbon(frames, section, { uvScale = 0.25, colorFn = null, offsetUp = 0 } = {}) {
+/** Powder-field moguls (zero inside the groomed groove and fading out at the snowbank). */
+export const moguls = (d, lat, g, hw) => {
+  const a = Math.abs(lat), w = Math.min(1, Math.max(0, (a - g) / 3)) * Math.min(1, Math.max(0, (hw - 1.5 - a) / 4));
+  return w * 0.3 * (Math.sin(d * 0.55 + lat * 0.9) * Math.sin(lat * 0.7 - d * 0.21) + 0.25 * Math.sin(d * 1.7 + lat));
+};
+
+export function buildRibbon(frames, section, { uvScale = 0.25, colorFn = null, offsetUp = 0, yFn = null } = {}) {
   const rows = frames.M + 1, cols = section.length;
   const positions = new Float32Array(rows * cols * 3);
   const uvs = new Float32Array(rows * cols * 2);
@@ -228,7 +234,7 @@ export function buildRibbon(frames, section, { uvScale = 0.25, colorFn = null, o
     for (let j = 0; j < cols; j++) {
       const o = (r * cols + j) * 3, s = section[j];
       positions[o] = P.x + B.x * s.lat;
-      positions[o + 1] = P.y + B.y * s.lat + s.up + offsetUp;
+      positions[o + 1] = P.y + B.y * s.lat + s.up + offsetUp + (yFn ? yFn(frames.dist[r], s.lat) : 0);
       positions[o + 2] = P.z + B.z * s.lat;
       uvs[(r * cols + j) * 2] = j / (cols - 1);
       uvs[(r * cols + j) * 2 + 1] = frames.dist[r] * uvScale;
@@ -371,6 +377,8 @@ export class TrackSpline {
     this.def = def;
     this.id = def.id;
     this.width = def.width ?? 18;
+    this.open = !!def.open;
+    this.grooveHalf = this.open ? (def.grooveHalf ?? 9) : this.width / 2; // half-width of the fast groomed lane
     this.curbHeight = 0.6;
     this.points = generateCenterline(def);
     this.path = new CurvePath(this.points);
@@ -419,6 +427,7 @@ export class TrackSpline {
     const rows = Math.ceil(this.length / 1.25);
     const mf = PathFrames.fromPath(this.path, rows, { rampH: this.rampH });
     const W = this.width, h = this.curbHeight, hw = W / 2;
+    if (this.open) return this._buildOpenMeshes(mf);
     const road = buildRibbon(mf, [{ lat: -hw, up: 0 }, { lat: hw, up: 0 }], { uvScale: 0.25 });
     const A = new THREE.Color(this.def.theme.curbA), Bc = new THREE.Color(this.def.theme.curbB);
     const colorFn = (r, j, d, c) => c.copy(Math.floor(d / 3.5) % 2 ? A : Bc);
@@ -428,5 +437,24 @@ export class TrackSpline {
       { lat: -hw - 140, up: -0.5 - 0.16 * 140 }, { lat: -hw - 0.4, up: -0.5 }, { lat: hw + 0.4, up: -0.5 }, { lat: hw + 140, up: -0.5 - 0.16 * 140 },
     ], { uvScale: 0.02 });
     return { road, curbL, curbR, terrain, physics: mergeMeshes([road, curbL, curbR]), frames: mf };
+  }
+
+  /** Open slope: groomed groove (fast) + moguly powder (slow) + snowbanks + wide terrain. */
+  _buildOpenMeshes(mf) {
+    const W = this.width, hw = W / 2, g = this.grooveHalf, BANK = 5.5, TOP = 3.1;
+    const yFn = (d, l) => moguls(d, l, g, hw);
+    const cols = (a, b) => { const n = Math.max(2, Math.round(Math.abs(b - a) / 2.2)); return Array.from({ length: n + 1 }, (_, i) => ({ lat: a + ((b - a) * i) / n, up: 0 })); };
+    const road = buildRibbon(mf, [{ lat: -g, up: 0 }, { lat: g, up: 0 }], { uvScale: 0.25 });
+    const powderL = buildRibbon(mf, cols(-hw, -g), { uvScale: 0.07, yFn });
+    const powderR = buildRibbon(mf, cols(g, hw), { uvScale: 0.07, yFn });
+    const white = (r, j, d, c) => c.setRGB(0.93 + 0.05 * (j / 2), 0.96 + 0.03 * (j / 2), 1);
+    const bankL = buildRibbon(mf, [{ lat: -hw, up: 0 }, { lat: -hw - 3, up: 1.6 }, { lat: -hw - BANK, up: TOP }], { colorFn: white });
+    const bankR = buildRibbon(mf, [{ lat: hw, up: 0 }, { lat: hw + 3, up: 1.6 }, { lat: hw + BANK, up: TOP }], { colorFn: white });
+    const far = 220, slope = 0.16;
+    const terrain = buildRibbon(mf, [
+      { lat: -hw - BANK - far, up: TOP - slope * far }, { lat: -hw - BANK, up: TOP - 0.1 }, { lat: -hw - BANK + 0.2, up: -0.8 },
+      { lat: hw + BANK - 0.2, up: -0.8 }, { lat: hw + BANK, up: TOP - 0.1 }, { lat: hw + BANK + far, up: TOP - slope * far },
+    ], { uvScale: 0.02 });
+    return { road, powder: [powderL, powderR], curbL: bankL, curbR: bankR, terrain, physics: mergeMeshes([road]), physicsPowder: mergeMeshes([powderL, powderR, bankL, bankR]), frames: mf, open: true };
   }
 }
