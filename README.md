@@ -65,6 +65,12 @@ Everything is procedural; swap in AI-generated `.glb` models via ASSET_PIPELINE.
 - **Animation**: kids lean and look into corners, bob with speed and celebrate at the finish; chassis rolls into turns and drifts; trees sway.
 - Tuned for desktop GPUs; "Low" disables shadows and post-processing.
 
+## Yeti & graphics upgrade
+- **Out of bounds (Whistler)**: the terrain beyond the snowbanks is drivable, with trees. Go > 35 m from the centre line and a **yeti** bursts out of the forest, chases (12 -> 26 m/s),
+  grabs you, hurls you back near the groomed groove and you take the same hit as an obstacle (stun, knock, part shed). Get back in time and it wanders off.
+- **Graphics**: Ultra tier adds ambient occlusion + 4K shadows; snow normal-maps, ski-carving trails, animated gondola lift, richer trees, soft spray (all disabled on Low).
+- See [ROADMAP.md](ROADMAP.md) for the path from MVP to a full game.
+
 ## Status vs. the spec
 Implemented: everything in spec §3–§6 as a vertical slice — all four tracks (procedural seeded splines with sweepers, banking, 8 jump kickers and 3 shortcuts each), 4-race circuit & draft,
 push-start/judges, hop/drift/mini-turbo FSM, trick boost, slipstream, piecemeal shedding + duct-tape snap-back, 4 weapons (with level upgrades), 3 shields, 4 stat boosts with γ diminishing returns, 3 mystery items,

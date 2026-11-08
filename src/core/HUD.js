@@ -42,7 +42,7 @@ export class HUD {
           <div class="slot shield"><div class="ic"></div><div class="cd"></div><div class="lb"></div></div>
         </div>
         <div class="hud-br"><div class="badges"></div></div>
-        <div class="ov feathers"></div><div class="ov stink"></div><div class="ov finish"></div>`;
+        <div class="ov feathers"></div><div class="ov stink"></div><div class="ov warn"><b></b></div><div class="ov finish"></div>`;
       this.root.appendChild(el);
       const q = (s) => el.querySelector(s);
       this.panels.push({
@@ -50,7 +50,7 @@ export class HUD {
         rhythm: q('.rhythm'), needle: q('.needle'), zone: q('.zone'), score: q('.score'), hint: q('.hint'), toasts: q('.toasts'),
         speed: q('.dial .num b'), arc: q('.fgp'), timer: q('.timer'), mm: q('.mm'), badge: q('.pbadge'), draft: q('.draft i'), drift: q('.drift i'), t1: q('.drift .t1'), t2: q('.drift .t2'), t3: q('.drift .t3'),
         driftWrap: q('.drift'), slotP: q('.slot.pickup'), slotW: q('.slot.weapon'), slotS: q('.slot.shield'), badges: q('.badges'),
-        feathers: q('.feathers'), stink: q('.stink'), finish: q('.finish'), cache: {},
+        feathers: q('.feathers'), warn: q('.warn'), warnB: q('.warn b'), stink: q('.stink'), finish: q('.finish'), cache: {},
       });
       const z = q('.zone');
       z.style.left = GREEN[0] * 100 + '%'; z.style.width = (GREEN[1] - GREEN[0]) * 100 + '%';
@@ -119,6 +119,8 @@ export class HUD {
     this.set(p, 'bd', ids.join(','), () => { p.badges.innerHTML = ids.map((id) => `<span title="${STAT_BOOSTS[id].name}">${STAT_BOOSTS[id].icon}</span>`).join(''); });
     // overlays
     this.set(p, 'fe', kart.t.blind > 0, (v) => p.feathers.classList.toggle('on', v));
+    this.set(p, 'wn', kart.oob || !!kart.grab, (v) => p.warn.classList.toggle('on', v));
+    if (kart.oob || kart.grab) p.warnB.textContent = kart.grab ? '🧊 GOT YOU!' : `🧊 YETI ${Math.max(0, Math.round(kart.yetiDist - 3))} m — RETURN TO THE SLOPE!`;
     this.set(p, 'st', kart.t.stink > 0, (v) => p.stink.classList.toggle('on', v));
     this.set(p, 'fin', kart.finished ? kart.rank : 0, (v) => { p.finish.classList.toggle('on', !!v); p.finish.innerHTML = v ? `<b>${ord(v)}</b><span>${session.humans.every((h) => h.finished) ? '' : 'waiting for the rest of the field…'}</span>` : ''; });
     // push-start

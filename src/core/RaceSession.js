@@ -9,6 +9,8 @@ import { KartVisual } from '../controllers/KartVisual.js';
 import { AIController } from '../controllers/AIController.js';
 import { ItemManager } from '../items/ItemManager.js';
 import { ObstacleManager } from '../track/ObstacleManager.js';
+import { YetiManager } from '../track/YetiManager.js';
+import { buildGondola } from '../track/Gondola.js';
 import { StartSequence, COUNTDOWN } from './StartSequence.js';
 import { ParticleSystem } from './FX.js';
 import { DRIFT_TIERS } from '../controllers/KartController.js';
@@ -62,6 +64,7 @@ export class RaceSession {
     this._buildTrack();
     this.items = new ItemManager(this);
     this.obstacles = new ObstacleManager(this);
+    this.yeti = this.track.open ? new YetiManager(this) : null;
     this.items.buildBoxes();
     this.obstacles.spawn(this.def);
     this.karts = []; this.visuals = []; this.ais = new Map(); this.starts = new Map();
@@ -71,6 +74,7 @@ export class RaceSession {
     this._buildJudges();
     assets.loadSkybox?.(trackId).then((tex) => { if (tex) { this.scene.background = tex; this.sky.visible = false; } });
     for (const t of this.trees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 1.25 * t.scale, 3.5); // trunk + low boughs
+    for (const t of this.forestTrees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 0.9 * t.scale, 3.5);
     applyToon(this.scene);
     this.markShadows();
     this.rank();
@@ -151,8 +155,8 @@ export class RaceSession {
     scene.add(new THREE.HemisphereLight(th.sky[0], th.ground, 1.35));
     this.sunDir = new V(300, 600, 200).normalize();
     const sun = new THREE.DirectionalLight(0xfff1dc, 2.8); sun.position.copy(this.sunDir).multiplyScalar(250);
-    sun.castShadow = this.quality === 'high';
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.castShadow = this.quality !== 'low';
+    const sm = this.quality === 'ultra' ? 4096 : 2048; sun.shadow.mapSize.set(sm, sm);
     Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 600 });
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.45;
     scene.add(sun, sun.target); this.sun = sun;
@@ -162,6 +166,7 @@ export class RaceSession {
     this.sky = makeSky(th, this.sunDir);
     scene.add(this.sky);
     this.snow = th.weather === 'snow' ? new Snowfall(scene) : null;
+    this.gondola = th.weather === 'snow' && this.quality !== 'low' ? buildGondola(this) : null;
     this.fx.dust = th.weather === 'snow' ? '#f4f9ff' : '#d8c6a0';
     // start line + finish arch
     const sf = track.atDist(58);
@@ -231,8 +236,9 @@ export class RaceSession {
   _addKart(r, i) {
     const def = KARTS[r.kartId], ch = CHARACTERS[r.charId];
     const spawn = this.track.gridSlot(i);
+    const snowy = this.def.theme.weather === 'snow';
     const kart = new KartController({ id: r.id, name: r.name, physics: this.physics, def, character: ch, isHuman: r.isHuman, spawn, index: r.humanIndex ?? i, build: r.build });
-    kart.hold = true;
+    kart.hold = true; kart.trailsOn = snowy && this.quality !== 'low';
     kart.lastSafeD = spawn.d;
     this.items.initLoadout(kart, { weapon: r.weapon, shield: r.shield });
     kart.persona = r.persona;
@@ -274,6 +280,7 @@ export class RaceSession {
     for (const k of this.karts) k.update(dt, ctx);
     this.items.update(dt);
     this.obstacles.update(dt, this.time);
+    this.yeti?.update(dt);
     this.physics.step((a, b, started) => this._sensor(a, b, started));
     this._events();
     this._checkEnd(dt);
@@ -338,6 +345,10 @@ export class RaceSession {
           case 'shield': this.say(k, 'SHIELD UP', '#8be9fd'); break;
           case 'mud': this.say(k, 'Fell off the shortcut! Mud drag', '#a1887f'); break;
           case 'respawn': this.say(k, 'Back on track', '#fff'); break;
+          case 'oob': this.say(k, 'OUT OF BOUNDS! A YETI IS COMING - get back on the slope!', '#ff5a5a', true); break;
+          case 'oobClear': this.say(k, 'Phew - the yeti lost you', '#9be7ff'); break;
+          case 'grabbed': this.say(k, 'CAUGHT BY THE YETI!', '#ff5a5a', true); break;
+          case 'yetiSlam': this.say(k, 'YETI SLAM! Obstacle penalty', '#ffb03a', true); this.sfx('bonk', k); break;
           case 'hit': if (e.data?.kind === 'knockup') this.say(k, 'FEATHERS!', '#fff6d8'); else if (e.data?.kind === 'oil') this.say(k, 'SLIPPERY!', '#ffd77a'); break;
           case 'finish': this.say(k, `FINISHED ${k.rank}${['st', 'nd', 'rd'][k.rank - 1] ?? 'th'}!`, '#ffd700', true); this.sfx('cheer', k); break;
           default: break;
@@ -370,6 +381,7 @@ export class RaceSession {
     wind.value = this.time;
     this.sky.material.uniforms.time.value = this.time;
     this.fxSoft.update(dt);
+    this.gondola?.update(this.time);
     if (f) {
       this.sky.position.copy(f.pos); this.mountains.position.set(f.pos.x, f.pos.y, f.pos.z);
       this.snow?.update(dt, f.pos);
@@ -379,7 +391,7 @@ export class RaceSession {
   }
 
   dispose() {
-    this.items.dispose(); this.obstacles.dispose();
+    this.items.dispose(); this.obstacles.dispose(); this.yeti?.dispose();
     this.visuals.forEach((v) => v.dispose());
     this.scene.traverse((o) => {
       o.geometry?.dispose?.();

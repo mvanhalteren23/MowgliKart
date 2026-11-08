@@ -34,7 +34,7 @@ export function powderMaterial(theme) {
     for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(140,175,225,${r() * 0.12})`; g.fillRect(r() * w, r() * h, 3 + r() * 10, 2 + r() * 5); }
     for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(255,255,255,${0.2 + r() * 0.5})`; g.fillRect(r() * w, r() * h, 2, 2); }
   }, [2, 2]);
-  return new THREE.MeshToonMaterial({ color: map ? 0xffffff : 0xf2f7ff, map, side: THREE.DoubleSide });
+  return new THREE.MeshToonMaterial({ color: map ? 0xffffff : 0xf2f7ff, map, side: THREE.DoubleSide, normalMap: snowNormal(), normalScale: new THREE.Vector2(1.2, 1.2) });
 }
 
 function tex(w, h, draw, repeat) {
@@ -46,6 +46,31 @@ function tex(w, h, draw, repeat) {
   return t;
 }
 
+/** Tileable procedural snow normal map (fine drift ripples + sparkle bumps) for the ground materials. */
+let _snowN = null;
+export function snowNormal() {
+  if (_snowN || !hasDOM) return _snowN;
+  const S = 256, h = new Float32Array(S * S), r = mulberry32(21);
+  for (const [cells, amp] of [[8, 1], [16, 0.55], [32, 0.3], [64, 0.16]]) {
+    const grid = Float32Array.from({ length: cells * cells }, () => r());
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const gx = (x / S) * cells, gy = (y / S) * cells, x0 = Math.floor(gx) % cells, y0 = Math.floor(gy) % cells, x1 = (x0 + 1) % cells, y1 = (y0 + 1) % cells;
+      const fx = gx - Math.floor(gx), fy = gy - Math.floor(gy), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+      h[y * S + x] += amp * ((grid[y0 * cells + x0] * (1 - sx) + grid[y0 * cells + x1] * sx) * (1 - sy) + (grid[y1 * cells + x0] * (1 - sx) + grid[y1 * cells + x1] * sx) * sy);
+    }
+  }
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const dx = h[y * S + ((x + 1) % S)] - h[y * S + ((x - 1 + S) % S)], dy = h[((y + 1) % S) * S + x] - h[((y - 1 + S) % S) * S + x];
+    const nx = -dx * 2.4, ny = -dy * 2.4, inv = 1 / Math.hypot(nx, ny, 1), o = (y * S + x) * 4;
+    img.data[o] = (nx * inv * 0.5 + 0.5) * 255; img.data[o + 1] = (ny * inv * 0.5 + 0.5) * 255; img.data[o + 2] = (inv * 0.5 + 0.5) * 255; img.data[o + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  _snowN = new THREE.CanvasTexture(c); _snowN.wrapS = _snowN.wrapT = THREE.RepeatWrapping; _snowN.repeat.set(5, 5);
+  return _snowN;
+}
+
 /** Ground texture: speckle + (for snow) long ski-track streaks running down the slope. */
 export function terrainMaterial(theme) {
   const snow = theme.scenery === 'pine';
@@ -55,7 +80,7 @@ export function terrainMaterial(theme) {
     for (let i = 0; i < 700; i++) { g.fillStyle = snow ? `rgba(120,160,215,${r() * 0.1})` : `rgba(0,0,0,${r() * 0.07})`; g.fillRect(r() * w, r() * h, 2 + r() * 8, 2 + r() * 8); }
     if (snow) for (let i = 0; i < 26; i++) { g.strokeStyle = `rgba(130,170,225,${0.18 + r() * 0.25})`; g.lineWidth = 1 + r() * 2.2; const x = r() * w; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + (r() - 0.5) * 24, h * 0.3, x + (r() - 0.5) * 24, h * 0.7, x + (r() - 0.5) * 8, h); g.stroke(); }
   }, [5, 1]);
-  return new THREE.MeshToonMaterial({ color: map ? 0xffffff : theme.ground, map, side: THREE.DoubleSide });
+  return new THREE.MeshToonMaterial({ color: map ? 0xffffff : theme.ground, map, side: THREE.DoubleSide, normalMap: snow ? snowNormal() : null, normalScale: new THREE.Vector2(0.9, 0.9) });
 }
 
 /** Instanced scatter helper: parts = [{geo, color, y, s?}], places `n` instances via fn(i)->{p, scale, rot} (or null). */
@@ -104,23 +129,25 @@ export function buildScenery(session) {
 
   if (th.scenery === 'pine') {
     // dense snow-capped fir forest + boulders + chalets; on the open slope also individually collidable trees in the powder
-    const open = track.open, edge = open ? hw + 5.5 : hw;
+    const open = track.open, edge = open ? hw + 5.5 : hw, forest = [];
     const gy = (off) => (open ? 3.1 - 0.16 * Math.max(0, off - edge) : -0.5 - 0.16 * (off - hw));
     const placeF = (minOff, spread, pw = 1.5) => () => {
       for (let t = 0; t < 40; t++) {
         const d = rnd() * track.length, side = rnd() < 0.5 ? -1 : 1, off = edge + minOff + Math.pow(rnd(), pw) * spread;
         const p = track.surface(d, side * off); p.y += gy(off);
         if (nearDeck(p)) continue;
-        return { p, scale: 0.8 + rnd() * 1.4, rot: rnd() * 6.28 };
+        const tr = { p, scale: 0.8 + rnd() * 1.4, rot: rnd() * 6.28 };
+        if (open && off < edge + 55) forest.push(tr); // solid trunks for the first stretch of forest, so the OOB zone isn't a ghost forest
+        return tr;
       }
       return null;
     };
     const nearDeck = (p) => track.shortcuts.some((sc) => { const P = sc.frames.P; for (let i = 0; i < P.length; i += 4) { const dx = P[i].x - p.x, dz = P[i].z - p.z; if (dx * dx + dz * dz < 110) return true; } return false; });
-    const layer = (r, h, y, color) => ({ geo: new THREE.ConeGeometry(r, h, 8), color, y, sway: true });
+    const layer = (r, h, y, color) => ({ geo: new THREE.ConeGeometry(r, h, 12), color, y, sway: true });
     const parts = () => [
       { geo: new THREE.CylinderGeometry(0.3, 0.42, 1.8, 6), color: 0x6b4a2a, y: 0.9 },
-      layer(2.5, 3.4, 3.2, 0x2a7a3c), layer(2.0, 3.0, 5.2, 0x328a45), layer(1.4, 2.6, 7.0, 0x3b9a50),
-      { geo: new THREE.ConeGeometry(2.1, 2.2, 8), color: 0xffffff, y: 3.9, sway: true }, { geo: new THREE.ConeGeometry(1.65, 2.0, 8), color: 0xffffff, y: 5.9, sway: true }, { geo: new THREE.ConeGeometry(1.1, 1.8, 8), color: 0xf4fbff, y: 7.7, sway: true },
+      layer(2.5, 3.4, 3.2, 0x2a7a3c), layer(2.0, 3.0, 5.2, 0x328a45), layer(1.4, 2.6, 7.0, 0x3b9a50), layer(0.9, 2.2, 8.7, 0x46ab5c),
+      { geo: new THREE.ConeGeometry(2.1, 2.2, 8), color: 0xffffff, y: 3.9, sway: true }, { geo: new THREE.ConeGeometry(1.65, 2.0, 8), color: 0xffffff, y: 5.9, sway: true }, { geo: new THREE.ConeGeometry(1.1, 1.8, 10), color: 0xf4fbff, y: 7.7, sway: true }, { geo: new THREE.ConeGeometry(0.62, 1.4, 8), color: 0xffffff, y: 9.3, sway: true },
     ];
     scatter(g, parts(), open ? 2600 : 1500, placeF(open ? 2 : 4, open ? 95 : 70, 1.35));
     scatter(g, [{ geo: rock, color: 0x8b95a5, y: 0.2, sy: 0.6 }, { geo: new THREE.SphereGeometry(1, 8, 5), color: 0xffffff, y: 0.65, sy: 0.35, sx: 0.9 }], 140, placeF(1, 50));
@@ -136,7 +163,7 @@ export function buildScenery(session) {
         trees.push({ p, scale: 1.1 + rnd() * 0.9, rot: rnd() * 6.28 });
       }
       scatter(g, parts(), trees.length, (i) => trees[i]);
-      session.trees = trees;
+      session.trees = trees; session.forestTrees = forest;
     }
     for (let i = 0; i < 16; i++) { // chalets on the slopes
       const d = rnd() * track.length, side = rnd() < 0.5 ? -1 : 1, off = edge + 28 + rnd() * 40;

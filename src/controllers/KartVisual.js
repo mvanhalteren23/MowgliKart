@@ -4,6 +4,7 @@ import { DRIFT_TIERS, FSM } from './KartController.js';
 import { SHIELDS, WEAPONS } from '../registries/CircuitDraftRegistry.js';
 import { WHEEL_R } from '../registries/_mesh.js';
 import { addOutlines, applyToon, blobTexture } from '../core/Toon.js';
+import { Trail } from '../core/Trail.js';
 import { GROUPS } from '../physics/PhysicsWorld.js';
 
 const V = THREE.Vector3;
@@ -41,6 +42,7 @@ export class KartVisual {
     const bt = blobTexture();
     this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 3.6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: bt, color: bt ? 0xffffff : 0x000000, transparent: true, opacity: bt ? 0.9 : 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
     scene.add(this.shadow);
+    this.trails = kart.trailsOn ? [new Trail(scene), new Trail(scene)] : null;
     // drafting wind ribbons
     this.ribbons = [];
     for (let i = 0; i < 3; i++) {
@@ -150,6 +152,10 @@ export class KartVisual {
       this.shadow.scale.setScalar(f); this.shadow.material.opacity = 0.9 * f;
       this.shadow.rotateY(k.speed > 1 ? Math.atan2(-k.fwd.x, -k.fwd.z) : 0);
     } else this.shadow.visible = false;
+    if (this.trails) {
+      let i = 0;
+      for (const nm of ['RL', 'RR']) { const w = this.wheels[nm]; if (!w) continue; w.getWorldPosition(this.tmp); this.tmp.y -= 0.2; this.trails[i++].push(this.tmp, k.right, k.grounded && k.speed > 3, dt); }
+    }
     // snow / dust spray off the rear wheels (heavier in powder)
     if (fx.soft && k.grounded && k.speed > 7 && !k.finished) {
       const n = k.onPowder ? 3 : drifting ? 2 : 1, col = fx.dust ?? '#f4f9ff';
@@ -198,7 +204,7 @@ export class KartVisual {
   }
 
   dispose() {
-    this.scene.remove(this.root); this.scene.remove(this.shadow);
+    this.scene.remove(this.root); this.scene.remove(this.shadow); this.trails?.forEach((t) => t.dispose());
     for (const r of this.ribbons) this.scene.remove(r);
     this.damage.dispose();
   }

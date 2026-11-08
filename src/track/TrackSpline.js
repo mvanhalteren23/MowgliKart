@@ -455,6 +455,13 @@ export class TrackSpline {
       { lat: -hw - BANK - far, up: TOP - slope * far }, { lat: -hw - BANK, up: TOP - 0.1 }, { lat: -hw - BANK + 0.2, up: -0.8 },
       { lat: hw + BANK - 0.2, up: -0.8 }, { lat: hw + BANK, up: TOP - 0.1 }, { lat: hw + BANK + far, up: TOP - slope * far },
     ], { uvScale: 0.02 });
-    return { road, powder: [powderL, powderR], curbL: bankL, curbR: bankR, terrain, physics: mergeMeshes([road]), physicsPowder: mergeMeshes([powderL, powderR, bankL, bankR]), frames: mf, open: true };
+    // out-of-bounds terrain is solid too, so you can leave the piste (and meet the yeti) instead of falling into the void
+    // coarse collider (3 m rows, 10 m columns, 100 m wide): long skinny triangles would wreck the physics broadphase
+    const mfc = PathFrames.fromPath(this.path, Math.ceil(this.length / 3), { rampH: this.rampH, bank: true });
+    const COLS = 10, REACH = 100;
+    const outer = (sgn) => buildRibbon(mfc, Array.from({ length: COLS + 1 }, (_, i) => { const o = (REACH * (sgn > 0 ? i : COLS - i)) / COLS; return { lat: sgn * (hw + BANK + o), up: TOP - 0.1 - slope * o }; }), { uvScale: 0.02 });
+    const outerL = outer(-1), outerR = outer(1);
+    this.oobLimit = hw + BANK + 8; // beyond this lateral offset the yeti comes
+    return { road, powder: [powderL, powderR], curbL: bankL, curbR: bankR, terrain, physics: mergeMeshes([road]), physicsPowder: mergeMeshes([powderL, powderR, bankL, bankR, outerL, outerR]), frames: mf, open: true };
   }
 }

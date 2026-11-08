@@ -87,6 +87,7 @@ export class AudioManager {
       case 'squirt': this.noise(0.3, L(0.2), 2200); break;
       case 'nitro': this.tone(200, 0.6, 'sawtooth', L(0.3), 700); break;
       case 'whistle': this.tone(1400, 0.5, 'sine', L(0.15), -900); break;
+      case 'roar': this.tone(95, 0.9, 'sawtooth', L(0.42), -45); this.tone(140, 0.7, 'square', L(0.2), -70); this.noise(0.8, L(0.28), 260); break;
       case 'cheer': this.noise(0.8, L(0.15), 1800); break;
       case 'thunk': this.tone(120, 0.15, 'sine', L(0.35), -50); break;
       case 'geyser': this.noise(0.6, L(0.3), 1000); break;

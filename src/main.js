@@ -127,7 +127,7 @@ function shuffle(a, rnd) { const r = [...a]; for (let i = r.length - 1; i > 0; i
   await initRapier();
   await assets.init();
   for (;;) {
-    const cfg = AUTO ? { players: +(params.get('players') ?? 1), autoShield: false, quality: params.get('q') ?? 'high', karts: ['rocket_grocery_kart', 'chicken_coop', 'rocket_grocery_kart', 'chicken_coop'], kids: ['barnaby', 'chloe', 'max', 'zoe'] } : await ui.showLobby();
+    const cfg = AUTO ? { players: +(params.get('players') ?? 1), autoShield: false, quality: params.get('q') ?? 'ultra', karts: ['rocket_grocery_kart', 'chicken_coop', 'rocket_grocery_kart', 'chicken_coop'], kids: ['barnaby', 'chloe', 'max', 'zoe'] } : await ui.showLobby();
     if (AUTO) { cfg.karts = cfg.karts.slice(0, cfg.players); cfg.kids = cfg.kids.slice(0, cfg.players); }
     await runCup(cfg);
     if (AUTO) { game.autoDone = true; ui.show('<div class="loading"><p>Auto cup complete</p></div>', 'screen'); return; }

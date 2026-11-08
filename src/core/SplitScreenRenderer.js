@@ -6,6 +6,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 
 /** Colour grade + vignette + radial speed blur (strength driven by boosts). Runs in linear space before OutputPass tone-mapping. */
 const GradeShader = {
@@ -126,6 +127,8 @@ export class SplitScreenRenderer {
     }
     c.camera.position.copy(c.pos);
     c.look.copy(pos).addScaledVector(c.fwd, CAM_LOOK).add(new V(0, 1.2, 0));
+    const yt = session?.yeti?.yetis.find((y) => y.kart === kart);
+    if (yt) c.look.lerp(yt.pos.clone().add(new V(0, 3, 0)), 0.45); // watch the yeti coming
     c.camera.lookAt(c.look);
     // FOV 91 -> 108 on boosts (mini-turbo, trick, slipstream, nitro), lerp(fov, target, 8 dt)
     const target = kart.isBoosting ? FOV_BOOST : FOV_BASE;
@@ -138,7 +141,7 @@ export class SplitScreenRenderer {
   }
 
   _ensureFx(session) {
-    if (this.fx?.session === session) return this.fx;
+    if (this.fx?.session === session && this.fx.quality === this.quality) return this.fx;
     this.disposeFx();
     const r = this.renderer, size = new THREE.Vector2(); r.getDrawingBufferSize(size);
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
@@ -146,16 +149,26 @@ export class SplitScreenRenderer {
     const pass = new RenderPass(session.scene, this.cams[0].camera);
     const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.16, 0.55, 1.02);
     const grade = new ShaderPass(GradeShader);
-    composer.addPass(pass); composer.addPass(bloom); composer.addPass(grade); composer.addPass(new OutputPass());
+    composer.addPass(pass);
+    let gtao = null;
+    if (this.quality === 'ultra') { // ground-truth ambient occlusion: contact shadows under trees, karts and ramps
+      gtao = new GTAOPass(session.scene, this.cams[0].camera, innerWidth, innerHeight);
+      gtao.output = GTAOPass.OUTPUT.Default;
+      gtao.updateGtaoMaterial({ radius: 1.1, distanceExponent: 1.6, thickness: 1.4, scale: 1.0, samples: 12, distanceFallOff: 1.0, screenSpaceRadius: false });
+      gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
+      gtao.blendIntensity = 0.85;
+      composer.addPass(gtao);
+    }
+    composer.addPass(bloom); composer.addPass(grade); composer.addPass(new OutputPass());
     composer.setPixelRatio(r.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
-    this.fx = { session, composer, pass, grade };
+    this.fx = { session, composer, pass, grade, gtao, quality: this.quality };
     return this.fx;
   }
   disposeFx() { if (this.fx) { this.fx.composer.dispose(); this.fx = null; } }
 
   render(session, dt) {
     const r = this.renderer;
-    if (this.quality === 'high' && this.players === 1 && session.humans[0]) return this._renderPost(session, dt);
+    if (this.quality !== 'low' && this.players === 1 && session.humans[0]) return this._renderPost(session, dt);
     r.setScissorTest(false); r.setClearColor(0x000000, 1); r.clear();
     r.setScissorTest(true);
     this.lay.views.forEach((v, i) => {
@@ -181,7 +194,7 @@ export class SplitScreenRenderer {
     const c = this.cams[0], fx = this._ensureFx(session);
     this._updateCam(c, kart, vis, dt, session);
     r.setScissorTest(false); r.setViewport(0, 0, innerWidth, innerHeight);
-    fx.pass.camera = c.camera;
+    fx.pass.camera = c.camera; if (fx.gtao) fx.gtao.camera = c.camera;
     const want = kart.isBoosting ? 1 : Math.min(0.25, kart.speed / 120);
     this.boostBlur += (want - this.boostBlur) * Math.min(1, 6 * dt);
     fx.grade.uniforms.boost.value = this.boostBlur;

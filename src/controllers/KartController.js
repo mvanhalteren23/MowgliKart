@@ -78,6 +78,7 @@ export class KartController {
     this.grounded = false; this.airTime = 0; this.prevVel = new V(); this.lastNormalVel = 0;
     this.hold = false;
     this.shieldImmuneOil = false;
+    this.oob = false; this.oobT = 0; this.oobSide = 1; this.grab = null; this.yetiPenalty = false; this.yetiDist = 0;
     this.vtopScale = 1;
     this.pos = new V(); this.quat = new Q(); this.vel = new V(); this.fwd = new V(0, 0, -1); this.up = new V(0, 1, 0); this.right = new V(1, 0, 0);
     this.prevPos = new V(); this.prevQuat = new Q();
@@ -198,6 +199,12 @@ export class KartController {
     for (const bs of this.boosts) bs.t -= dt;
     this.boosts = this.boosts.filter((x) => x.t > 0);
     if (this.hold) { this._hold(); this._postProgress(ctx, dt); return; }
+    if (this.grab) { // held aloft by the yeti: pinned to its fist, spinning, no physics
+      const gp = this.grab.pos;
+      b.setTranslation({ x: gp.x, y: gp.y, z: gp.z }, true); this._hold();
+      b.setAngvel({ x: 0, y: 6, z: 0 }, true);
+      this._readState(); this._postProgress(ctx, dt); return;
+    }
 
     // ---- air/ground transitions
     if (this.grounded) this.airTime = 0; else this.airTime += dt;
@@ -319,6 +326,14 @@ export class KartController {
     const { track } = ctx;
     const loc = track.locate(this.pos, this.hint, this.hint >= 0 ? 60 : 0, this._loc ??= {});
     this.hint = loc.idx; this.d = loc.d; this.lat = loc.lat;
+    // out of bounds on the open slope: the yeti (YetiManager) takes it from here
+    if (track.open && !this.finished && !this.grab && !this.yetiPenalty) {
+      const lim = track.oobLimit ?? track.width;
+      if (Math.abs(loc.lat) > lim && this.lastGround !== 'deck') {
+        this.oobT += dt; this.oobSide = Math.sign(loc.lat) || 1;
+        if (!this.oob) { this.oob = true; this.emit('oob'); }
+      } else if (Math.abs(loc.lat) < lim - 3 && this.oob) { this.oob = false; this.oobT = 0; this.emit('oobClear'); }
+    }
     this.roadN = track.atDist(loc.d, (this._fr ??= {})).N;
     if (this.d > this.maxD) this.maxD = this.d;
     if (this.grounded && this.lastGround === 'road' && Math.abs(loc.lat) < track.width / 2 - 1) this.lastSafeD = this.d;
@@ -338,7 +353,7 @@ export class KartController {
     const d = Math.max(0, this.lastSafeD - 6);
     this.placeAt(ctx.track, d, 0, Math.min(this.speed, 14));
     this.hint = -1; this.airTime = 0;
-    this.fsm = FSM.NORMAL; this.drift.charge = 0;
+    this.fsm = FSM.NORMAL; this.drift.charge = 0; this.oob = false; this.oobT = 0; this.grab = null; this.yetiPenalty = false;
     for (const k of Object.keys(this.t)) this.t[k] = 0;
     if (penalty) { this.t.mud = 2.0; this.emit('mud'); }
     this.emit('respawn', { reason });
@@ -367,6 +382,12 @@ export class KartController {
       }
     }
     this.trick.ramp = null;
+    if (this.yetiPenalty) { // back on the slope after the throw: treated exactly like an obstacle hit
+      this.yetiPenalty = false;
+      this.shove(new V(-this.vel.x * 0.25, 5.5, -this.vel.z * 0.25));
+      this.stunFor(0.55 * 1.6, 0.35);
+      this.emit('hit', { kind: 'obstacle', name: 'Yeti slam' }); this.emit('shed'); this.emit('yetiSlam');
+    }
   }
   _doTrick() {
     if (this.trick.active) return;

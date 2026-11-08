@@ -20,7 +20,7 @@ export class UI {
   showLobby(defaults = {}) {
     return new Promise((resolve) => {
       const st = {
-        players: defaults.players ?? 1, autoShield: false, quality: (() => { try { return localStorage.getItem('mk_q') || 'high'; } catch { return 'high'; } })(),
+        players: defaults.players ?? 1, autoShield: false, quality: (() => { try { return localStorage.getItem('mk_q') || (matchMedia('(pointer: coarse)').matches ? 'high' : 'ultra'); } catch { return 'high'; } })(),
         karts: [PLAYABLE_KARTS[0].id, PLAYABLE_KARTS[1].id, PLAYABLE_KARTS[0].id, PLAYABLE_KARTS[1].id],
         kids: ['barnaby', 'chloe', 'max', 'zoe'],
       };
@@ -37,7 +37,7 @@ export class UI {
             <h1>MOWGLI<span>KART</span></h1>
             <p class="tag">Downhill Soapbox Circuit · 4-Race Roguelite Draft Cup</p>
             <div class="row"><b>Players</b> ${[1, 2, 3, 4].map((n) => `<button class="pill ${st.players === n ? 'sel' : ''}" data-n="${n}">${n}P</button>`).join('')}<em>+ ${8 - st.players} AI → 8 racers</em></div>
-            <div class="row"><b>Graphics</b> ${['high', 'low'].map((q) => `<button class="pill ${st.quality === q ? 'sel' : ''}" data-q="${q}">${q === 'high' ? 'High' : 'Low'}</button>`).join('')}<em>High = shadows · bloom · speed blur (1-player) · snowfall</em></div>
+            <div class="row"><b>Graphics</b> ${['ultra', 'high', 'low'].map((q) => `<button class="pill ${st.quality === q ? 'sel' : ''}" data-q="${q}">${q[0].toUpperCase() + q.slice(1)}</button>`).join('')}<em>Ultra = +ambient occlusion · 4K shadows · High = shadows, bloom, speed blur (1P) · Low = none</em></div>
             ${rows}
             <label class="chk"><input type="checkbox" ${st.autoShield ? 'checked' : ''} data-auto> Auto-Shield assist (reactive counter-measure when a charged shield cell is held)</label>
             <button class="go" data-go>START THE CUP ▶</button>
