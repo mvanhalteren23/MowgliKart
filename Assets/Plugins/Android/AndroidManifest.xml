@@ -5,7 +5,7 @@
     android:versionName="1.0"
     android:installLocation="internalOnly">
 
-    <!-- Pico G1 runs Android 7.0/7.1 (API 24-25); Pico G2 runs Android 8.1 (API 27) -->
+    <!-- Fleet confirmed: PUI 3 / Android 8.1.0 (API 27) on all headsets. minSdk stays 24 per the spec (harmless; older ROMs still install). -->
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="27" />
 
     <!-- Mandatory VR Hardware Features for Pico G1/G2 Compositor -->

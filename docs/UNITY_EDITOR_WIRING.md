@@ -42,3 +42,9 @@ but Mirror v96 and Addressables 1.19.19 are happiest on 2020.3+).
 - Player Settings > Android > Other: Blit Type shows **Never** (the key was written as `androidBlitType: 2` per the spec; fix it in the UI if it shows Auto), Graphics APIs = OpenGLES3 only, Stereo Rendering = Multi Pass, Min/Target API 24/27, Scripting backend IL2CPP/ARMv7, Publishing Settings > *Custom Main Manifest* checked.
 - Project Settings > Time: Fixed Timestep 0.05. Physics: Auto Simulation off (trigger events are driven by `KinematicTriggerTicker`).
 - Select `KinematicKart.prefab`: NetworkTransformUnreliable shows ClientToServer, sensitivity 0.01 / 0.5, compressRotation on, syncScale off.
+
+## Target fleet: PUI 3 / Android 8.1.0 (API 27)
+- targetSdk 27 matches the OS exactly, so cleartext HTTP (Addressables over `http://<laptop-ip>`) is permitted; the manifest flag is kept as the explicit guarantee.
+- PUI 3 is new enough that `ToBService` should be available: expect the main kiosk path (not the `UPvr_GetDeviceSN` / wlan0 fallback) on device. Check the log for `ToBService bound with status`. If `pico_advance_interface` features are refused, the app may need to be whitelisted/signed for enterprise APIs per Pico's ToB docs.
+- Auto-boot comes from the HOME launcher role (`UPvr_SetAPPAsHome`). The `BOOT_COMPLETED` filter on the activity is ignored by Android (only a `<receiver>` gets that broadcast); add a small BroadcastReceiver only if the HOME role does not start the app after a cold boot.
+- Android 8.x requires runtime prompts for the storage permissions; Addressables uses app-private cache, so denying them is harmless.
