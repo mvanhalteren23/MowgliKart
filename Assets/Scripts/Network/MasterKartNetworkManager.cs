@@ -97,6 +97,12 @@ namespace LegacyVR.KartRacing.Networking
         private readonly Dictionary<string, GameModuleDescriptor> _modulesById =
             new Dictionary<string, GameModuleDescriptor>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Read-only views used by the Windows operator panel.</summary>
+        public IEnumerable<RegisteredHeadsetRecord> RegisteredHeadsets => _registryByMac.Values;
+        public IReadOnlyList<GameModuleDescriptor> GameModules => registeredGameModules;
+        public IReadOnlyDictionary<int, RaceSessionGroup> ActiveSessions => _activeSessions;
+        public int RegisteredHeadsetCount => _registryByMac.Count;
+
         public event Action<RegisteredHeadsetRecord> OnHeadsetRegistered;
         public event Action<string> OnHeadsetDisconnected;
         public event Action<int, string> OnHeadsetSceneReady;

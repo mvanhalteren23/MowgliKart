@@ -1,4 +1,19 @@
-# Unity Editor wiring still required
+# Unity Editor wiring
+
+## Fast path: let Unity build the scenes
+After the project opens and compiles: **Tools > MowgliKart > Build Scenes**. This generates
+`Assets/Scenes/HubScene.unity` (Pvr rig + controllers + camera rig with references assigned + PicoKioskController +
+NetworkManager prefab), `Assets/Scenes/MasterScene.unity` (NetworkManager + `MasterOperatorPanel`), and
+`Assets/Scenes/Tracks/Track01.unity` (ground, 3 BoostPads, 13 grid markers, disabled `LeaderControlUI` canvas with
+Start/Pause/Return buttons) already marked Addressable under key `Assets/Scenes/Tracks/Track01.unity`. It also sets Build
+Settings (Hub = 0, Master = 1). The manual list below is what that command automates, kept for reference/verification.
+
+## Windows operator (MasterScene)
+Press Play (or build a Windows Standalone with MasterScene): **Start Server**, wait for headsets to appear, tick the group,
+tick **P1** on the leader, pick the game, **LAUNCH**. Session ID auto-increments.
+
+---
+
 
 Open the project in **Unity 2020.3 LTS** (ProjectVersion pinned to 2020.3.48f1; 2019.4 also fine for the scripts,
 but Mirror v96 and Addressables 1.19.19 are happiest on 2020.3+).
