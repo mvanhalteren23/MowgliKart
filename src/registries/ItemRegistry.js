@@ -44,9 +44,20 @@ export const ITEM_IDS = Object.keys(ITEMS);
 
 export function makeMysteryBox(THREE) {
   const g = new THREE.Group();
-  const m = box(THREE, 1.5, 1.5, 1.5, 0xffffff);
-  m.material = new THREE.MeshToonMaterial({ color: 0x66ddff, transparent: true, opacity: 0.8 });
+  let tex = null;
+  if (typeof document !== 'undefined') {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 128, 128);
+    ['#ff5fa2', '#ffd23f', '#3ddc84', '#35b6ff', '#b36bff'].forEach((col, i, a) => gr.addColorStop(i / (a.length - 1), col));
+    x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+    x.fillStyle = '#fff'; x.fillRect(0, 0, 128, 10); x.fillRect(0, 118, 128, 10); x.fillRect(0, 0, 10, 128); x.fillRect(118, 0, 10, 128);
+    x.font = 'bold 92px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.lineWidth = 8; x.strokeStyle = '#2a1a50'; x.strokeText('?', 64, 70); x.fillStyle = '#fff'; x.fillText('?', 64, 70);
+    tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  }
+  const m = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshToonMaterial({ color: tex ? 0xffffff : 0x66ddff, map: tex }));
   g.add(m);
-  g.add(sphere(THREE, 0.34, 0xffd400, [0, 0, 0], 8));
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.9, 1.9), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false }));
+  g.add(glow);
   return g;
 }

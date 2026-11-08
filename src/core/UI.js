@@ -1,6 +1,6 @@
 import { PLAYABLE_KARTS, KARTS } from '../registries/KartRegistry.js';
 import { CHARACTERS, CHARACTER_IDS } from '../registries/CharacterRegistry.js';
-import { TRACKS } from '../registries/TrackRegistry.js';
+import { TRACKS, TRACK_ORDER } from '../registries/TrackRegistry.js';
 import { STAT_BOOSTS, WEAPONS, SHIELDS } from '../registries/CircuitDraftRegistry.js';
 
 const PCOL = ['#44ff88', '#44aaff', '#ffcc33', '#ff66cc'];
@@ -63,32 +63,45 @@ export class UI {
   /* ------------------------------------------------------------------ draft */
   /** circuit.hands holds each human's three dealt cards. Resolves once all humans have picked. */
   showDraft(circuit) {
+    // 0-5 bar ratings shown on the cards (Top Speed / Knockback Res ... like the design reference)
+    const BARS = {
+      leaf_blower: [['Top Speed', 3], ['Knockback Res', 2]], shopping_casters: [['Top Speed', 2], ['Drift Charge', 3]], pogo_shocks: [['Top Speed', 2], ['Trick Boost', 3]], lead_ballast: [['Top Speed', 2], ['Knockback Res', 4]],
+      ballistic_chicken: [['Impact', 4], ['Recharge', 3]], baby_oil_puddle: [['Area', 4], ['Recharge', 4]], mentos_mortar: [['Impact', 3], ['Recharge', 2]], boxing_glove: [['Impact', 4], ['Recharge', 4]],
+      bubble_wrap_shield: [['Block', 5], ['Recharge', 3]], trash_lid_shield: [['Reflect', 5], ['Recharge', 3]], tinfoil_shield: [['Immunity', 5], ['Recharge', 3]],
+    };
+    const CAT = { stat: ['STAT BOOST', '⬆'], weapon: ['WEAPON', '⚔'], shield: ['SHIELD', '🛡'] };
     return new Promise((resolve) => {
       const humans = circuit.racers.filter((r) => r.isHuman);
+      const snap = new Map(circuit.hands);                // keep showing the cards after a pick (with SELECTED)
+      const chosen = new Map();
       const sel = new Map(humans.map((h) => [h.id, 0]));
       const el = this.show('', 'screen draft');
-      const cardHtml = (c, k, h, i) => `<button class="card ${c.category} ${sel.get(h.id) === k ? 'focus' : ''}" data-h="${h.id}" data-k="${k}">
-          <div class="cat">${c.tag}</div><div class="big">${c.icon}</div><h3>${c.name}</h3><p>${c.desc}</p><kbd>${i < 2 ? (i ? ['8', '9', '0'][k] : String(k + 1)) : '◀ ▶ + A'}</kbd></button>`;
+      const bars = (id) => (BARS[id] ?? []).map(([n, v]) => `<div class="bar"><span>${n}</span><i>${Array.from({ length: 5 }, (_, k) => `<u class="${k < v ? 'on' : ''}"></u>`).join('')}</i></div>`).join('');
+      const cardHtml = (c, k, h, i) => `<button class="card ${c.category} ${chosen.get(h.id) === k ? 'picked' : sel.get(h.id) === k && !chosen.has(h.id) ? 'focus' : ''} ${chosen.has(h.id) && chosen.get(h.id) !== k ? 'dim' : ''}" data-h="${h.id}" data-k="${k}">
+          <div class="chip">${CAT[c.category][1]}</div><div class="cat">${CAT[c.category][0]}:</div><h3>${c.name}</h3>
+          <div class="big">${c.icon}</div><p>${c.desc}</p><div class="bars">${bars(c.id)}</div>
+          <div class="tagline">${c.tag}</div>${chosen.get(h.id) === k ? '<div class="sel">SELECTED</div>' : ''}
+          <kbd>${i < 2 ? (i ? ['8', '9', '0'][k] : String(k + 1)) : '◀ ▶ + A'}</kbd></button>`;
       const build = (h) => `${h.stats.map((id) => STAT_BOOSTS[id].icon).join(' ') || '—'} &nbsp;|&nbsp; ${h.weapon ? WEAPONS[h.weapon.id].icon + ' Lv' + h.weapon.level : 'no weapon'} &nbsp;|&nbsp; ${h.shield ? SHIELDS[h.shield.id].icon + ' Lv' + h.shield.level : 'no shield'}`;
+      const tracker = `<div class="tracker"><div class="tl">4-RACE CIRCUIT<br>PROGRESS TRACKER</div><div class="nodes">${TRACK_ORDER.map((id, k) => `<div class="node ${k < circuit.stage ? 'done' : k === circuit.stage ? 'cur' : 'lock'}"><i>${k < circuit.stage ? '✔' : k === circuit.stage ? k + 1 : '🔒'}</i><b>${TRACKS[id].name.toUpperCase()}</b>${k === circuit.stage ? `<small>STAGE ${k + 1}</small>` : ''}</div>`).join('<div class="link"></div>')}</div>
+          <div class="btns"><span><i class="a">A</i> SELECT</span><span><i class="b">B</i> CANCEL</span></div></div>`;
       const render = () => {
-        const track = TRACKS[circuit.trackId];
-        el.innerHTML = `<div class="panel wide"><h2>Pre-Race Draft · Race ${circuit.raceNumber} of 4</h2>
-          <p class="tag">${track.name} — pick ONE card: a stacking Stat Boost, a Rechargeable Weapon, or a Rechargeable Shield</p>
+        el.innerHTML = `<div class="panel wide"><h2>⭐ CIRCUIT STAGE ${circuit.raceNumber} OF 4 — PRE-RACE DRAFT</h2>
           <div class="draftgrid n${humans.length}">${humans.map((h, i) => `
             <div class="dpanel" style="--pc:${PCOL[i]}"><div class="dname">${h.name}<small>${build(h)}</small></div>
-            ${circuit.hands.has(h.id) ? `<div class="cards">${circuit.hands.get(h.id).map((c, k) => cardHtml(c, k, h, i)).join('')}</div>` : '<div class="done">✔ Locked in — waiting for the other players…</div>'}
-            </div>`).join('')}</div></div>`;
+            <div class="cards">${snap.get(h.id).map((c, k) => cardHtml(c, k, h, i)).join('')}</div></div>`).join('')}</div>${tracker}</div>`;
         el.querySelectorAll('.card').forEach((b) => (b.onclick = () => pick(+b.dataset.h, +b.dataset.k)));
       };
       const pick = (id, k) => {
         const hand = circuit.hands.get(id);
-        if (!hand) return;
+        if (!hand || chosen.has(id)) return;
         circuit.apply(id, hand[k]);
+        chosen.set(id, k);
         render();
-        if (!circuit.humansPending().length) { setTimeout(() => { this.clear(); resolve(); }, 450); }
+        if (!circuit.humansPending().length) { setTimeout(() => { this.clear(); resolve(); }, 650); }
       };
       render();
-      const nav = (hi, d) => { const h = humans[hi]; if (!h || !circuit.hands.has(h.id)) return; sel.set(h.id, (sel.get(h.id) + d + 3) % 3); render(); };
+      const nav = (hi, d) => { const h = humans[hi]; if (!h || chosen.has(h.id)) return; sel.set(h.id, (sel.get(h.id) + d + 3) % 3); render(); };
       const keymap = { Digit1: [0, 0], Digit2: [0, 1], Digit3: [0, 2], Digit8: [1, 0], Digit9: [1, 1], Digit0: [1, 2], Numpad1: [0, 0], Numpad2: [0, 1], Numpad3: [0, 2] };
       this.cleanup.push(this.input.onKey((code) => {
         if (keymap[code] && humans[keymap[code][0]]) pick(humans[keymap[code][0]].id, keymap[code][1]);

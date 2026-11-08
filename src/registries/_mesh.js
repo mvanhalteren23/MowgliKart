@@ -68,3 +68,22 @@ export function makeGenericKart(THREE, o = {}) {
   if (o.extra) o.extra(THREE, root);
   return root;
 }
+
+/** Rainbow "oil-slick / soap-bubble" texture (conic gradient). Returns null without a DOM. */
+export function iridescentTexture(THREE, alpha = 1) {
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const cone = g.createConicGradient(0, 128, 128);
+  ['#ff6ad5', '#ffd86a', '#7dff9a', '#6ad8ff', '#a28bff', '#ff6ad5'].forEach((col, i, a) => cone.addColorStop(i / (a.length - 1), col));
+  g.globalAlpha = alpha; g.fillStyle = cone; g.fillRect(0, 0, 256, 256);
+  const fade = g.createRadialGradient(128, 128, 20, 128, 128, 128);
+  fade.addColorStop(0, 'rgba(255,255,255,0.55)'); fade.addColorStop(0.6, 'rgba(255,255,255,0.1)'); fade.addColorStop(1, 'rgba(255,255,255,0)');
+  g.globalAlpha = 1; g.globalCompositeOperation = 'lighter'; g.fillStyle = fade; g.fillRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+/** Soap-bubble sphere: fresnel-ish rim + rainbow tint. */
+export function bubbleMaterial(THREE, tint = 0xbfe8ff, opacity = 0.4) {
+  const map = iridescentTexture(THREE);
+  return new THREE.MeshBasicMaterial({ color: map ? 0xffffff : tint, map, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+}

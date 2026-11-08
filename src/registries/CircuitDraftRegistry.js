@@ -1,4 +1,4 @@
-import { toon, box, cyl, cone, sphere } from './_mesh.js';
+import { toon, box, cyl, cone, sphere, iridescentTexture, bubbleMaterial } from './_mesh.js';
 
 // γ_dim(n) = max(0.75, 1 - 0.06 n): diminishing return for the n-th drafted stat card (SPEC 3.3).
 export const gammaDim = (n) => Math.max(0.75, 1.0 - 0.06 * n);
@@ -58,12 +58,12 @@ export const WEAPONS = {
     width: 3.8, width2: 6.0, life: 18,
     assetPrompt: 'Flat iridescent translucent baby-oil puddle decal, rainbow sheen, glossy, top-down, low poly disc.',
     proceduralFallback(THREE) {
+      const tex = iridescentTexture(THREE);
       const m = new THREE.Mesh(
-        new THREE.CylinderGeometry(1, 1, 0.05, 28),
-        new THREE.MeshToonMaterial({ color: 0xffd77a, transparent: true, opacity: 0.75 }),
+        new THREE.CircleGeometry(1, 36).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: tex ? 0xffffff : 0xffd77a, map: tex, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
       );
-      m.add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.07, 24),
-        new THREE.MeshToonMaterial({ color: 0xff9ad8, transparent: true, opacity: 0.6 })));
+      m.scale.set(1, 1, 0.8);
       return m;
     },
   },
@@ -105,8 +105,7 @@ export const SHIELDS = {
     desc: 'Absorbs all weapon hits (42% ricochet), immune to oil & poo, welds panels back.',
     assetPrompt: 'Giant translucent sphere of industrial bubble wrap, soft blue tint, low poly bubble pattern.',
     proceduralFallback(THREE) {
-      return new THREE.Mesh(new THREE.SphereGeometry(1.7, 20, 16),
-        new THREE.MeshToonMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.32 }));
+      return new THREE.Mesh(new THREE.SphereGeometry(1.7, 28, 20), bubbleMaterial(THREE, 0xbfe8ff, 0.42));
     },
   },
   trash_lid_shield: {
@@ -131,8 +130,7 @@ export const SHIELDS = {
     assetPrompt: 'Crinkly kitchen-tinfoil radar dish on a kid helmet with a glowing blue static dome, low poly.',
     proceduralFallback(THREE) {
       const g = new THREE.Group();
-      g.add(new THREE.Mesh(new THREE.SphereGeometry(1.6, 18, 14),
-        new THREE.MeshToonMaterial({ color: 0x66aaff, transparent: true, opacity: 0.22 })));
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 18), bubbleMaterial(THREE, 0x66aaff, 0.3)));
       g.add(cone(THREE, 0.5, 0.25, 0xdfe6ee, [0, 1.3, 0], [Math.PI, 0, 0], 10));
       return g;
     },

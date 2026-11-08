@@ -46,8 +46,8 @@ export class SplitScreenRenderer {
     this.canvas.style.width = W + 'px'; this.canvas.style.height = H + 'px';
     this.size = { W, H };
     this.lay = this.layout(W, H);
-    this.hud.layout(this.lay.views, this.lay.mini);
-    this.lay.views.forEach((v, i) => { this.cams[i].camera.aspect = v.w / v.h; this.cams[i].camera.updateProjectionMatrix(); });
+    if (this.hud.panels.length) this.hud.layout(this.lay.views, this.lay.mini);
+    this.lay.views.forEach((v, i) => { const c = this.cams[i]; if (c) { c.camera.aspect = v.w / v.h; c.camera.updateProjectionMatrix(); } });
   }
 
   _vFov(fov, aspect) {

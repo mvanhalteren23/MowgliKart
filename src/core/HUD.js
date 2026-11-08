@@ -21,8 +21,8 @@ export class HUD {
       const el = document.createElement('div');
       el.className = 'vp'; el.style.setProperty('--pc', PCOL[i]);
       el.innerHTML = `
-        <div class="hud-tl"><div class="rank"><b>1</b><sup>st</sup><span> / 8</span></div><div class="stage"></div><div class="pname"></div></div>
-        <div class="hud-tr"><div class="progress"><i></i></div><div class="pct">0%</div></div>
+        <div class="hud-tl"><div class="rank"><b>1</b><sup>st</sup><span> / 8</span></div><div class="stage"></div><div class="timer"></div><div class="pname"></div></div>
+        <div class="hud-tr"><div class="pbadge">P${i + 1}</div><div class="progress"><i></i></div><div class="pct">0%</div><canvas class="mm" width="200" height="200"></canvas></div>
         <div class="hud-c">
           <div class="count"></div>
           <div class="rhythm"><div class="zone"></div><div class="needle"></div></div>
@@ -30,9 +30,12 @@ export class HUD {
           <div class="hint"></div>
         </div>
         <div class="toasts"></div>
-        <div class="hud-bl"><div class="speed"><b>0</b><span>km/h</span></div>
+        <div class="hud-bl">
           <div class="meter draft"><i></i><em>SLIPSTREAM</em></div>
           <div class="meter drift"><i></i><u class="t1"></u><u class="t2"></u><u class="t3"></u></div></div>
+        <div class="dial"><svg viewBox="0 0 100 62"><defs><linearGradient id="rb${i}" x1="0" x2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset=".3" stop-color="#22c55e"/><stop offset=".62" stop-color="#facc15"/><stop offset="1" stop-color="#ef4444"/></linearGradient></defs>
+          <path class="bgp" d="M10 56 A40 40 0 0 1 90 56" pathLength="100"/><path class="fgp" d="M10 56 A40 40 0 0 1 90 56" pathLength="100" stroke="url(#rb${i})" stroke-dasharray="0 100"/></svg>
+          <div class="num"><b>0</b><span>KM/H</span></div></div>
         <div class="hud-bc">
           <div class="slot pickup"><div class="ic"></div><div class="lb">ITEM</div></div>
           <div class="slot weapon"><div class="ic"></div><div class="cd"></div><div class="lb"></div></div>
@@ -45,7 +48,7 @@ export class HUD {
       this.panels.push({
         el, rank: q('.rank'), stage: q('.stage'), pname: q('.pname'), prog: q('.progress i'), pct: q('.pct'), count: q('.count'),
         rhythm: q('.rhythm'), needle: q('.needle'), zone: q('.zone'), score: q('.score'), hint: q('.hint'), toasts: q('.toasts'),
-        speed: q('.speed b'), draft: q('.draft i'), drift: q('.drift i'), t1: q('.drift .t1'), t2: q('.drift .t2'), t3: q('.drift .t3'),
+        speed: q('.dial .num b'), arc: q('.fgp'), timer: q('.timer'), mm: q('.mm'), badge: q('.pbadge'), draft: q('.draft i'), drift: q('.drift i'), t1: q('.drift .t1'), t2: q('.drift .t2'), t3: q('.drift .t3'),
         driftWrap: q('.drift'), slotP: q('.slot.pickup'), slotW: q('.slot.weapon'), slotS: q('.slot.shield'), badges: q('.badges'),
         feathers: q('.feathers'), stink: q('.stink'), finish: q('.finish'), cache: {},
       });
@@ -53,6 +56,7 @@ export class HUD {
       z.style.left = GREEN[0] * 100 + '%'; z.style.width = (GREEN[1] - GREEN[0]) * 100 + '%';
       q('.drift .t1').style.left = (DRIFT_TIERS[0].t / 4) * 100 + '%'; q('.drift .t2').style.left = (DRIFT_TIERS[1].t / 4) * 100 + '%'; q('.drift .t3').style.left = '100%';
     }
+    this.panels.forEach((p) => { p.mm.style.display = players > 2 ? 'none' : 'block'; p.badge.style.display = players > 1 ? 'block' : 'none'; });
     // 3-player mode: 4th quadrant = live minimap + circuit standings
     this.mini = null;
     if (players === 3) {
@@ -81,6 +85,11 @@ export class HUD {
     const pr = Math.max(0, Math.min(1, kart.maxD / session.track.finishD));
     this.set(p, 'pr', Math.round(pr * 200), () => { p.prog.style.width = pr * 100 + '%'; p.pct.textContent = Math.round(pr * 100) + '%'; });
     this.set(p, 'spd', Math.round(kart.speed * 3.6), (v) => { p.speed.textContent = v; });
+    const frac = Math.round(Math.min(100, (kart.speed / (kart.vtop * 1.6)) * 100));
+    this.set(p, 'arc', frac, () => p.arc.setAttribute('stroke-dasharray', `${frac} 100`));
+    const T = session.raceTime;
+    this.set(p, 'tm', Math.floor(T * 10), () => { const m = Math.floor(T / 60), sec = (T % 60).toFixed(1).padStart(4, '0'); p.timer.textContent = `Time ${String(m).padStart(2, '0')}:${sec}`; });
+    if ((p.mmT = (p.mmT ?? 0) + 1) % 6 === 1) this.drawMini(p, session, kart);
     const dm = Math.round((kart.slip.draftTimer / 1.5) * 50);
     this.set(p, 'dm', dm + (kart.slip.inCone ? 'c' : ''), () => { p.draft.style.width = Math.min(100, (kart.slip.draftTimer / 1.5) * 100) + '%'; p.draft.parentElement.classList.toggle('hot', kart.slip.inCone); });
     // drift gauge
@@ -132,6 +141,26 @@ export class HUD {
       while (p.toasts.children.length > 4) p.toasts.firstChild.remove();
       setTimeout(() => d.remove(), 2200);
     }
+  }
+
+  /** Circular per-player minimap (shown for 1-2 players). */
+  drawMini(p, session, kart) {
+    const c = p.mm; if (!c.offsetParent && c.style.display === 'none') return;
+    const g = c.getContext('2d'), tr = session.track;
+    if (!session._mm) {
+      const pts = []; let a = 1e9, b = -1e9, d = 1e9, e = -1e9;
+      for (let k = 0; k <= 2000; k += 8) { const P = tr.frames.P[k]; pts.push(P); a = Math.min(a, P.x); b = Math.max(b, P.x); d = Math.min(d, P.z); e = Math.max(e, P.z); }
+      session._mm = { pts, a, b, d, e, s: 150 / Math.max(b - a, e - d), cx: (a + b) / 2, cz: (d + e) / 2 };
+    }
+    const m = session._mm, X = (x) => 100 + (x - m.cx) * m.s, Z = (z) => 100 + (z - m.cz) * m.s;
+    g.clearRect(0, 0, 200, 200);
+    g.fillStyle = '#2f7d4acc'; g.beginPath(); g.arc(100, 100, 98, 0, 7); g.fill();
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    g.strokeStyle = '#1b2a40'; g.lineWidth = 11; g.beginPath(); m.pts.forEach((P, k) => (k ? g.lineTo(X(P.x), Z(P.z)) : g.moveTo(X(P.x), Z(P.z)))); g.stroke();
+    g.strokeStyle = '#f4f8ff'; g.lineWidth = 7; g.stroke();
+    for (const sc of tr.shortcuts) { g.strokeStyle = '#ffcf4a'; g.lineWidth = 3; g.beginPath(); sc.frames.P.forEach((P, k) => { if (k % 6) return; const f = k ? g.lineTo : g.moveTo; f.call(g, X(P.x), Z(P.z)); }); g.stroke(); }
+    session.karts.forEach((k) => { if (k === kart) return; g.fillStyle = k.isHuman ? PCOL[k.index % 4] : '#ffffff'; g.strokeStyle = '#000a'; g.lineWidth = 2; g.beginPath(); g.arc(X(k.pos.x), Z(k.pos.z), 5, 0, 7); g.fill(); g.stroke(); });
+    g.fillStyle = '#ff2a2a'; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(X(kart.pos.x), Z(kart.pos.z), 8, 0, 7); g.fill(); g.stroke();
   }
 
   /** 3P quadrant: minimap + standings */

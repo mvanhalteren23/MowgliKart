@@ -47,6 +47,14 @@ src/registries/  Karts, Characters, Tracks (+obstacles), Items, CircuitDraft (st
 Content is data-driven: every registry entry carries a `proceduralFallback(THREE)` builder, so the game is fully playable with **no external assets**.
 Drop `.glb` files in `public/assets/models/` (see [ASSET_PIPELINE.md](ASSET_PIPELINE.md)) and `npm run validate-assets` to swap them in.
 
+## Art direction
+Styled after the supplied reference shots: 4-band cel shading with black inverted-hull outlines on karts/kids, soft ground shadows, dense snow-capped firs,
+distant mountain ring, chalets, wooden kicker ramps, rainbow "?" mystery boxes, iridescent oil puddles and soap-bubble shields. Per-track dressing:
+Whistler (snow/ski tracks), San Diego (palms + pastel buildings), Great Wall (crenellated battlements + watchtowers), Zoo (baobabs + wooden fences).
+HUD: rainbow arc speedometer, circular minimap (shortcuts in yellow), bold rank, colour-framed Item/Weapon/Shield slots, P-badges in split-screen.
+Draft: a 3D garage backdrop showing each drafting player's kart + kid, glowing colour-coded stat/weapon/shield cards with rating bars, and the 4-race progress tracker.
+Everything is procedural; swap in AI-generated `.glb` models via ASSET_PIPELINE.md for the fully illustrated look.
+
 ## Status vs. the spec
 Implemented: everything in spec §3–§6 as a vertical slice — all four tracks (procedural seeded splines with sweepers, banking, 8 jump kickers and 3 shortcuts each), 4-race circuit & draft,
 push-start/judges, hop/drift/mini-turbo FSM, trick boost, slipstream, piecemeal shedding + duct-tape snap-back, 4 weapons (with level upgrades), 3 shields, 4 stat boosts with γ diminishing returns, 3 mystery items,

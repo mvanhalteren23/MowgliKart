@@ -12,6 +12,8 @@ import { ObstacleManager } from '../track/ObstacleManager.js';
 import { StartSequence, COUNTDOWN } from './StartSequence.js';
 import { ParticleSystem } from './FX.js';
 import { DRIFT_TIERS } from '../controllers/KartController.js';
+import { buildScenery, buildMountains, buildRampOverlays, terrainMaterial } from '../track/Scenery.js';
+import { applyToon } from './Toon.js';
 
 const V = THREE.Vector3;
 const hasDOM = typeof document !== 'undefined';
@@ -60,9 +62,10 @@ export class RaceSession {
     this.karts = []; this.visuals = []; this.ais = new Map(); this.starts = new Map();
     racers.forEach((r, i) => this._addKart(r, i));
     this.humans = this.karts.filter((k) => k.isHuman).sort((a, b) => a.index - b.index); // viewport order = player order
-    this._buildScenery();
+    buildScenery(this);
     this._buildJudges();
     assets.loadSkybox?.(trackId).then((tex) => { if (tex) { this.scene.background = tex; this.sky.visible = false; } });
+    applyToon(this.scene);
     this.rank();
   }
 
@@ -89,7 +92,7 @@ export class RaceSession {
     scene.add(road);
     const curbMat = new THREE.MeshToonMaterial({ vertexColors: true, side: THREE.DoubleSide });
     scene.add(new THREE.Mesh(toBufferGeometry(m.curbL), curbMat), new THREE.Mesh(toBufferGeometry(m.curbR), curbMat));
-    scene.add(new THREE.Mesh(toBufferGeometry(m.terrain), new THREE.MeshToonMaterial({ color: th.ground, side: THREE.DoubleSide })));
+    scene.add(new THREE.Mesh(toBufferGeometry(m.terrain), terrainMaterial(th)));
     // shortcut decks
     const deckTex = canvasTex(128, 128, (g, w, h) => {
       g.fillStyle = hex(th.deck); g.fillRect(0, 0, w, h);
@@ -102,7 +105,7 @@ export class RaceSession {
       physics.addTrimesh(sm.physics.positions, sm.physics.indices, 'deck');
       scene.add(new THREE.Mesh(toBufferGeometry(sm.deck), deckMat));
       for (const e of sm.extras) scene.add(new THREE.Mesh(toBufferGeometry(e), new THREE.MeshToonMaterial({ color: 0x5a3a1a, side: THREE.DoubleSide })));
-      scene.add(new THREE.Mesh(toBufferGeometry(sm.kicker), new THREE.MeshToonMaterial({ color: 0xc9a05a, side: THREE.DoubleSide })));
+      scene.add(new THREE.Mesh(toBufferGeometry(sm.kicker), deckMat));
       // signpost at the entry so players can read the shortcut
       const fr = track.atDist(sc.dEntry - 12);
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.6, 0.3), new THREE.MeshToonMaterial({ color: 0x6b4a2a }));
@@ -111,18 +114,20 @@ export class RaceSession {
       sign.position.copy(post.position).add(new V(0, 1.6, 0)); sign.quaternion.setFromUnitVectors(new V(0, 0, 1), fr.B.clone().negate().setY(0).normalize());
       scene.add(post, sign);
     }
-    // jump-ramp chevrons
+    // wooden kicker overlays + trick-zone chevrons
+    buildRampOverlays(this, m.frames, deckMat);
     for (const r of track.jumpRamps.filter((x) => x.pathId === 'main')) {
-      const fr = track.atDist(r.zoneD);
-      const pad = new THREE.Mesh(new THREE.PlaneGeometry(track.width * 0.7, TRICK_VIS), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.35 }));
-      pad.position.copy(fr.P).addScaledVector(fr.N, 0.1).addScaledVector(fr.T, 2.2);
+      const fr = track.atDist(r.zoneD - 9);
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(track.width * 0.6, 1.4), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.55, depthWrite: false }));
+      pad.position.copy(fr.P).addScaledVector(fr.N, 0.1);
       pad.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(fr.B, fr.T.clone().negate(), fr.N));
       scene.add(pad);
     }
     // lights, sky, fog
-    scene.add(new THREE.HemisphereLight(th.sky[0], th.ground, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.4); sun.position.set(300, 600, 200); scene.add(sun);
-    scene.fog = new THREE.Fog(th.fog, 260, 1300);
+    scene.add(new THREE.HemisphereLight(th.sky[0], th.ground, 1.9));
+    const sun = new THREE.DirectionalLight(0xfff4e0, 2.6); sun.position.set(300, 600, 200); scene.add(sun);
+    scene.fog = new THREE.Fog(th.fog, 320, 1500);
+    this.mountains = buildMountains(th); scene.add(this.mountains);
     scene.background = new THREE.Color(th.sky[1]);
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
@@ -152,37 +157,6 @@ export class RaceSession {
     bar.position.copy(ff.P).add(new V(0, 8, 0)); bar.quaternion.setFromUnitVectors(new V(0, 0, 1), ff.T.clone().negate().setY(0).normalize());
     bar.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(ff.B, new V(0, 1, 0), ff.T.clone().negate()));
     arch.add(bar); scene.add(arch);
-  }
-
-  _buildScenery() {
-    const { track, def, scene } = this;
-    const th = def.theme, rnd = mulberry32(def.seed * 31), hw = track.width / 2;
-    const mk = (geo, color, n) => { const m = new THREE.InstancedMesh(geo, new THREE.MeshToonMaterial({ color }), n); m.frustumCulled = false; return m; };
-    const kinds = {
-      pine: [[new THREE.ConeGeometry(2.2, 6, 7), 0x2f7d3a, 4.5], [new THREE.ConeGeometry(1.7, 4.5, 7), 0x3b9147, 7.5], [new THREE.CylinderGeometry(0.35, 0.45, 2, 6), 0x6b4a2a, 1]],
-      palm: [[new THREE.CylinderGeometry(0.3, 0.45, 7, 6), 0x9c7a4a, 3.5], [new THREE.SphereGeometry(2.4, 7, 5), 0x2fa84a, 7.6], [new THREE.BoxGeometry(7, 6, 6), 0xf4e1c0, 3]],
-      tower: [[new THREE.CylinderGeometry(2.6, 3.2, 9, 8), 0x9c9486, 4.5], [new THREE.BoxGeometry(4.6, 1.4, 4.6), 0x7d776a, 9.6], [new THREE.ConeGeometry(7, 12, 5), 0x6d7a5a, 6]],
-      jungle: [[new THREE.CylinderGeometry(0.45, 0.6, 5, 6), 0x6b4a2a, 2.5], [new THREE.SphereGeometry(3.4, 8, 6), 0x2e9e4a, 6.5], [new THREE.ConeGeometry(1.6, 5, 6), 0xff8a50, 2.5]],
-    }[th.scenery];
-    const N = 520;
-    const meshes = kinds.map(([g, c]) => mk(g, c, N));
-    const tmp = new THREE.Object3D();
-    for (let i = 0; i < N; i++) {
-      const d = rnd() * track.length, side = rnd() < 0.5 ? -1 : 1;
-      const off = hw + 5 + Math.pow(rnd(), 1.6) * 46;
-      const p = track.surface(d, side * off);
-      const sc = 0.8 + rnd() * 1.2, rot = rnd() * 6.28;
-      const base = p.y - 0.5 - 0.16 * (off - hw);
-      kinds.forEach(([, , y], j) => {
-        // buildings (palm/tower scenery) sit at the far edge, only on some indices
-        if (th.scenery === 'palm' && j === 2 && (i % 4)) { tmp.scale.setScalar(0.0001); }
-        else if (th.scenery === 'tower' && j === 2 && (i % 3)) { tmp.scale.setScalar(0.0001); }
-        else tmp.scale.setScalar(sc);
-        tmp.position.set(p.x, base + y * sc, p.z); tmp.rotation.set(0, rot, 0); tmp.updateMatrix();
-        meshes[j].setMatrixAt(i, tmp.matrix);
-      });
-    }
-    meshes.forEach((m) => { m.instanceMatrix.needsUpdate = true; scene.add(m); });
   }
 
   _buildJudges() {
@@ -367,7 +341,8 @@ export class RaceSession {
     this.fx.update(dt);
     // keep the sky centred on the first human
     const f = this.humans[0] ?? this.karts[0];
-    if (f) this.sky.position.copy(f.pos);
+    if (f) { this.sky.position.copy(f.pos); this.mountains.position.set(f.pos.x, f.pos.y, f.pos.z); }
+    if ((this._tc = (this._tc ?? 0) + 1) % 25 === 1) applyToon(this.scene);
   }
 
   dispose() {

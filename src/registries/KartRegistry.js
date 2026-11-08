@@ -4,7 +4,7 @@ import { box, cyl, cone, sphere, makeGenericKart, toon } from './_mesh.js';
 export const KARTS = {
   rocket_grocery_kart: {
     id: 'rocket_grocery_kart', playable: true, name: 'Rocket Grocery Kart',
-    topSpeed: 23.41, accel: 1.15, mass: 135, driftTurn: 1.12, knockbackRes: 1.0, color: '#d92b2b',
+    topSpeed: 23.41, accel: 1.15, mass: 135, thrusters: [-0.38, 0.38], driftTurn: 1.12, knockbackRes: 1.0, color: '#d92b2b',
     desc: 'Supermarket cart welded to a firework thruster. Quick, light, tight drifts.',
     parts: ['Left wire side-gate', 'Right wire side-gate', 'Child-seat flap', 'Shopping-basket bumper'],
     assetPrompt: 'Cartoon supermarket shopping cart soapbox racer with a giant red firework rocket thruster welded on the back, wire-frame sides, four small wheels, side-gates, child-seat flap, basket bumper, glossy toon style, low poly.',
@@ -39,6 +39,11 @@ export const KARTS = {
           roof.scale.set(1.05, 1, 0.95);
           root.add(roof);
           root.add(sphere(T, 0.14, 0xffdd55, [0, 1.3, -0.95]));
+          root.add(box(T, 0.42, 0.34, 0.05, 0x2a1d12, [0, 0.45, -0.46]));          // little barn window
+          root.add(box(T, 0.5, 0.06, 0.08, 0xf2e2c4, [0, 0.27, -0.47]));           // window sill
+          root.add(box(T, 0.28, 0.5, 0.28, 0xb23a2a, [0.32, 1.15, 0.35]));          // chimney
+          root.add(box(T, 1.2, 0.05, 0.05, 0x7a4a1c, [0, 0.55, -0.45]));
+          root.add(box(T, 0.6, 0.38, 0.5, 0xd9a05b, [0, -0.05, 0.9]));               // nesting box
         },
       });
     },

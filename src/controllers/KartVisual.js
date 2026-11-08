@@ -3,6 +3,8 @@ import { DamageModel } from './DamageModel.js';
 import { DRIFT_TIERS, FSM } from './KartController.js';
 import { SHIELDS, WEAPONS } from '../registries/CircuitDraftRegistry.js';
 import { WHEEL_R } from '../registries/_mesh.js';
+import { addOutlines, applyToon, blobTexture } from '../core/Toon.js';
+import { GROUPS } from '../physics/PhysicsWorld.js';
 
 const V = THREE.Vector3;
 
@@ -21,15 +23,24 @@ export class KartVisual {
     this.kid = kid;
     this.wheels = {};
     for (const k of ['FL', 'FR', 'RL', 'RR']) this.wheels[k] = this.model.getObjectByName(`Wheel_${k}`);
+    addOutlines(this.model); addOutlines(kid); applyToon(this.root);
     this.spin = 0;
     this.damage = new DamageModel(scene, this.model);
     this.weaponMount = this.model.getObjectByName('Weapon_Mount');
     this.shieldMount = this.model.getObjectByName('Shield_Mount');
     this.weaponMesh = null; this.weaponId = null;
     this.aura = null; this.auraId = null;
-    this.flame = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.85 }));
-    this.flame.rotation.x = -Math.PI / 2; this.flame.position.set(0, -0.1, 1.9); this.flame.visible = false;
-    this.flip.add(this.flame);
+    // rocket / exhaust flames (twin thrusters on the Rocket Grocery Kart)
+    this.flames = (kart.def.thrusters ?? [0]).map((x) => {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.3, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.85 }));
+      f.rotation.x = -Math.PI / 2; f.position.set(x, 0.05, 1.9); f.visible = false; f.userData.outline = true;
+      this.flip.add(f); return f;
+    });
+    this.flame = this.flames[0];
+    // soft ground shadow (re-projected onto the road every frame)
+    const bt = blobTexture();
+    this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 3.6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: bt, color: bt ? 0xffffff : 0x000000, transparent: true, opacity: bt ? 0.9 : 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
+    scene.add(this.shadow);
     // drafting wind ribbons
     this.ribbons = [];
     for (let i = 0; i < 3; i++) {
@@ -111,14 +122,26 @@ export class KartVisual {
         if (lo.shield.id === 'trash_lid_shield') this.aura.rotation.y += dt * 5;
       }
     }
-    // flame
+    // flames: full on boosts, idle glow on throttle for rocket karts
     const boosting = k.isBoosting || k.t.surge > 0;
-    this.flame.visible = boosting;
-    if (boosting) {
-      const src = k.boosts.find((b) => b.src === 'drift');
-      this.flame.material.color.set(src ? DRIFT_TIERS[Math.max(0, k.drift.lastTier ?? 0)]?.color ?? '#ffaa00' : k.hasNitro ? '#55aaff' : '#ffaa00');
-      this.flame.scale.set(1 + Math.random() * 0.2, 0.8 + Math.random() * 0.6, 1);
+    const idle = !boosting && k.def.thrusters && k.input.throttle > 0.3 && k.grounded;
+    const src = k.boosts.find((b) => b.src === 'drift');
+    const col = src ? DRIFT_TIERS[Math.max(0, k.drift.lastTier ?? 0)]?.color ?? '#ffaa00' : k.hasNitro ? '#55aaff' : '#ffaa00';
+    for (const f of this.flames) {
+      f.visible = boosting || idle;
+      if (f.visible) { f.material.color.set(boosting ? col : '#ffb347'); const sc = boosting ? 1 : 0.45; f.scale.set(sc * (1 + Math.random() * 0.2), sc * (0.8 + Math.random() * 0.6), sc); }
     }
+    // ground shadow
+    const hit = k.physics.castRay(this._p.x, this._p.y, this._p.z, 0, -1, 0, 40, GROUPS.TRACK, k.body);
+    if (hit) {
+      this.shadow.visible = true;
+      const n = hit.normal;
+      this.shadow.position.set(this._p.x, this._p.y - hit.toi + 0.06, this._p.z);
+      this.shadow.quaternion.setFromUnitVectors(new V(0, 1, 0), new V(n.x, n.y, n.z));
+      const f = Math.max(0.35, 1 - hit.toi / 18);
+      this.shadow.scale.setScalar(f); this.shadow.material.opacity = 0.9 * f;
+      this.shadow.rotateY(k.speed > 1 ? Math.atan2(-k.fwd.x, -k.fwd.z) : 0);
+    } else this.shadow.visible = false;
     // drift sparks at rear wheels
     if (drifting && k.grounded) {
       const tier = k.drift.tier;
@@ -154,7 +177,7 @@ export class KartVisual {
   }
 
   dispose() {
-    this.scene.remove(this.root);
+    this.scene.remove(this.root); this.scene.remove(this.shadow);
     for (const r of this.ribbons) this.scene.remove(r);
     this.damage.dispose();
   }

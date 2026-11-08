@@ -8,6 +8,7 @@ import { SplitScreenRenderer } from './core/SplitScreenRenderer.js';
 import { CircuitManager } from './core/CircuitManager.js';
 import { RaceSession } from './core/RaceSession.js';
 import { UI } from './core/UI.js';
+import { DraftScene } from './core/DraftScene.js';
 import { PLAYABLE_KARTS } from './registries/KartRegistry.js';
 import { CHARACTER_IDS, CHARACTERS } from './registries/CharacterRegistry.js';
 import { PERSONAS } from './registries/CircuitDraftRegistry.js';
@@ -74,7 +75,18 @@ async function runCup(cfg) {
 
   for (;;) {
     circuit.dealAll();
-    if (AUTO) { for (const h of circuit.humansPending()) circuit.aiPick(h.id); } else await ui.showDraft(circuit);
+    if (AUTO) { for (const h of circuit.humansPending()) circuit.aiPick(h.id); } else {
+      // 3D garage backdrop behind the draft cards
+      renderer.hud.build(0); renderer.resize();
+      await assets.preload(circuit.racers.filter((r) => r.isHuman).flatMap((r) => [r.kartId, r.charId]));
+      const gs = new DraftScene(assets, circuit.racers);
+      let raf = 0, last = performance.now();
+      const gl = renderer.renderer;
+      const frame = (now) => { gs.update(Math.min(0.1, (now - last) / 1000), innerWidth / innerHeight); last = now; gl.setScissorTest(false); gl.setViewport(0, 0, innerWidth, innerHeight); gl.clear(); gl.render(gs.scene, gs.camera); raf = requestAnimationFrame(frame); };
+      raf = requestAnimationFrame(frame);
+      await ui.showDraft(circuit);
+      cancelAnimationFrame(raf); gs.dispose();
+    }
     circuit.aiPickAll();
 
     ui.loading(`Building ${circuit.trackId.replace(/_/g, ' ')}…`);
@@ -85,7 +97,7 @@ async function runCup(cfg) {
     const physics = await PhysicsWorld.create();
     await assets.preload([...new Set(grid.flatMap((r) => [r.kartId, r.charId]))]);
     const session = game.session = new RaceSession({
-      physics, assets, trackId: circuit.trackId, seed: (rng() * 1e6) | 0, input, autoShield: cfg.autoShield,
+      physics, assets, trackId: params.get('track') ?? circuit.trackId, seed: (rng() * 1e6) | 0, input, autoShield: cfg.autoShield,
       cup: { race: circuit.raceNumber, of: 4 },
       racers: grid.map((r) => ({ ...r, build: r.build, weapon: r.weapon, shield: r.shield, stats: r.stats })),
     });
