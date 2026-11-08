@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Real-socket tests. Compiles Mirror's kcp2k transport sources straight from Assets/ (no copies). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <NoWarn>CS0169;CS0414;CS0649;CS0219;CS0067;CS0618;CS0108;CS0114;CS0162;CS0168;CS8981</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="KcpEightClients.cs" />
+    <Compile Include="../../Assets/Mirror/Transports/KCP/kcp2k/highlevel/**/*.cs" />
+    <Compile Include="../../Assets/Mirror/Transports/KCP/kcp2k/kcp/**/*.cs" />
+  </ItemGroup>
+</Project>

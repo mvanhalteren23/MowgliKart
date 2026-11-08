@@ -13,3 +13,6 @@
 .idea/
 bin/
 obj/
+
+# Unity generates *.csproj files (ignored) - but the hand-written test project must be tracked
+!tests/NetTests/NetTests.csproj
