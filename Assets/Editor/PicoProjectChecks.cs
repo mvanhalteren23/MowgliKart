@@ -186,6 +186,14 @@ namespace LegacyVR.KartRacing.EditorTools.Checks
 
             string m = File.ReadAllText(manifest);
             if (!m.Contains("\"com.unity.addressables\"")) Err(issues, "com.unity.addressables missing from Packages/manifest.json.");
+            // Built-in modules the bundled Mirror / Pico SDK code compiles against (e.g. Mirror uses Terrain + Physics2D,
+            // the Pico SDK uses UnityEngine.XR + UI Elements). A missing one is a compile error on first import.
+            foreach (string module in new[] { "terrain", "terrainphysics", "physics2d", "physics", "xr", "uielements", "ui", "animation", "unitywebrequest", "assetbundle", "androidjni" })
+            {
+                if (!m.Contains("\"com.unity.modules." + module + "\""))
+                    Err(issues, $"Built-in module com.unity.modules.{module} missing from Packages/manifest.json (compile error on import).");
+            }
+
             foreach (string bad in new[] { "com.unity.xr.openxr", "com.unity.xr.picoxr", "com.unity.netcode.gameobjects" })
             {
                 if (m.Contains(bad)) Err(issues, $"Forbidden package in manifest: {bad}.");
