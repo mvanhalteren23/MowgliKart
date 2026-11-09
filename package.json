@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "validate-assets": "node scripts/validate-assets.js",
     "sim": "node scripts/sim.mjs",
-    "gen-pipeline": "node scripts/gen-pipeline.js"
+    "gen-pipeline": "node scripts/gen-pipeline.js",
+    "test": "node --test scripts/test.mjs",
+    "check": "npm test && npm run build"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.14.0",

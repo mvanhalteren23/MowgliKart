@@ -90,7 +90,20 @@ export class SplitScreenRenderer {
     return Math.min(112, (2 * Math.atan(tanH / aspect) * 180) / Math.PI);
   }
 
+  toggleCockpit(i = 0) { const c = this.cams[i]; if (c) c.cockpit = !c.cockpit; }
+
   _updateCam(c, kart, vis, dt, session) {
+    if (c.cockpit) { // first-person: eyes at the driver's head, dashboard + turning wheel in view, FOV widens on boosts
+      vis.setCockpit(true);
+      const seat = vis.model.getObjectByName('Driver_Seat'), eye = new V(0, 0.95, -0.08);
+      seat?.localToWorld(eye) ?? eye.copy(vis.root.position).add(new V(0, 1.2, 0));
+      const fwd = new V(0, 0, -1).applyQuaternion(vis.root.quaternion);
+      c.camera.position.copy(eye); c.camera.lookAt(eye.clone().addScaledVector(fwd, 20));
+      c.fov += ((kart.isBoosting ? 112 : 98) - c.fov) * Math.min(1, 8 * dt);
+      c.camera.fov = this._vFov(c.fov, c.camera.aspect); c.camera.updateProjectionMatrix(); c.init = false;
+      return;
+    }
+    if (vis.isCockpit) vis.setCockpit(false);
     const pos = vis.root.position, k = 1 - Math.exp(-6 * dt);
     // desired heading: chassis forward blended with velocity direction (steady through spins / oil)
     const f = new V(0, 0, -1).applyQuaternion(vis.root.quaternion);

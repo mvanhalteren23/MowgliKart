@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, moguls } from './TrackSpline.js';
+import { TextureFactory } from '../core/TextureFactory.js';
 
 const V = THREE.Vector3;
 const hexs = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -220,7 +221,7 @@ export function buildMountains(theme) {
 }
 
 /** Wooden kicker overlays (planks, side beams, lip face) so jump ramps read as ramps like the reference art. */
-export function buildRampOverlays(session, frames, deckMat) {
+export function buildRampOverlays(session, frames, deckMat) { // deckMat = neon-chevron ramp material
   const { track, scene } = session, hw = track.grooveHalf - 0.4;
   const pos = [], idx = [], uv = [];
   const wood = deckMat;
@@ -230,7 +231,7 @@ export function buildRampOverlays(session, frames, deckMat) {
     for (let k = 0; k <= rows; k++) {
       const d = r.startD + ((r.lipD - r.startD) * k) / rows - (k === rows ? 0.02 : 0);
       const fr = frames.sample(d, {});
-      for (const s of [-1, 1]) { const p = fr.P.clone().addScaledVector(fr.B, s * hw).addScaledVector(fr.N, 0.07); pos.push(p.x, p.y, p.z); uv.push(s < 0 ? 0 : 1, k / 2); }
+      for (const s of [-1, 1]) { const p = fr.P.clone().addScaledVector(fr.B, s * hw).addScaledVector(fr.N, 0.07); pos.push(p.x, p.y, p.z); uv.push(s < 0 ? 0 : 1, k / rows); }
     }
     for (let k = 0; k < rows; k++) { const a = base + k * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     // lip face + side beams as boxes
@@ -252,4 +253,81 @@ export function buildRampOverlays(session, frames, deckMat) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx); geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, wood); scene.add(mesh);
+}
+
+
+/* ------------------------------------------------------------------ roadside dressing (all GPU-instanced) */
+function waveMat(opts, vertexBody) {
+  const m = new THREE.MeshToonMaterial(opts);
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uWind = wind;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uWind;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n#ifdef USE_INSTANCING\nfloat ph = instanceMatrix[3].x * 0.31 + instanceMatrix[3].z * 0.23;\n#else\nfloat ph = 0.0;\n#endif\n${vertexBody}`);
+  };
+  m.customProgramCacheKey = () => vertexBody;
+  return m;
+}
+
+/** Waving race flags on poles, sponsor banners between poles, guardrails, and a bouncing crowd: ~15 draw calls total. */
+export function buildRoadside(session) {
+  const { track, def, scene } = session, th = def.theme, open = track.open, hw = track.width / 2;
+  const edge = open ? track.grooveHalf + 1.8 : hw + 1.5, rnd = mulberry32(def.seed * 17 + 3), g = new THREE.Group(); scene.add(g);
+  const skip = (d) => track.shortcuts.some((s) => d > s.dEntry - 30 && d < s.dExit + 30) || track.jumpRamps.some((r) => r.pathId === 'main' && d > r.startD - 25 && d < r.lipD + 30);
+  const at = (d, lat, up = 0) => { const f = track.atDist(d); return { f, p: f.P.clone().addScaledVector(f.B, lat).addScaledVector(f.N, up) }; };
+  const basis = (x, y, z) => new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  const mat = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1);
+  const palette = [0xd92b2b, 0xffd23a, 0x2f8de0, 0xffffff, 0x2dc26b].map((c) => new THREE.Color(c));
+
+  // flags: pole + waving cloth, alternating colours, both sides every 55 m
+  const slots = [];
+  for (let d = 130; d < track.length - 150; d += 55) { if (skip(d)) continue; for (const side of [-1, 1]) slots.push({ d, side }); }
+  const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.05, 0.075, 5.2, 8), new THREE.MeshToonMaterial({ color: 0xe8edf2 }), slots.length);
+  const cloth = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.5, 0.9, 12, 3).translate(0.75, 0, 0),
+    waveMat({ color: 0xffffff, side: THREE.DoubleSide }, 'transformed.z += sin(position.x * 4.2 + uWind * 6.0 + ph) * position.x * 0.16; transformed.y += sin(position.x * 3.0 + uWind * 5.0 + ph) * position.x * 0.05;'), slots.length);
+  slots.forEach((s, i) => {
+    const { f, p } = at(s.d, s.side * edge);
+    mat.compose(p.clone().addScaledVector(f.N, 2.6), basis(f.B, f.N, f.T.clone().negate()), one); poles.setMatrixAt(i, mat);
+    const q = basis(f.B, f.N, f.T.clone().negate()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.side > 0 ? Math.PI : 0));
+    mat.compose(p.clone().addScaledVector(f.N, 4.7), q, one); cloth.setMatrixAt(i, mat); cloth.setColorAt(i, palette[(i >> 1) % palette.length]);
+  });
+  poles.castShadow = true; for (const m of [poles, cloth]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; g.add(m); }
+  if (cloth.instanceColor) cloth.instanceColor.needsUpdate = true;
+
+  // sponsor banners strung between two poles, facing the road, every 230 m
+  const texts = [['MOWGLI KART', 0xd92b2b, 0xffd23a], ['RED SNOW', 0x2f8de0, 0xffffff], ['GO GO GO!', 0x2dc26b, 0xffd23a]];
+  const spots = []; for (let d = 210; d < track.length - 200; d += 230) if (!skip(d)) spots.push({ d, side: spots.length % 2 ? 1 : -1 });
+  const bPoles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07, 0.09, 4.4, 8), new THREE.MeshToonMaterial({ color: 0x59606b }), spots.length * 2);
+  const banners = texts.map(([t, a, b]) => { const tx = TextureFactory.banner(t, a, b); return new THREE.InstancedMesh(new THREE.PlaneGeometry(4.4, 1.1), new THREE.MeshBasicMaterial({ color: tx ? 0xffffff : a, map: tx, side: THREE.DoubleSide }), spots.length); });
+  const used = [0, 0, 0];
+  spots.forEach((s, i) => {
+    const { f, p } = at(s.d, s.side * (edge + 0.6)), faceZ = f.B.clone().multiplyScalar(-s.side), x = f.T.clone().multiplyScalar(s.side);
+    for (const k of [-1, 1]) { const pp = p.clone().addScaledVector(f.T, k * 2.4).addScaledVector(f.N, 2.2); mat.compose(pp, basis(f.B, f.N, f.T.clone().negate()), one); bPoles.setMatrixAt(i * 2 + (k > 0 ? 1 : 0), mat); }
+    const v = i % banners.length; mat.compose(p.clone().addScaledVector(f.N, 3.55), basis(x, f.N, faceZ), one); banners[v].setMatrixAt(used[v]++, mat);
+  });
+  banners.forEach((b, v) => { b.count = used[v]; b.frustumCulled = false; b.instanceMatrix.needsUpdate = true; g.add(b); });
+  bPoles.frustumCulled = false; bPoles.instanceMatrix.needsUpdate = true; g.add(bPoles);
+
+  // crowd: bouncing spectators clustered near the start, the finish and along the run (vertex-shader hop, one draw call per body part)
+  const clusters = [48, track.finishD - 25, track.finishD + 20];
+  for (let d = 500; d < track.length - 400; d += 520) clusters.push(d);
+  const spectators = []; for (const d of clusters) for (let k = 0; k < 14; k++) spectators.push({ d: d + (rnd() - 0.5) * 36, lat: (rnd() < 0.5 ? -1 : 1) * (edge + 3.2 + rnd() * 5), sc: 0.85 + rnd() * 0.35 });
+  const hop = 'transformed.y += abs(sin(uWind * 5.5 + ph * 3.0)) * 0.3;';
+  const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.22, 0.55, 3, 8).translate(0, 0.62, 0), waveMat({ color: 0xffffff }, hop), spectators.length);
+  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 10, 8).translate(0, 1.32, 0), waveMat({ color: 0xffffff }, hop), spectators.length);
+  const skins = [0xffd9b0, 0xe8b88a, 0xb98154, 0x7a4a2a].map((c) => new THREE.Color(c));
+  spectators.forEach((s, i) => {
+    const { f, p } = at(Math.min(track.length - 5, Math.max(5, s.d)), s.lat);
+    const q = basis(f.B, f.N, f.T.clone().negate()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (s.lat > 0 ? 1 : -1) * (-Math.PI / 2)));
+    mat.compose(p, q, new THREE.Vector3(s.sc, s.sc, s.sc)); bodies.setMatrixAt(i, mat); heads.setMatrixAt(i, mat);
+    bodies.setColorAt(i, palette[i % palette.length]); heads.setColorAt(i, skins[i % skins.length]);
+  });
+  for (const m of [bodies, heads]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; g.add(m); }
+
+  // guardrails on the curbed tracks that don't already have walls/fences (San Diego streets)
+  if (th.scenery === 'palm') {
+    alongTrack(g, track, new THREE.BoxGeometry(0.14, 0.95, 0.14), 0x8a939e, 6, hw + 1.2, 0.48);
+    alongTrack(g, track, new THREE.BoxGeometry(0.1, 0.16, 6.1), 0xd0d7de, 6, hw + 1.2, 0.62);
+    alongTrack(g, track, new THREE.BoxGeometry(0.1, 0.16, 6.1), 0xd0d7de, 6, hw + 1.2, 0.9);
+  }
+  return g;
 }

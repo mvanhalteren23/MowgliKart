@@ -59,10 +59,10 @@ export class InputManager {
     const held = { left: false, right: false, gas: false, brake: false, hop: false, item: false, weapon: false, shield: false };
     const root = document.createElement('div'); root.id = 'touch'; root.className = 'hidden';
     const defs = [['left', '◀', 'steer l'], ['right', '▶', 'steer r'], ['hop', 'DRIFT<small>hop · trick</small>', 'act big'], ['gas', 'GAS', 'act mid'], ['brake', 'BRAKE', 'act small'],
-      ['item', '🎁', 'act sm2 i1'], ['weapon', '⚔', 'act sm2 i2'], ['shield', '🛡', 'act sm2 i3']];
+      ['cam', '👁', 'act cam'], ['item', '🎁', 'act sm2 i1'], ['weapon', '⚔', 'act sm2 i2'], ['shield', '🛡', 'act sm2 i3']];
     for (const [name, label, cls] of defs) {
       const b = document.createElement('button'); b.className = 'tb ' + cls; b.innerHTML = label; b.dataset.t = name; b.setAttribute('aria-label', name);
-      const down = (e) => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); if (!held[name] && this.latch[0][name] !== undefined) this.latch[0][name] = true; held[name] = true; b.classList.add('on'); };
+      const down = (e) => { e.preventDefault(); if (name === 'cam') { this.camToggle?.(); return; } b.setPointerCapture?.(e.pointerId); if (!held[name] && this.latch[0][name] !== undefined) this.latch[0][name] = true; held[name] = true; b.classList.add('on'); };
       const up = (e) => { e.preventDefault(); held[name] = false; b.classList.remove('on'); };
       b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
       root.appendChild(b);
@@ -100,7 +100,7 @@ export class InputManager {
       const edge = (name, val) => { if (val && !this.padPrev[i][name]) this.menuEdges.push({ player: i, name }); this.padPrev[i][name] = val; };
       edge('left', b(14) || (gp.axes[0] ?? 0) < -0.6);
       edge('right', b(15) || (gp.axes[0] ?? 0) > 0.6);
-      edge('confirm', b(0)); edge('up', b(12) || (gp.axes[1] ?? 0) < -0.6); edge('down', b(13) || (gp.axes[1] ?? 0) > 0.6); edge('start', b(9));
+      edge('confirm', b(0)); edge('up', b(12) || (gp.axes[1] ?? 0) < -0.6); edge('down', b(13) || (gp.axes[1] ?? 0) > 0.6); edge('start', b(9)); edge('r3', b(11));
     });
   }
 

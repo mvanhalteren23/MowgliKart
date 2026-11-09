@@ -3,7 +3,7 @@ import { DamageModel } from './DamageModel.js';
 import { DRIFT_TIERS, FSM } from './KartController.js';
 import { SHIELDS, WEAPONS } from '../registries/CircuitDraftRegistry.js';
 import { WHEEL_R } from '../registries/_mesh.js';
-import { addOutlines, applyToon, blobTexture } from '../core/Toon.js';
+import { addOutlines, applyToon, bakeAssembly, makeShadowDecal } from '../core/Toon.js';
 import { Trail } from '../core/Trail.js';
 import { GROUPS } from '../physics/PhysicsWorld.js';
 
@@ -24,7 +24,11 @@ export class KartVisual {
     this.kid = kid; this.kidY0 = kid.position.y;
     this.wheels = {};
     for (const k of ['FL', 'FR', 'RL', 'RR']) this.wheels[k] = this.model.getObjectByName(`Wheel_${k}`);
-    addOutlines(this.model); addOutlines(kid); applyToon(this.root);
+    bakeAssembly(this.model); addOutlines(this.model, 0.03); applyToon(this.root); // ~15x fewer draw calls, same look
+    this.exhausts = []; this.cockpit = { wheel: null, needle: null };
+    this.model.traverse((o) => { if (o.name?.startsWith('Exhaust') && !o.name.endsWith('_baked')) this.exhausts.push({ node: o, ph: Math.random() * 6.28 }); if (o.name === 'Cockpit_Wheel') this.cockpit.wheel = o; if (o.name === 'Cockpit_Needle') this.cockpit.needle = o; });
+    this.eyes = []; kid.traverse((o) => { if (o.name === 'Eye') this.eyes.push(o); }); this.blinkT = 1 + Math.random() * 3; this.blinkV = 0;
+    this.isCockpit = false;
     this.spin = 0;
     this.damage = new DamageModel(scene, this.model);
     this.weaponMount = this.model.getObjectByName('Weapon_Mount');
@@ -38,11 +42,9 @@ export class KartVisual {
       this.flip.add(f); return f;
     });
     this.flame = this.flames[0];
-    // soft ground shadow (re-projected onto the road every frame)
-    const bt = blobTexture();
-    this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 3.6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: bt, color: bt ? 0xffffff : 0x000000, transparent: true, opacity: bt ? 0.9 : 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
-    scene.add(this.shadow);
+    this.shadow = makeShadowDecal(scene, 2.8); // soft contact shadow, re-projected onto the road every frame
     this.trails = kart.trailsOn ? [new Trail(scene), new Trail(scene)] : null;
+    this.sparkTrails = [new Trail(scene, { max: 40, width: 0.09, additive: true, alpha: 0.95, fade: 0.93, every: 0.025 }), new Trail(scene, { max: 40, width: 0.09, additive: true, alpha: 0.95, fade: 0.93, every: 0.025 })];
     // drafting wind ribbons
     this.ribbons = [];
     for (let i = 0; i < 3; i++) {
@@ -169,6 +171,28 @@ export class KartVisual {
         }
       }
     }
+    // glowing drift-spark trails: additive ribbons streaming behind both rear wheels in the current mini-turbo colour
+    {
+      const tier = k.drift.tier, hexC = tier ? DRIFT_TIERS[tier - 1].color : '#ffe9a0', cc = new THREE.Color(hexC);
+      let i = 0;
+      for (const nm of ['RL', 'RR']) { const w = this.wheels[nm]; if (!w) continue; w.getWorldPosition(this.tmp); this.tmp.y -= 0.15; this.sparkTrails[i++].push(this.tmp, k.right, drifting && k.grounded, dt, [cc.r, cc.g, cc.b]); }
+    }
+    // wobbling exhaust stacks / rocket pods + smoke puffs while on the throttle
+    const thr = k.input.throttle;
+    for (const e of this.exhausts) {
+      const wob = (0.02 + 0.035 * thr + (k.isBoosting ? 0.05 : 0)) * Math.sin(time * (26 + 18 * thr) + e.ph);
+      e.node.rotation.z = (e.node.userData.rz ??= e.node.rotation.z) + wob; e.node.rotation.x = (e.node.userData.rx ??= e.node.rotation.x) + wob * 0.6;
+      if (fx.soft && thr > 0.3 && k.speed > 2 && Math.random() < 0.35 && !e.node.name.startsWith('Exhaust_Rocket')) {
+        e.node.getWorldPosition(this.tmp); this.tmp.y += 0.5;
+        fx.soft.emit(this.tmp.x, this.tmp.y, this.tmp.z, (Math.random() - 0.5) * 0.6, 0.8 + Math.random() * 0.8, (Math.random() - 0.5) * 0.6, k.isBoosting ? '#5a6577' : '#aab2bd', 0.6, -0.3);
+      }
+    }
+    // cockpit: steering wheel turns with the input, speedo needle sweeps, kid blinks
+    if (this.cockpit.wheel) this.cockpit.wheel.rotation.z += (-k.input.steer * 1.1 - this.cockpit.wheel.rotation.z) * Math.min(1, 12 * dt);
+    if (this.cockpit.needle) this.cockpit.needle.rotation.z = -0.5 + Math.min(1, k.speed / (k.vtop * 1.2)) * 3.2 * -0.5;
+    this.blinkT -= dt; if (this.blinkT <= 0) { this.blinkV = 0.14; this.blinkT = 1.8 + Math.random() * 3.2; }
+    if (this.blinkV > 0) this.blinkV -= dt;
+    for (const e of this.eyes) e.scale.y = this.blinkV > 0 ? 0.1 : 1;
     // drift sparks at rear wheels
     if (drifting && k.grounded) {
       const tier = k.drift.tier;
@@ -203,8 +227,11 @@ export class KartVisual {
     }
   }
 
+  /** First-person view: hide the driver (so the camera isn't inside the head) and keep the dashboard/wheel. */
+  setCockpit(on) { this.isCockpit = on; this.kid.visible = !on; }
+
   dispose() {
-    this.scene.remove(this.root); this.scene.remove(this.shadow); this.trails?.forEach((t) => t.dispose());
+    this.scene.remove(this.root); this.scene.remove(this.shadow); this.trails?.forEach((t) => t.dispose()); this.sparkTrails?.forEach((t) => t.dispose());
     for (const r of this.ribbons) this.scene.remove(r);
     this.damage.dispose();
   }

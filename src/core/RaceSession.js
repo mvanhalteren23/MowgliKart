@@ -14,9 +14,10 @@ import { buildGondola } from '../track/Gondola.js';
 import { StartSequence, COUNTDOWN } from './StartSequence.js';
 import { ParticleSystem } from './FX.js';
 import { DRIFT_TIERS } from '../controllers/KartController.js';
-import { buildScenery, buildMountains, buildRampOverlays, terrainMaterial, powderMaterial, wind } from '../track/Scenery.js';
+import { buildScenery, buildRoadside, buildMountains, buildRampOverlays, terrainMaterial, powderMaterial, wind } from '../track/Scenery.js';
 import { makeSky, Snowfall } from './Atmosphere.js';
 import { applyToon } from './Toon.js';
+import { TextureFactory } from './TextureFactory.js';
 
 const V = THREE.Vector3;
 const hasDOM = typeof document !== 'undefined';
@@ -70,7 +71,7 @@ export class RaceSession {
     this.karts = []; this.visuals = []; this.ais = new Map(); this.starts = new Map();
     racers.forEach((r, i) => this._addKart(r, i));
     this.humans = this.karts.filter((k) => k.isHuman).sort((a, b) => a.index - b.index); // viewport order = player order
-    buildScenery(this);
+    buildScenery(this); buildRoadside(this);
     this._buildJudges();
     assets.loadSkybox?.(trackId).then((tex) => { if (tex) { this.scene.background = tex; this.sky.visible = false; } });
     for (const t of this.trees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 1.25 * t.scale, 3.5); // trunk + low boughs
@@ -104,13 +105,7 @@ export class RaceSession {
     this.meshes = m;
     physics.addTrimesh(m.physics.positions, m.physics.indices, 'road');
     // road
-    const roadTex = canvasTex(256, 256, (g, w, h) => {
-      g.fillStyle = hex(th.road); g.fillRect(0, 0, w, h);
-      for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`; g.fillRect(Math.random() * w, Math.random() * h, 3, 3); }
-      g.fillStyle = hex(th.line);
-      g.fillRect(w * 0.03, 0, 6, h); g.fillRect(w * 0.97 - 6, 0, 6, h);
-      g.fillRect(w / 2 - 4, 0, 8, h / 2 - 20);
-    }, [1, 1]);
+    const roadTex = TextureFactory.road(th);
     const road = new THREE.Mesh(toBufferGeometry(m.road), new THREE.MeshToonMaterial({ color: roadTex ? 0xffffff : th.road, map: roadTex, side: THREE.DoubleSide }));
     scene.add(road);
     const curbMat = new THREE.MeshToonMaterial({ vertexColors: true, side: THREE.DoubleSide });
@@ -122,18 +117,17 @@ export class RaceSession {
       physics.addTrimesh(m.physicsPowder.positions, m.physicsPowder.indices, 'powder');
     }
     // shortcut decks
-    const deckTex = canvasTex(128, 128, (g, w, h) => {
-      g.fillStyle = hex(th.deck); g.fillRect(0, 0, w, h);
-      g.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 4; i++) g.fillRect(i * (w / 4), 0, 3, h);
-      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(0, h * 0.5, w, 3);
-    }, [1, 1]);
+    const deckTex = TextureFactory.planks(th.deck, 4);
     const deckMat = new THREE.MeshToonMaterial({ color: deckTex ? 0xffffff : th.deck, map: deckTex, side: THREE.DoubleSide });
+    // ramps & shortcut kickers: wood planks with painted, glowing neon chevron boost arrows (emissive mask also feeds the bloom pass)
+    const boostTex = TextureFactory.boostRamp(th.deck), neon = TextureFactory.neonMask();
+    const rampMat = new THREE.MeshToonMaterial({ color: boostTex ? 0xffffff : th.deck, map: boostTex, emissiveMap: neon, emissive: neon ? 0xffffff : 0x000000, emissiveIntensity: 1.6, side: THREE.DoubleSide });
     for (const sc of track.shortcuts) {
       const sm = sc.buildMesh();
       physics.addTrimesh(sm.physics.positions, sm.physics.indices, 'deck');
       scene.add(new THREE.Mesh(toBufferGeometry(sm.deck), deckMat));
       for (const e of sm.extras) scene.add(new THREE.Mesh(toBufferGeometry(e), new THREE.MeshToonMaterial({ color: 0x5a3a1a, side: THREE.DoubleSide })));
-      scene.add(new THREE.Mesh(toBufferGeometry(sm.kicker), deckMat));
+      scene.add(new THREE.Mesh(toBufferGeometry(sm.kicker), rampMat));
       // signpost at the entry so players can read the shortcut
       const fr = track.atDist(sc.dEntry - 12);
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.6, 0.3), new THREE.MeshToonMaterial({ color: 0x6b4a2a }));
@@ -143,7 +137,7 @@ export class RaceSession {
       scene.add(post, sign);
     }
     // wooden kicker overlays + trick-zone chevrons
-    buildRampOverlays(this, m.frames, deckMat);
+    buildRampOverlays(this, m.frames, rampMat);
     for (const r of track.jumpRamps.filter((x) => x.pathId === 'main')) {
       const fr = track.atDist(r.zoneD - 9);
       const pad = new THREE.Mesh(new THREE.PlaneGeometry(track.width * 0.6, 1.4), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.55, depthWrite: false }));
@@ -170,14 +164,13 @@ export class RaceSession {
     this.fx.dust = th.weather === 'snow' ? '#f4f9ff' : '#d8c6a0';
     // start line + finish arch
     const sf = track.atDist(58);
-    const startLine = new THREE.Mesh(new THREE.PlaneGeometry(track.width, 1.6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    const startTex = TextureFactory.checker(Math.round(track.width / 0.8), 2);
+    const startLine = new THREE.Mesh(new THREE.PlaneGeometry(track.width, 1.6), new THREE.MeshBasicMaterial({ color: 0xffffff, map: startTex }));
     startLine.position.copy(sf.P).addScaledVector(sf.N, 0.06);
     startLine.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(sf.B, sf.T.clone().negate(), sf.N));
     scene.add(startLine);
     const ff = track.atDist(track.finishD);
-    const banner = canvasTex(512, 128, (g, w, h) => {
-      for (let y = 0; y < 4; y++) for (let x = 0; x < 16; x++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * 32, y * 32, 32, 32); }
-    });
+    const banner = TextureFactory.checker(16, 4, true);
     const arch = new THREE.Group();
     for (const side of [-1, 1]) {
       const p = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 8, 8), new THREE.MeshToonMaterial({ color: 0xdd2222 }));

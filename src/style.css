@@ -179,3 +179,11 @@ body.touch .hud-bl { display: none; }
 #flash { position: fixed; left: 50%; top: 14px; transform: translate(-50%, -80px); z-index: 60; background: #101830ee; border: 2px solid #35d65f; color: #fff; font-weight: 800; padding: 8px 16px; border-radius: 99px; transition: transform .25s; pointer-events: none; }
 #flash.on { transform: translate(-50%, 0); }
 .padrow .padok { color: #35d65f; font-weight: 800; }
+
+/* peripheral speed lines while boosting: radial streaks that leave the centre clear, jittering at ~8 Hz */
+.speedlines { inset: -15%; opacity: var(--sl, 0); transition: opacity .18s; mix-blend-mode: screen;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, transparent 0 4deg, rgba(255,255,255,.7) 4.3deg 4.8deg, transparent 5.2deg 9.7deg, rgba(190,235,255,.5) 10deg 10.3deg, transparent 10.7deg 17deg);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 34%, #000 78%); mask: radial-gradient(circle at 50% 50%, transparent 34%, #000 78%);
+  animation: slj .12s steps(2) infinite; }
+@keyframes slj { 50% { transform: rotate(2.2deg) scale(1.035); } }
+.tb.cam { width: 9vmin; height: 9vmin; right: 3vmin; top: 3vmin; bottom: auto; font-size: 4.4vmin; background: #101830aa; }

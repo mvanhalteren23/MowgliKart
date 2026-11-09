@@ -42,7 +42,7 @@ function playRace(session, humans) {
     audio.setFocus(session.humans[0] ?? null);
     let finishedAt = null;
     const loop = new GameLoop({
-      poll: () => input.poll(),
+      poll: () => { input.poll(); if (input.menuEdges.some((e) => e.name === 'r3')) renderer.toggleCockpit(0); },
       step: (dt) => session.step(dt),
       render: (alpha, dt) => {
         session.updateVisuals(dt || 1 / 60, alpha);
@@ -55,7 +55,9 @@ function playRace(session, humans) {
         }
       },
     });
+    input.camToggle = () => renderer.toggleCockpit(0);
     const offKey = input.onKey((c) => {
+      if (c === 'KeyV') renderer.toggleCockpit(0);
       if (c === 'KeyP') { loop.paused = !loop.paused; pauseEl.classList.toggle('hidden', !loop.paused); }
       if (c === 'KeyM') audio.toggleMute();
     });

@@ -360,7 +360,9 @@ export class ShortcutBranch {
     const last = rows * 4;
     idx.push(last, last + 2, last + 1, last + 1, last + 2, last + 3); // lip face
     const n = pos.length / 3;
-    return { positions: new Float32Array(pos), indices: new Uint32Array(idx), uvs: new Float32Array(n * 2), colors: null };
+    const uvs = new Float32Array(n * 2);
+    for (let r = 0; r <= rows; r++) for (let k = 0; k < 4; k++) { uvs[(r * 4 + k) * 2] = k & 1; uvs[(r * 4 + k) * 2 + 1] = r / rows; }
+    return { positions: new Float32Array(pos), indices: new Uint32Array(idx), uvs, colors: null };
   }
 
   buildMesh() {
@@ -388,9 +390,20 @@ export class TrackSpline {
     this.path = new CurvePath(this.points);
     this.length = this.path.length;
     this.finishD = this.length - 90; // 90 m of flat run-out to brake after the line
-    const kap = this.points.kappaAt ?? (() => 0);
-    const nudge = (d) => { for (let k = 0; k < 12 && Math.abs(kap(d)) > 0.0026; k++) d += (k % 2 ? -1 : 1) * 20 * (1 + (k >> 1)); return d; }; // kickers sit on straights
-    this.jumpRamps = def.jumps.map(nudge).map((lipD, i) => ({ id: i, lipD, startD: lipD - RAMP_LEN, zoneD: lipD - TRICK_ZONE, minLat: -Infinity, maxLat: Infinity, pathId: 'main' }));
+    // Kickers belong on straights: search outward from the authored distance for the nearest low-curvature spot that keeps
+    // >= 110 m from the previous kicker and stays out of the shortcut hairpins.
+    const pre = PathFrames.fromPath(this.path, 2000, { bank: false }), placed = [];   // ramp-free frames: real geometric curvature
+    const kap = (d) => Math.max(Math.abs(pre.curvature(d - 10)), Math.abs(pre.curvature(d)), Math.abs(pre.curvature(d + 10)));
+    const inShortcut = (d) => (def.shortcuts ?? []).some((sc) => d > sc.dEntry - 45 && d < sc.dExit + 45);
+    const nudge = (want) => {
+      for (let off = 0; off <= 480; off += 12) for (const sgn of off ? [1, -1] : [1]) {
+        const d = want + sgn * off;
+        if (d < 130 || d > def.length - 260 || inShortcut(d) || kap(d) > 0.0034 || kap(d - 14) > 0.004 || kap(d + 14) > 0.004 || placed.some((p) => Math.abs(p - d) < 110)) continue;
+        placed.push(d); return d;
+      }
+      placed.push(want); return want;
+    };
+    this.jumpRamps = [...def.jumps].sort((x, y) => x - y).map(nudge).sort((x, y) => x - y).map((lipD, i) => ({ id: i, lipD, startD: lipD - RAMP_LEN, zoneD: lipD - TRICK_ZONE, minLat: -Infinity, maxLat: Infinity, pathId: 'main' }));
     const rampH = (d) => {
       for (const r of this.jumpRamps) if (d >= r.startD && d < r.lipD) return (d - r.startD) * RAMP_SLOPE;
       return 0;
@@ -436,7 +449,9 @@ export class TrackSpline {
     if (this.open) return this._buildOpenMeshes(mf);
     const road = buildRibbon(mf, [{ lat: -hw, up: 0 }, { lat: hw, up: 0 }], { uvScale: 0.25 });
     const A = new THREE.Color(this.def.theme.curbA), Bc = new THREE.Color(this.def.theme.curbB);
-    const colorFn = (r, j, d, c) => c.copy(Math.floor(d / 3.5) % 2 ? A : Bc);
+    const calmA = new THREE.Color(0xdfe6ee), calmB = new THREE.Color(0xb9c3cf);
+    // bold red/white rumble strips only where the road is turning, calm stripes on straights
+    const colorFn = (r, j, d, c) => { const on = Math.floor(d / 3.5) % 2, curve = Math.abs(mf.kappa[Math.min(r, mf.M)]) > 0.0022; c.copy(curve ? (on ? A : Bc) : (on ? calmA : calmB)); };
     const curbL = buildRibbon(mf, [{ lat: -hw - 0.5, up: h }, { lat: -hw, up: h }, { lat: -hw, up: 0 }], { colorFn });
     const curbR = buildRibbon(mf, [{ lat: hw, up: 0 }, { lat: hw, up: h }, { lat: hw + 0.5, up: h }], { colorFn });
     const terrain = buildRibbon(mf, [

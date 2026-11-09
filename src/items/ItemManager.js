@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WEAPONS, SHIELDS, weaponEffectiveness, weaponCooldown, shieldPower, shieldCooldown } from '../registries/CircuitDraftRegistry.js';
 import { ITEMS, ITEM_IDS, makeMysteryBox } from '../registries/ItemRegistry.js';
 import { GROUPS } from '../physics/PhysicsWorld.js';
+import { addOutlines, bakeAssembly, applyToon, makeShadowDecal } from '../core/Toon.js';
 
 const V = THREE.Vector3;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -20,6 +21,9 @@ export class ItemManager {
     this.boxes = [];
     this.group = new THREE.Group();
     session.scene.add(this.group);
+    // every prop that is not a flat decal gets the baked toon look + ink outline (see core/Toon.js)
+    const grp = this.group, add = grp.add.bind(grp);
+    grp.add = (...objs) => { for (const o of objs) { if (!o.userData.dressed && !o.userData.decal) { o.userData.dressed = true; bakeAssembly(o); addOutlines(o, 0.03); applyToon(o); } add(o); } return grp; };
   }
 
   /* ------------------------------------------------------------------ mystery boxes */
@@ -31,7 +35,8 @@ export class ItemManager {
         const pos = track.surface(d, lat).add(new V(0, 1.4, 0));
         mesh.position.copy(pos);
         this.group.add(mesh);
-        this.boxes.push({ mesh, d, lat, pos, active: true, respawn: 0 });
+        const sh = makeShadowDecal(this.s.scene, 2.2); const fr = track.atDist(d); sh.position.copy(fr.P).addScaledVector(fr.B, lat).addScaledVector(fr.N, 0.06); sh.quaternion.setFromUnitVectors(new V(0, 1, 0), fr.N); sh.material.opacity = 0.55;
+        this.boxes.push({ mesh, d, lat, pos, active: true, respawn: 0, shadow: sh });
       }
     }
   }
@@ -63,15 +68,16 @@ export class ItemManager {
     for (const b of this.boxes) {
       if (!b.active) {
         b.respawn -= dt;
-        if (b.respawn <= 0) { b.active = true; b.mesh.visible = true; }
+        if (b.respawn <= 0) { b.active = true; b.mesh.visible = true; b.shadow.visible = true; }
         continue;
       }
-      b.mesh.rotation.y += dt * 2; b.mesh.position.y = b.pos.y + Math.sin(time * 3 + b.d) * 0.15;
+      b.mesh.rotation.y += dt * 1.2; b.mesh.position.y = b.pos.y + Math.sin(time * 3 + b.d) * 0.15;
+      const q = b.mesh.userData.q; if (q) { q.rotation.y -= dt * 3.4; q.position.y = Math.sin(time * 4 + b.d) * 0.06; }
       for (const k of karts) {
         if (k.loadout.pickup) continue;
         if (Math.abs(k.d - b.d) > 4) continue;
         if (k.pos.distanceToSquared(b.pos) < 3.2 * 3.2) {
-          b.active = false; b.mesh.visible = false; b.respawn = 6;
+          b.active = false; b.mesh.visible = false; b.shadow.visible = false; b.respawn = 6;
           k.loadout.pickup = this.rollPickup(k);
           k.emit('pickup', { id: k.loadout.pickup });
           this.s.fx.burst(b.pos, 14, 5, '#66ddff', 0.6);
@@ -232,6 +238,7 @@ export class ItemManager {
     } else { // peel
       mesh = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.25, 5), new THREE.MeshToonMaterial({ color: 0xffe135 }));
     }
+    if (kind === 'puddle') mesh.userData.decal = true;
     mesh.position.copy(pos).addScaledVector(fr.N, kind === 'puddle' ? 0.07 : 0.15);
     const q = new THREE.Quaternion().setFromUnitVectors(new V(0, 1, 0), fr.N);
     mesh.quaternion.copy(q);

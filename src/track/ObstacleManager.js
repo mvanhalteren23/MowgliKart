@@ -3,6 +3,7 @@ import { OBSTACLES } from '../registries/TrackRegistry.js';
 import { GROUPS } from '../physics/PhysicsWorld.js';
 import { mulberry32 } from './TrackSpline.js';
 import { SHIELDS } from '../registries/CircuitDraftRegistry.js';
+import { addOutlines, bakeAssembly, applyToon, makeShadowDecal } from '../core/Toon.js';
 
 const V = THREE.Vector3;
 
@@ -25,10 +26,12 @@ export class ObstacleManager {
         // spread evenly down the run, avoiding the starting grid and the finish
         const d = 220 + ((track.length - 600) * (i + rnd() * 0.8)) / count;
         const mesh = assets.getObstacle(T);
+        bakeAssembly(mesh); addOutlines(mesh, 0.035); applyToon(mesh);
         this.group.add(mesh);
+        const shadow = makeShadowDecal(this.s.scene, T.radius * 3.4);
         const o = {
           T, d0: d, d, lat: (rnd() * 2 - 1) * half, half, phase: rnd() * 6.283, mesh,
-          dir: rnd() < 0.5 ? -1 : 1, hit: 0, away: 0, rnd, reachCd: 0, pos: new V(), sensor: null, cooldown: 0,
+          dir: rnd() < 0.5 ? -1 : 1, hit: 0, away: 0, rnd, reachCd: 0, pos: new V(), sensor: null, cooldown: 0, shadow,
         };
         this._place(o, 0);
         o.sensor = physics.addSensor({ position: o.pos.clone().setY(o.pos.y + T.radius * 0.7), radius: T.radius, group: GROUPS.OBSTACLE, kinematic: true, ref: o, kind: 'obstacle' });
@@ -50,6 +53,7 @@ export class ObstacleManager {
     o.d = Math.max(10, Math.min(track.length - 40, o.d));
     const fr = track.atDist(o.d);
     o.pos.copy(fr.P).addScaledVector(fr.B, o.lat);
+    o.shadow.position.copy(o.pos).addScaledVector(fr.N, 0.07); o.shadow.quaternion.setFromUnitVectors(new V(0, 1, 0), fr.N);
     let bob = 0;
     if (T.behavior === 'hop') bob = Math.abs(Math.sin(t * 5 + o.phase)) * 1.6;
     else if (T.behavior === 'static') bob = Math.abs(Math.sin(t * 6 + o.phase)) * 0.25;
@@ -63,6 +67,7 @@ export class ObstacleManager {
   update(dt, time) {
     for (const o of this.list) {
       o.cooldown = Math.max(0, o.cooldown - dt);
+      o.shadow.visible = o.away <= 0;
       if (o.away > 0) { // batted aside by a shield / nitro: fly off then pop back
         o.away -= dt; o.mesh.position.y += 14 * dt; o.mesh.rotation.z += 9 * dt;
         o.sensor.body.setNextKinematicTranslation({ x: 0, y: -9999, z: 0 });
@@ -121,6 +126,6 @@ export class ObstacleManager {
   /** AI 3-ray whisker support: obstacles/hazards are real Rapier colliders on their own groups. */
   dispose() {
     this.s.scene.remove(this.group);
-    for (const o of this.list) this.s.physics.removeSensor(o.sensor);
+    for (const o of this.list) { this.s.physics.removeSensor(o.sensor); this.s.scene.remove(o.shadow); }
   }
 }

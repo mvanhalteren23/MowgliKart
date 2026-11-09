@@ -96,3 +96,10 @@ Decisions & deviations (so nothing is a surprise):
 ## Verification done
 `npm run build` clean; Node simulations (full 8-AI races on all tracks, the 4-race Cup with drafting); headless-Chromium runs of the real UI (lobby → draft → 1/2/3/4-player races) with zero console errors,
 real keyboard control, and a GLB hot-swap round-trip. Physics regression helpers live in `scripts/sim.mjs`.
+
+## Visual pass & tests
+- `src/core/TextureFactory.js`: procedural canvas textures (asphalt/snow road with dashed centreline, rumble strips on curves, checkered banner, wood-plank decks, neon boost chevrons, kart wood/metal/stripes/number decals, cockpit dash).
+- `src/core/Toon.js`: 3-step nearest-filtered toon ramp, inverted-hull ink outlines (`#14141f`), per-unit mesh baking (big draw-call cut), soft drop-shadow decals.
+- Compound meshes in `src/registries/_detail.js`; roadside flags/banners/crowds/guardrails via `InstancedMesh` in `Scenery.js`.
+- First-person cockpit camera: `V` key / gamepad R3 / 👁 touch button.
+- `npm test` runs `scripts/test.mjs` (node:test: asset contracts, track geometry, AI sessions on all tracks, yeti, trees, powder, cup rules); `npm run check` = test + build.

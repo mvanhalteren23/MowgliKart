@@ -1,5 +1,5 @@
 import { box, cyl, cone, sphere } from './_mesh.js';
-import { ball, limb } from './_detail.js';
+import { ball, limb, surfCart, rickshaw, safariTram } from './_detail.js';
 
 /**
  * Regional cartoon hazards. `behavior` drives ObstacleManager:
@@ -49,7 +49,7 @@ export const OBSTACLES = {
     proceduralFallback: (T) => critter(T, { body: 0x777777, extra: (T2, g) => { g.add(box(T2, 1.8, 1.2, 1.2, 0x2f8f4f, [0, 0.6, 0.9])); } }) },
   surf_cart: { id: 'surf_cart', name: 'Runaway Surfboard Cart', behavior: 'slide', radius: 1.5, speed: 13, power: 0.9,
     assetPrompt: 'Runaway wheeled cart stacked with colorful surfboards, low poly cartoon.',
-    proceduralFallback: (T) => { const g = new T.Group(); g.add(box(T, 1.3, 0.3, 1.8, 0x888888, [0, 0.3, 0])); for (const [i, c] of [0xff5050, 0x50c0ff, 0xffe050].entries()) g.add(box(T, 0.3, 1.8, 0.6, c, [-0.4 + i * 0.4, 1.0, 0])); return g; } },
+    proceduralFallback: (T) => surfCart(T) },
   // --- Great Wall
   sleepy_panda: { id: 'sleepy_panda', name: 'Sleepy Giant Panda', behavior: 'cross', radius: 1.7, speed: 4.5, power: 1.1,
     assetPrompt: 'Giant sleepy panda curled in a ball rolling along a stone walkway, low poly cartoon.',
@@ -59,7 +59,7 @@ export const OBSTACLES = {
     proceduralFallback: (T) => critter(T, { body: 0xf2f2e8, head: 0xffd9a0, extra: (T2, g) => { g.add(box(T2, 0.15, 0.15, 1.1, 0xf2f2e8, [0.7, 1.0, -0.4])); g.add(sphere(T2, 0.25, 0xffffff, [0, 1.05, -0.2], 6)); } }) },
   rickshaw: { id: 'rickshaw', name: 'Runaway Rickshaw', behavior: 'slide', radius: 1.6, speed: 12, power: 1.0,
     assetPrompt: 'Runaway red rickshaw with no driver, tasseled canopy, low poly cartoon.',
-    proceduralFallback: (T) => { const g = new T.Group(); g.add(box(T, 1.3, 0.8, 1.6, 0xc0392b, [0, 0.7, 0])); g.add(box(T, 1.4, 0.1, 1.7, 0xffd400, [0, 1.6, 0])); return g; } },
+    proceduralFallback: (T) => rickshaw(T) },
   // --- Zoo
   charging_rhino: { id: 'charging_rhino', name: 'Charging Rhino', behavior: 'cross', radius: 2.0, speed: 9, power: 1.4,
     assetPrompt: 'Charging cartoon rhino, grey, big horn, stampede pose, low poly.',
@@ -72,7 +72,7 @@ export const OBSTACLES = {
     proceduralFallback: (T) => { const g = new T.Group(); for (const [i, c] of [0xffd400, 0xff7070, 0x70d0ff].entries()) { const k = critter(T, { body: c, size: 0.7 }); k.position.x = (i - 1) * 0.9; g.add(k); } return g; } },
   safari_tram: { id: 'safari_tram', name: 'Runaway Safari Tram', behavior: 'slide', radius: 2.6, speed: 10, power: 1.5,
     assetPrompt: 'Runaway open-air safari tram with striped canopy and empty seats, low poly cartoon.',
-    proceduralFallback: (T) => { const g = new T.Group(); g.add(box(T, 2.4, 0.9, 4.0, 0x5aa02c, [0, 0.8, 0])); g.add(box(T, 2.5, 0.12, 4.1, 0xffe0a0, [0, 2.2, 0])); return g; } },
+    proceduralFallback: (T) => safariTram(T) },
 };
 
 const sweep = (d, dir, len = 420, turn = 150) => ({ d, dir, len, turn });

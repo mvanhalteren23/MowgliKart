@@ -1,4 +1,5 @@
 import { box, cyl, cone, sphere } from './_mesh.js';
+import { questionMark } from './_detail.js';
 
 // Single-use consumables from Mystery Boxes (SPEC 3.4.5)
 export const ITEMS = {
@@ -43,21 +44,17 @@ export const ITEMS = {
 export const ITEM_IDS = Object.keys(ITEMS);
 
 export function makeMysteryBox(THREE) {
-  const g = new THREE.Group();
-  let tex = null;
-  if (typeof document !== 'undefined') {
-    const c = document.createElement('canvas'); c.width = c.height = 128;
-    const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 128, 128);
-    ['#ff5fa2', '#ffd23f', '#3ddc84', '#35b6ff', '#b36bff'].forEach((col, i, a) => gr.addColorStop(i / (a.length - 1), col));
-    x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
-    x.fillStyle = '#fff'; x.fillRect(0, 0, 128, 10); x.fillRect(0, 118, 128, 10); x.fillRect(0, 0, 10, 128); x.fillRect(118, 0, 10, 128);
-    x.font = 'bold 92px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.lineWidth = 8; x.strokeStyle = '#2a1a50'; x.strokeText('?', 64, 70); x.fillStyle = '#fff'; x.fillText('?', 64, 70);
-    tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.Group(), S = 0.82;
+  // translucent rainbow glass cube + chrome edge frame + a real extruded, spinning "?" inside
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(S * 2, S * 2, S * 2), new THREE.MeshToonMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.32, depthWrite: false }));
+  g.add(glass);
+  const edge = new THREE.MeshToonMaterial({ color: 0xf2f6ff });
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+    for (const [dx, dy, dz, w, h, d] of [[0, sx * S, sy * S, S * 2, 0.09, 0.09], [sx * S, 0, sy * S, 0.09, S * 2, 0.09], [sx * S, sy * S, 0, 0.09, 0.09, S * 2]]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), edge); bar.position.set(dx, dy, dz); g.add(bar);
+    }
   }
-  const m = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshToonMaterial({ color: tex ? 0xffffff : 0x66ddff, map: tex }));
-  g.add(m);
-  const glow = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.9, 1.9), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, depthWrite: false }));
-  g.add(glow);
+  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) { const c = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshToonMaterial({ color: 0xffd23a })); c.position.set(x * S, y * S, z * S); g.add(c); }
+  const q = new THREE.Group(); q.name = 'q'; q.userData.unit = true; q.add(questionMark(THREE, 0xffd23a)); g.add(q); g.userData.q = q;
   return g;
 }
