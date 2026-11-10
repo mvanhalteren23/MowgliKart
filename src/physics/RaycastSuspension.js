@@ -55,6 +55,7 @@ export class RaycastSuspension {
       if (_n.dot(s.up) < 0) _n.negate();
       w.normal.copy(_n);
       this.avgNormal.add(_n);
+      if (o.passive) continue; // network puppets: wheel travel for visuals only, no forces
 
       // Contact-point velocity (reused for the damper and lateral friction)
       _arm.subVectors(_p, s.com);

@@ -104,6 +104,7 @@ export class KartController {
   get vtop() { return this.vtopBase * this.build.topSpeed; }
 
   addBoost(mult, dur, src, snap = false) {
+    if (this.puppet) return;
     const ex = this.boosts.find((b) => b.src === src);
     if (ex) { ex.mult = Math.max(ex.mult, mult); ex.t = Math.max(ex.t, dur); ex.dur = Math.max(ex.dur, dur); }
     else this.boosts.push({ mult, t: dur, dur, src });
@@ -113,6 +114,7 @@ export class KartController {
 
   /* ---------------------------------------------------------------- status effects (called by ItemManager / ObstacleManager) */
   knockUp(jy, stun) {
+    if (this.puppet) return;
     const r = this.knockRes;
     this.body.applyImpulse({ x: 0, y: (this.mass * jy) / r, z: 0 }, true);
     this.t.stun = Math.max(this.t.stun, stun / r);
@@ -120,26 +122,31 @@ export class KartController {
     this.emit('hit', { kind: 'knockup' });
   }
   stunFor(dur, slow = 0.5) {
+    if (this.puppet) return;
     this.t.stun = Math.max(this.t.stun, dur / this.knockRes);
     this.scaleSpeed(slow);
     this.cancelDrift();
   }
   spinOut(dur, torque = 700, slow = 0.7) {
+    if (this.puppet) return;
     this.t.spin = Math.max(this.t.spin, dur / this.knockRes);
     this.spinDir = Math.random() < 0.5 ? -1 : 1; this.spinTorque = torque;
     this.scaleSpeed(slow);
     this.cancelDrift();
   }
   oilSlick(dur = 1.8) {
+    if (this.puppet) return;
     if (this.t.oil <= 0.3) this.spinDir = Math.random() < 0.5 ? -1 : 1;
     this.t.oil = Math.max(this.t.oil, dur);
     this.cancelDrift();
   }
   shove(vec) {
+    if (this.puppet) return;
     const k = 1 / this.knockRes;
     this.body.applyImpulse({ x: vec.x * this.mass * k, y: vec.y * this.mass * k, z: vec.z * this.mass * k }, true);
   }
   scaleSpeed(f) {
+    if (this.puppet) return;
     const v = this.body.linvel();
     this.body.setLinvel({ x: v.x * f, y: v.y, z: v.z * f }, true);
   }
@@ -173,6 +180,7 @@ export class KartController {
   update(dt, ctx) {
     this.time = ctx.time;
     const { track } = ctx;
+    if (this.puppet) return this._puppetUpdate(dt, ctx);
     this._readState();
     const b = this.body, inp = this.input, M = this.build;
     const av = b.angvel();
@@ -300,6 +308,7 @@ export class KartController {
     // ---- items (human or AI inputs)
     if (!locked || inp.shieldPressed) {
       if (inp.itemPressed) ctx.items.usePickup(this);
+      if (inp.usePressed && !ctx.items.usePickup(this)) ctx.items.fireWeapon(this); // one-button "smart use" (VR remote / touch)
       if (inp.weaponPressed) ctx.items.fireWeapon(this);
       if (inp.shieldPressed) ctx.items.activateShield(this);
     }
@@ -314,6 +323,19 @@ export class KartController {
     this.prevVel.copy(this.vel);
 
     this._postProgress(ctx, dt);
+  }
+
+  /** Network puppet: the transform is driven by the owner's snapshots (NetRace); only progress + timers run locally. */
+  _puppetUpdate(dt, ctx) {
+    this._readState();
+    for (const k of Object.keys(this.t)) if (this.t[k] > 0) this.t[k] = Math.max(0, this.t[k] - dt);
+    this.suspension.update(dt, { pos: this.pos, quat: this.quat, vel: this.vel, ang: _w.set(0, 0, 0), com: _g.copy(this.pos), up: this.up, right: this.right }, { grip: 1, driftRear: false, oil: false, passive: true });
+    this.grounded = this.suspension.count >= 2;
+    this.fwdSpeed = this.vel.dot(this.fwd);
+    const loc = ctx.track.locate(this.pos, this.hint, this.hint >= 0 ? 60 : 0, this._loc ??= {});
+    this.hint = loc.idx; this.d = loc.d; this.lat = loc.lat;
+    if (this.d > this.maxD && this.d - this.maxD < 200) this.maxD = this.d;
+    this.prevVel.copy(this.vel);
   }
 
   _hold() {
@@ -457,5 +479,5 @@ export class KartController {
 }
 
 export function blankInput() {
-  return { steer: 0, throttle: 0, brake: 0, hop: false, hopPressed: false, item: false, itemPressed: false, weapon: false, weaponPressed: false, shield: false, shieldPressed: false };
+  return { steer: 0, throttle: 0, brake: 0, hop: false, hopPressed: false, item: false, itemPressed: false, use: false, usePressed: false, weapon: false, weaponPressed: false, shield: false, shieldPressed: false };
 }

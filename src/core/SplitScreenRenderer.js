@@ -49,6 +49,8 @@ export class SplitScreenRenderer {
     this.hud = new HUD(hudRoot);
     this.cams = [];
     this.players = 0;
+    this.vr = null; this.vrHud = null;   // set by main: first-person headset rendering
+    this.firstPerson = true;              // default view on every device is from the driver's seat (V / R3 / 👁 toggles the chase cam)
     addEventListener('resize', () => this.resize());
   }
 
@@ -58,7 +60,7 @@ export class SplitScreenRenderer {
     this.disposeFx();
     this.cams = Array.from({ length: n }, () => ({
       camera: new THREE.PerspectiveCamera(FOV_BASE, 16 / 9, 0.3, 3000), fov: FOV_BASE,
-      fwd: new V(0, 0, -1), pos: new V(), init: false, look: new V(),
+      fwd: new V(0, 0, -1), pos: new V(), init: false, look: new V(), cockpit: this.firstPerson,
     }));
     this.resize();
   }
@@ -179,19 +181,37 @@ export class SplitScreenRenderer {
   }
   disposeFx() { if (this.fx) { this.fx.composer.dispose(); this.fx = null; } }
 
+  /** Player i's kart, or (spectating host / nobody local) the current race leader. */
+  subject(session, i) { return session.humans[i] ?? (i === 0 ? session.spectateKart() : null); }
+
+  /** Headset: one rig in the driver's seat, HUD on the dash, no post-processing, no shadow pass. */
+  _renderVR(session, dt) {
+    const kart = this.subject(session, 0), vis = session.visuals[session.karts.indexOf(kart)];
+    if (session.sun?.castShadow) session.sun.castShadow = false;
+    if (this._vrVis && this._vrVis !== vis) this._vrVis.setCockpit(false);
+    this._vrVis = vis; vis.setCockpit(true);
+    this.vr.follow(kart, vis, dt); session.viewPos.copy(this.vr.rig.position);
+    this.vrHud.attach(this.vr.rig); this.vrHud.update(session, kart, dt, this.vr);
+    this.vr.render(session.scene);
+    session.messages.length = 0;
+  }
+
   render(session, dt) {
     const r = this.renderer;
-    if (this.quality !== 'low' && this.players === 1 && session.humans[0]) return this._renderPost(session, dt);
+    if (this.vr?.active) return this._renderVR(session, dt);
+    this.vrHud?.hide();
+    if (this.quality !== 'low' && this.quality !== 'vr' && this.players === 1 && session.humans[0]) return this._renderPost(session, dt);
     r.setScissorTest(false); r.setClearColor(0x000000, 1); r.clear();
     r.setScissorTest(true);
     this.lay.views.forEach((v, i) => {
-      const kart = session.humans[i], vis = session.visuals[session.karts.indexOf(kart)];
+      const kart = this.subject(session, i), vis = session.visuals[session.karts.indexOf(kart)];
       if (!kart) return;
       const c = this.cams[i];
+      if (!session.humans[i]) { c.cockpit = false; if (c.subject !== kart) { c.subject = kart; c.init = false; } } // spectator: chase cam on the leader
       this._updateCam(c, kart, vis, dt, session);
       r.setViewport(v.x, v.y, v.w, v.h); r.setScissor(v.x, v.y, v.w, v.h);
       r.render(session.scene, c.camera);
-      this.hud.update(i, session);
+      this.hud.update(i, session, kart);
     });
     if (this.lay.mini) {
       const m = this.lay.mini;

@@ -1,3 +1,4 @@
+import { detail } from './Lod.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { makeGenericKart } from '../registries/_mesh.js';
@@ -51,8 +52,8 @@ export class AssetManager {
     return fallback();
   }
 
-  getKart(def) { return this._instance(def.id, () => def.proceduralFallback(THREE) ?? makeGenericKart(THREE)); }
-  getCharacter(def) { return this._instance(def.id, () => def.proceduralFallback(THREE)); }
-  getObstacle(def) { return this._instance(def.id, () => def.proceduralFallback(THREE)); }
-  getProp(id, def) { return this._instance(id, () => def.proceduralFallback(THREE)); }
+  getKart(def) { return this._instance(def.id, () => def.proceduralFallback(detail.T) ?? makeGenericKart(detail.T)); }
+  getCharacter(def) { return this._instance(def.id, () => def.proceduralFallback(detail.T)); }
+  getObstacle(def) { return this._instance(def.id, () => def.proceduralFallback(detail.T)); }
+  getProp(id, def) { return this._instance(id, () => def.proceduralFallback(detail.T)); }
 }

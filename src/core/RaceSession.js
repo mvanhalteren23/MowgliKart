@@ -16,7 +16,8 @@ import { ParticleSystem } from './FX.js';
 import { DRIFT_TIERS } from '../controllers/KartController.js';
 import { buildScenery, buildRoadside, buildMountains, buildRampOverlays, terrainMaterial, powderMaterial, wind } from '../track/Scenery.js';
 import { makeSky, Snowfall } from './Atmosphere.js';
-import { applyToon } from './Toon.js';
+import { applyToon, toonCfg } from './Toon.js';
+import { chunkStatic, detail } from './Lod.js';
 import { TextureFactory } from './TextureFactory.js';
 
 const V = THREE.Vector3;
@@ -43,26 +44,30 @@ export class RaceSession {
    * @param racers [{ id, name, isHuman, humanIndex, kartId, charId, persona, build, weapon, shield, skill }]
    *               in grid order (pole first)
    */
-  constructor({ physics, assets, trackId, racers, seed = 1, input = null, laps = 1, cup = { race: 1, of: 4 }, autoShield = false, quality = 'high' }) {
-    this.quality = quality;
+  constructor({ physics, assets, trackId, racers, seed = 1, input = null, laps = 1, cup = { race: 1, of: 4 }, autoShield = false, quality = 'high', net = null }) {
+    this.quality = quality; this.lite = quality === 'low' || quality === 'vr'; // 'vr' = standalone-headset budget (Pico G2 4K)
+    this.net = net; this.netClient = !!net && !net.isHost; this.netHold = !!net;
     this.physics = physics; this.assets = assets; this.input = input;
     this.def = TRACKS[trackId];
     this.track = new TrackSpline(this.def);
-    this.rng = mulberry32(seed * 2654435761);
+    this.rng = mulberry32(seed * 2654435761); this.kartRng = mulberry32(seed * 40503 + 7);
     this.cup = cup;
     this.autoShield = autoShield;
     this.scene = new THREE.Scene();
-    this.fx = new ParticleSystem(this.scene);
-    this.fxSoft = new ParticleSystem(this.scene, 3500, 0.9, true); // soft snow spray (normal-blended, alpha fade)
+    this.fx = new ParticleSystem(this.scene, quality === 'vr' ? 900 : 2500);
+    this.fxSoft = new ParticleSystem(this.scene, quality === 'vr' ? 700 : 3500, 0.9, true); // soft snow spray (normal-blended, alpha fade)
     this.fx.soft = this.fxSoft;
     this.fx.dust = '#f4f9ff';
     this.time = 0; this.raceTime = 0;
+    toonCfg.outlines = quality !== 'vr'; toonCfg.coarse = quality === 'vr'; detail.set(quality === 'vr');
+    this.viewPos = new V(); this.lod = [];
     this.state = 'COUNTDOWN';
     this.messages = []; this.sfxQueue = [];
     this.audio = null;
     this.done = false; this.results = null; this.endTimer = null;
     this.humanLeaderD = 0;
     this._buildTrack();
+    const trackRoots = this.scene.children.filter((o) => o.isMesh && o !== this.sky);
     this.items = new ItemManager(this);
     this.obstacles = new ObstacleManager(this);
     this.yeti = this.track.open ? new YetiManager(this) : null;
@@ -70,10 +75,13 @@ export class RaceSession {
     this.obstacles.spawn(this.def);
     this.karts = []; this.visuals = []; this.ais = new Map(); this.starts = new Map();
     racers.forEach((r, i) => this._addKart(r, i));
-    this.humans = this.karts.filter((k) => k.isHuman).sort((a, b) => a.index - b.index); // viewport order = player order
+    this.humans = this.karts.filter((k) => k.isHuman).sort((a, b) => a.index - b.index); // viewport order = player order (local players only)
+    this.allHumans = this.karts.filter((k) => k.isHuman || k.remoteHuman); // + network players (for the end-of-race rule)
+    const nBefore = this.scene.children.length;
     buildScenery(this); buildRoadside(this);
+    if (quality === 'vr') this.lod = chunkStatic([...trackRoots, ...this.scene.children.slice(nBefore)], 220); // frustum + distance culling for the headset
     this._buildJudges();
-    assets.loadSkybox?.(trackId).then((tex) => { if (tex) { this.scene.background = tex; this.sky.visible = false; } });
+    assets.loadSkybox?.(trackId).then((tex) => { if (tex) { this.scene.background = tex; this.sky.visible = false; this.mountains.visible = false; } }); // a supplied 360 image wins over the baked one
     for (const t of this.trees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 1.25 * t.scale, 3.5); // trunk + low boughs
     for (const t of this.forestTrees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 0.9 * t.scale, 3.5);
     applyToon(this.scene);
@@ -149,18 +157,18 @@ export class RaceSession {
     scene.add(new THREE.HemisphereLight(th.sky[0], th.ground, 1.35));
     this.sunDir = new V(300, 600, 200).normalize();
     const sun = new THREE.DirectionalLight(0xfff1dc, 2.8); sun.position.copy(this.sunDir).multiplyScalar(250);
-    sun.castShadow = this.quality !== 'low';
+    sun.castShadow = !this.lite;
     const sm = this.quality === 'ultra' ? 4096 : 2048; sun.shadow.mapSize.set(sm, sm);
     Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 600 });
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.45;
     scene.add(sun, sun.target); this.sun = sun;
-    scene.fog = new THREE.Fog(th.fog, 320, 1500);
+    scene.fog = this.quality === 'vr' ? new THREE.Fog(th.fog, 150, 640) : new THREE.Fog(th.fog, 320, 1500);
     this.mountains = buildMountains(th); this.mountains.userData.noShadow = true; scene.add(this.mountains);
     scene.background = new THREE.Color(th.sky[1]);
     this.sky = makeSky(th, this.sunDir);
     scene.add(this.sky);
-    this.snow = th.weather === 'snow' ? new Snowfall(scene) : null;
-    this.gondola = th.weather === 'snow' && this.quality !== 'low' ? buildGondola(this) : null;
+    this.snow = th.weather === 'snow' ? new Snowfall(scene, this.quality === 'vr' ? 700 : 2600) : null;
+    this.gondola = th.weather === 'snow' && !this.lite ? buildGondola(this) : null;
     this.fx.dust = th.weather === 'snow' ? '#f4f9ff' : '#d8c6a0';
     // start line + finish arch
     const sf = track.atDist(58);
@@ -231,16 +239,19 @@ export class RaceSession {
     const spawn = this.track.gridSlot(i);
     const snowy = this.def.theme.weather === 'snow';
     const kart = new KartController({ id: r.id, name: r.name, physics: this.physics, def, character: ch, isHuman: r.isHuman, spawn, index: r.humanIndex ?? i, build: r.build });
-    kart.hold = true; kart.trailsOn = snowy && this.quality !== 'low';
+    kart.hold = true; kart.trailsOn = snowy && !this.lite; kart.lodProxy = this.quality === 'vr';
+    kart.ownerId = r.owner ?? null;
+    if (r.puppet) { kart.puppet = true; kart.remoteHuman = !!r.remoteHuman; kart.body.setGravityScale(0, true); }
     kart.lastSafeD = spawn.d;
     this.items.initLoadout(kart, { weapon: r.weapon, shield: r.shield });
     kart.persona = r.persona;
     this.karts.push(kart);
     this.visuals.push(new KartVisual(this.scene, kart, this.assets));
     kart.statIds = r.stats ?? [];
-    if (!r.isHuman || r.autopilot) {
-      this.ais.set(kart.id, new AIController(kart, this, { skill: r.skill ?? (0.97 + this.rng() * 0.04), rnd: this.rng }));
-      this.starts.set(kart.id, StartSequence.ai(this.rng));
+    if (r.puppet) this.starts.set(kart.id, StartSequence.ai(this.kartRng));
+    else if (!r.isHuman || r.autopilot) {
+      this.ais.set(kart.id, new AIController(kart, this, { skill: r.skill ?? (0.97 + this.kartRng() * 0.04), rnd: this.kartRng }));
+      this.starts.set(kart.id, StartSequence.ai(this.kartRng));
     } else this.starts.set(kart.id, new StartSequence(true));
   }
 
@@ -251,7 +262,24 @@ export class RaceSession {
     this.humanLeaderD = this.humans.length ? Math.max(...this.humans.map((k) => k.d)) : 0;
   }
 
+  /** Camera subject for spectators / finished players: the best-placed kart still racing (sticky for 3 s). */
+  spectateKart() {
+    const live = this.karts.filter((k) => !k.finished).sort((a, b) => a.rank - b.rank);
+    const want = live[0] ?? this.karts.find((k) => k.rank === 1) ?? this.karts[0];
+    if (!this._spec || this._spec.finished || (this._spec !== want && this.time - (this._specT ?? 0) > 3)) { this._spec = want; this._specT = this.time; }
+    return this._spec;
+  }
+
+  /** A network player left mid-race: hand their kart to the AI so the race can finish. */
+  takeOver(kart) {
+    if (!kart.puppet) return;
+    kart.puppet = false; kart.remoteHuman = false; kart.hold = false; kart.body.setGravityScale(1, true);
+    this.allHumans = this.allHumans.filter((k) => k !== kart);
+    this.ais.set(kart.id, new AIController(kart, this, { skill: 0.98, rnd: this.kartRng }));
+  }
+
   step(dt) {
+    if (this.netHold) { this.net?.raceHook?.step(dt); return; } // multiplayer: everyone waits on the grid for the host's "go"
     this.time += dt;
     const ctx = { time: this.time, track: this.track, karts: this.karts, items: this.items };
     if (this.state === 'COUNTDOWN') this._stepCountdown(dt);
@@ -270,6 +298,7 @@ export class RaceSession {
     }
     if (this.input) this.input.autoGas = this.state === 'RACING';
     this.rank();
+    this.net?.raceHook?.step(dt);
     for (const k of this.karts) k.update(dt, ctx);
     this.items.update(dt);
     this.obstacles.update(dt, this.time);
@@ -322,6 +351,7 @@ export class RaceSession {
       const k = this.karts[i], vis = this.visuals[i];
       for (const e of k.events) {
         if (k.isHuman && this.haptic) this.haptic(k.index, e.type);
+        if (!k.puppet) this.net?.raceHook?.onKartEvent(k, e);
         switch (e.type) {
           case 'impact': case 'shed':
             if (vis.damage.detachNextPart(k.vel)) { this.sfx('crash', k); this.fx.burst(k.pos, 10, 6, '#ffcc66', 0.5, 8); }
@@ -353,8 +383,8 @@ export class RaceSession {
   }
 
   _checkEnd(dt) {
-    if (this.done) return;
-    const humansDone = this.humans.length > 0 && this.humans.every((k) => k.finished);
+    if (this.done || this.netClient) return; // network clients wait for the host's official results
+    const humansDone = this.allHumans.length > 0 && this.allHumans.every((k) => k.finished);
     const allDone = this.karts.every((k) => k.finished);
     if (humansDone && this.endTimer === null) this.endTimer = 7;
     if (this.endTimer !== null) this.endTimer -= dt;
@@ -382,6 +412,13 @@ export class RaceSession {
       this.sun.target.position.copy(f.pos); this.sun.position.copy(f.pos).addScaledVector(this.sunDir, 250); this.sun.target.updateMatrixWorld();
     }
     if ((this._tc = (this._tc ?? 0) + 1) % 25 === 1) applyToon(this.scene);
+    if (this.quality === 'vr' && this._tc % 6 === 2) { // headset tier: nothing is drawn beyond the fog
+      const vp = this.viewPos.lengthSq() ? this.viewPos : f?.pos ?? this.viewPos, far = 620;
+      for (const c of this.lod) c.obj.visible = c.center.distanceTo(vp) < far + c.radius;
+      for (const o of this.obstacles.list) if (o.away <= 0) o.mesh.visible = o.pos.distanceToSquared(vp) < 300 * 300;
+      for (const b of this.items.boxes) if (b.active) b.mesh.visible = b.pos.distanceToSquared(vp) < 300 * 300;
+      for (const v of this.visuals) v.setFar(v.root.position.distanceToSquared(vp) > 32 * 32);
+    }
   }
 
   dispose() {
@@ -391,6 +428,7 @@ export class RaceSession {
       o.geometry?.dispose?.();
       const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach((x) => { x.map?.dispose?.(); x.dispose?.(); });
     });
+    this.skybox?.dispose();
     this.physics.dispose();
   }
 }

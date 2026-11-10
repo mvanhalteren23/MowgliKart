@@ -2,14 +2,15 @@ import { PLAYABLE_KARTS, KARTS } from '../registries/KartRegistry.js';
 import { CHARACTERS, CHARACTER_IDS } from '../registries/CharacterRegistry.js';
 import { TRACKS, TRACK_ORDER } from '../registries/TrackRegistry.js';
 import { STAT_BOOSTS, WEAPONS, SHIELDS } from '../registries/CircuitDraftRegistry.js';
+import { STEER_MODES, STEER_LABEL, SHARPNESS } from '../vr/VRManager.js';
 
 const PCOL = ['#44ff88', '#44aaff', '#ffcc33', '#ff66cc'];
 const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]);
 
 /** Menu overlay screens (Lobby -> Draft -> Standings). Each show* returns a Promise. */
 export class UI {
-  constructor(root, input) {
-    this.root = root; this.input = input;
+  constructor(root, input, vr = null) {
+    this.root = root; this.input = input; this.vr = vr;
     this.cleanup = [];
   }
   clear() { this.cleanup.forEach((f) => f()); this.cleanup = []; this.root.className = 'hidden'; this.root.innerHTML = ''; }
@@ -20,14 +21,18 @@ export class UI {
   showLobby(defaults = {}) {
     return new Promise((resolve) => {
       const st = {
-        players: defaults.players ?? 1, autoShield: false, quality: (() => { try { return localStorage.getItem('mk_q') || (matchMedia('(pointer: coarse)').matches ? 'high' : 'ultra'); } catch { return 'high'; } })(),
+        players: defaults.players ?? 1, autoShield: false, net: defaults.net ?? 'solo', code: defaults.code ?? '', error: defaults.error ?? '', quality: (() => { try { return localStorage.getItem('mk_q') || (matchMedia('(pointer: coarse)').matches ? 'high' : 'ultra'); } catch { return 'high'; } })(),
         karts: [PLAYABLE_KARTS[0].id, PLAYABLE_KARTS[1].id, PLAYABLE_KARTS[0].id, PLAYABLE_KARTS[1].id],
         kids: ['barnaby', 'chloe', 'max', 'zoe'],
       };
       const el = this.show('', 'screen lobby');
+      const vr = this.vr;
+      this.cleanup.push(vr?.onChange(() => render()) ?? (() => {}));
       let pads = this.input.padCount();
       if (pads > st.players) st.players = Math.min(4, pads);
       const render = () => {
+        if (st.net === 'join') st.players = 1; else if (st.net === 'solo' && st.players < 1) st.players = 1;
+        const inVR = !!vr?.active, q = inVR ? 'vr' : st.quality;
         const rows = Array.from({ length: st.players }, (_, i) => `
           <div class="prow" style="--pc:${PCOL[i]}">
             <div class="ptag">P${i + 1}<small>${i < 2 ? (i ? 'Arrows' : 'WASD') : 'Gamepad'}</small></div>
@@ -38,12 +43,17 @@ export class UI {
           <div class="panel">
             <h1>MOWGLI<span>KART</span></h1>
             <p class="tag">Downhill Soapbox Circuit · 4-Race Roguelite Draft Cup</p>
-            <div class="row"><b>Players</b> ${[1, 2, 3, 4].map((n) => `<button class="pill ${st.players === n ? 'sel' : ''}" data-n="${n}">${n}P</button>`).join('')}<em>+ ${8 - st.players} AI → 8 racers</em></div>
-            <div class="row padrow"><b>🎮 Controllers</b> ${pads ? `<span class="padok">${pads} connected</span> — P1${pads > 1 ? '–P' + pads : ''} use pad${pads > 1 ? 's' : ''} (keyboard still works)` : '<em>none yet — press any button on a controller (USB / Bluetooth) to wake it</em>'}${pads && st.players < pads ? `<button class="pill" data-usepads>Use ${pads} players</button>` : ''}</div>
-            <div class="row"><b>Graphics</b> ${['ultra', 'high', 'low'].map((q) => `<button class="pill ${st.quality === q ? 'sel' : ''}" data-q="${q}">${q[0].toUpperCase() + q.slice(1)}</button>`).join('')}<em>Ultra = +ambient occlusion · 4K shadows · High = shadows, bloom, speed blur (1P) · Low = none</em></div>
+            ${st.error ? `<p class="vrline err">${st.error}</p>` : ''}
+            <div class="row"><b>Mode</b> ${[['solo', 'This device'], ['host', 'Host a room'], ['join', 'Join a room']].map(([k, l]) => `<button class="pill ${st.net === k ? 'sel' : ''}" data-net="${k}">${l}</button>`).join('')}<em>Rooms: every headset, phone or computer is one racer (or split-screen); AI fills the grid to 8</em></div>
+            ${st.net === 'join' ? `<div class="row vrrow"><b>Room code</b> <span class="codebox">${(st.code + '____').slice(0, 4).split('').join(' ')}</span> ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((n) => `<button class="pill key" data-key="${n}">${n}</button>`).join('')}<button class="pill key" data-key="del">⌫</button></div>` : `
+            <div class="row"><b>Players</b> ${(st.net === 'host' ? [0, 1, 2, 3, 4] : [1, 2, 3, 4]).map((n) => `<button class="pill ${st.players === n ? 'sel' : ''}" data-n="${n}" data-vr="${n ? n + 'P' : 'Spectate'}">${n ? n + 'P' : '📺 Spectate'}</button>`).join('')}<em>${st.net === 'host' ? 'on this device · 0 = big-screen spectator view' : `+ ${8 - st.players} AI → 8 racers`}</em></div>`}
+            <div class="row"><b>🥽 Headset</b> ${STEER_MODES.map((m) => `<button class="pill ${vr?.steerMode === m ? 'sel' : ''}" data-steer="${m}">${STEER_LABEL[m]}</button>`).join('')}<em>steering in VR</em></div>
+            <div class="row"><b>VR detail</b> ${Object.keys(SHARPNESS).map((k) => `<button class="pill ${vr?.sharpness === k ? 'sel' : ''}" data-sharp="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}<em>${inVR ? 'applies the next time you enter VR' : vr?.supported ? 'press the 🥽 button (top right) to race in the headset' : 'open this page in the headset\'s WebXR browser to race in VR'}</em></div>
+            <div class="row padrow" data-vr-hide><b>🎮 Controllers</b> ${pads ? `<span class="padok">${pads} connected</span> — P1${pads > 1 ? '–P' + pads : ''} use pad${pads > 1 ? 's' : ''} (keyboard still works)` : '<em>none yet — press any button on a controller (USB / Bluetooth) to wake it</em>'}${pads && st.players < pads ? `<button class="pill" data-usepads>Use ${pads} players</button>` : ''}</div>
+            <div class="row" data-vr-hide><b>Graphics</b> ${['ultra', 'high', 'low', 'vr'].map((k) => `<button class="pill ${q === k ? 'sel' : ''}" data-q="${k}">${k === 'vr' ? 'Headset' : k[0].toUpperCase() + k.slice(1)}</button>`).join('')}<em>Ultra = +ambient occlusion · 4K shadows · High = shadows, bloom, speed blur (1P) · Low = none</em></div>
             ${rows}
-            <label class="chk"><input type="checkbox" ${st.autoShield ? 'checked' : ''} data-auto> Auto-Shield assist (reactive counter-measure when a charged shield cell is held)</label>
-            <button class="go" data-go>START THE CUP ▶</button>
+            <label class="chk" data-vr-hide><input type="checkbox" ${st.autoShield ? 'checked' : ''} data-auto> Auto-Shield assist (reactive counter-measure when a charged shield cell is held)</label>
+            <button class="go" data-go>${st.net === 'host' ? 'CREATE ROOM ▶' : st.net === 'join' ? 'JOIN ROOM ▶' : 'START THE CUP ▶'}</button>
             <details><summary>Controls</summary>
               <table class="ctl"><tr><th></th><th>P1</th><th>P2</th><th>Gamepad</th></tr>
               <tr><td>Steer / Throttle / Brake</td><td>A D / W / S</td><td>← → / ↑ / ↓</td><td>L-stick / R2·A / L2</td></tr>
@@ -51,31 +61,66 @@ export class UI {
               <tr><td>Use Mystery Item</td><td>Left Shift</td><td>Right Shift</td><td>L1</td></tr>
               <tr><td>Fire Circuit Weapon</td><td>E</td><td>/</td><td>X</td></tr>
               <tr><td>Activate Circuit Shield</td><td>Q</td><td>.</td><td>B / Y</td></tr></table>
-              <p class="note">M mutes audio · P pauses · 10 more pre-registered karts unlock in Milestone 2.</p>
+              <table class="ctl"><tr><th colspan="2">🥽 Pico G2 4K remote (in VR)</th></tr>
+              <tr><td>Steer</td><td>Tilt the remote like a handlebar (or touchpad / head tilt — Headset row above)</td></tr>
+              <tr><td>Trigger</td><td>Hold = hop + drift, release = mini-turbo · tap at a ramp lip = trick · countdown: hold on DROP!</td></tr>
+              <tr><td>Touchpad click</td><td>Use item, otherwise fire weapon · click the lower third = shield · countdown: pump in the green</td></tr>
+              <tr><td>Touch lower edge of pad</td><td>Brake / reverse (gas is automatic)</td></tr>
+              <tr><td>Menus</td><td>Point the remote, pull the trigger</td></tr></table>
+              <p class="note">V / R3 / 👁 switches between the driver's seat and the chase camera. M mutes audio · P pauses · 10 more pre-registered karts unlock in Milestone 2.</p>
             </details>
           </div>`;
         el.querySelectorAll('[data-n]').forEach((b) => (b.onclick = () => { st.players = +b.dataset.n; render(); }));
+        el.querySelectorAll('[data-net]').forEach((b) => (b.onclick = () => { st.net = b.dataset.net; st.error = ''; render(); }));
+        el.querySelectorAll('[data-key]').forEach((b) => (b.onclick = () => { st.code = b.dataset.key === 'del' ? st.code.slice(0, -1) : (st.code + b.dataset.key).slice(0, 4); render(); }));
+        el.querySelectorAll('[data-steer]').forEach((b) => (b.onclick = () => { vr?.setSteer(b.dataset.steer); render(); }));
+        el.querySelectorAll('[data-sharp]').forEach((b) => (b.onclick = () => { vr?.setSharpness(b.dataset.sharp); render(); }));
         el.querySelector('[data-usepads]')?.addEventListener('click', () => { st.players = Math.min(4, pads); render(); });
         el.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { st.quality = b.dataset.q; try { localStorage.setItem('mk_q', st.quality); } catch { /* private mode */ } render(); }));
         el.querySelectorAll('[data-kart]').forEach((b) => (b.onclick = () => { st.karts[+b.dataset.p] = b.dataset.kart; render(); }));
         el.querySelectorAll('[data-kid]').forEach((s) => (s.onchange = () => { st.kids[+s.dataset.kid] = s.value; }));
         el.querySelector('[data-auto]').onchange = (e) => { st.autoShield = e.target.checked; };
-        el.querySelector('[data-go]').onclick = () => { this.clear(); resolve({ ...st, karts: st.karts.slice(0, st.players), kids: st.kids.slice(0, st.players) }); };
+        el.querySelector('[data-go]').onclick = () => {
+          if (st.net === 'join' && st.code.length < 4) { st.error = 'Enter the 4-digit room code shown on the host\'s screen'; render(); return; }
+          this.clear(); resolve({ ...st, quality: vr?.active ? 'vr' : st.quality, karts: st.karts.slice(0, st.players), kids: st.kids.slice(0, st.players) });
+        };
       };
       render();
       // controllers can join/leave while in the lobby; A starts the cup, d-pad changes players
       this.cleanup.push(this.input.onPadChange((n) => { if (n > pads && n > st.players) st.players = Math.min(4, n); pads = n; render(); }));
+      this.cleanup.push(this.input.onKey((c) => { const m = /^(?:Digit|Numpad)(\d)$/.exec(c); if (st.net !== 'join') return; if (m) { st.code = (st.code + m[1]).slice(0, 4); render(); } else if (c === 'Backspace') { st.code = st.code.slice(0, -1); render(); } }));
       const timer = setInterval(() => {
         this.input.poll();
         const n = this.input.padCount(); if (n !== pads) { pads = n; render(); }
         for (const e of this.input.menuEdges) {
           if (e.name === 'confirm' || e.name === 'start') { el.querySelector('[data-go]')?.click(); return; }
-          if (e.name === 'right' && st.players < 4) { st.players++; render(); }
-          if (e.name === 'left' && st.players > 1) { st.players--; render(); }
+          if (e.name === 'right' && st.players < 4 && st.net !== 'join') { st.players++; render(); }
+          if (e.name === 'left' && st.players > 1 && st.net !== 'join') { st.players--; render(); }
         }
       }, 120);
       this.cleanup.push(() => clearInterval(timer));
     });
+  }
+
+  /* ------------------------------------------------------------------ multiplayer room (host) */
+  /** roster(): [{ name, where }]. Returns { done: Promise, refresh() }; done resolves when the host presses start. */
+  showRoom(code, roster) {
+    let refresh;
+    const done = new Promise((resolve) => {
+      const el = this.show('', 'screen room');
+      refresh = () => {
+        const list = roster();
+        el.innerHTML = `<div class="panel"><h2>ROOM OPEN</h2>
+          <p class="tag">On each headset, phone or computer: open this site → Join a room → enter</p>
+          <p class="roomcode">${code.split('').join(' ')}</p>
+          ${list.map((r, i) => `<p class="vrline">${i + 1}. ${r.name} <small>— ${r.where}</small></p>`).join('') || '<p class="vrline">Nobody yet…</p>'}
+          <p class="tag">${list.length} player${list.length === 1 ? '' : 's'} + ${Math.max(0, 8 - list.length)} AI</p>
+          <button class="go" data-go>START THE CUP ▶</button></div>`;
+        el.querySelector('[data-go]').onclick = () => { this.clear(); resolve(); };
+      };
+      refresh();
+    });
+    return { done, refresh: () => refresh() };
   }
 
   /* ------------------------------------------------------------------ draft */
@@ -89,7 +134,7 @@ export class UI {
     };
     const CAT = { stat: ['STAT BOOST', '⬆'], weapon: ['WEAPON', '⚔'], shield: ['SHIELD', '🛡'] };
     return new Promise((resolve) => {
-      const humans = circuit.racers.filter((r) => r.isHuman);
+      const humans = circuit.racers.filter((r) => r.isHuman && !r.remote); // players on this device
       const snap = new Map(circuit.hands);                // keep showing the cards after a pick (with SELECTED)
       const chosen = new Map();
       const sel = new Map(humans.map((h) => [h.id, 0]));
@@ -116,7 +161,7 @@ export class UI {
         circuit.apply(id, hand[k]);
         chosen.set(id, k);
         render();
-        if (!circuit.humansPending().length) { setTimeout(() => { this.clear(); resolve(); }, 650); }
+        if (humans.every((h) => chosen.has(h.id))) { setTimeout(() => { this.clear(); resolve(); }, 650); }
       };
       render();
       const nav = (hi, d) => { const h = humans[hi]; if (!h || chosen.has(h.id)) return; sel.set(h.id, (sel.get(h.id) + d + 3) % 3); render(); };
@@ -140,7 +185,7 @@ export class UI {
   }
 
   /* ------------------------------------------------------------------ standings */
-  showStandings(circuit, raceOrder, final) {
+  showStandings(circuit, raceOrder, final, nextLabel = null) {
     return new Promise((resolve) => {
       const st = circuit.standings();
       const lastIdx = Object.fromEntries(raceOrder.map((id, i) => [id, i + 1]));
@@ -149,7 +194,7 @@ export class UI {
         ${final ? `<p class="champ">${champ.name} wins the Mowgli Kart Cup with ${champ.points} points!</p>` : `<p class="tag">${TRACKS[circuit.trackId].name} · Circuit Standings</p>`}
         <table class="stand"><tr><th>#</th><th>Racer</th><th>Kart</th><th>Race</th>${circuit.racers[0].results.map((_, i) => `<th>R${i + 1}</th>`).join('')}<th>Points</th></tr>
         ${st.map((r, i) => `<tr class="${r.isHuman ? 'human' : ''}"><td>${i + 1}</td><td>${r.name}${r.isHuman ? ' ★' : ''}</td><td>${KARTS[r.kartId].name}</td><td>${ordinal(lastIdx[r.id])}</td>${r.results.map((x) => `<td>${x.pts}</td>`).join('')}<td><b>${r.points}</b></td></tr>`).join('')}</table>
-        <button class="go" data-next>${final ? 'BACK TO LOBBY' : `NEXT: Race ${circuit.raceNumber + 1} Draft ▶`}</button></div>`, 'screen standings');
+        <button class="go" data-next>${nextLabel ?? (final ? 'BACK TO LOBBY' : `NEXT: Race ${circuit.raceNumber + 1} Draft ▶`)}</button></div>`, 'screen standings');
       const done = () => { this.clear(); resolve(); };
       el.querySelector('[data-next]').onclick = done;
       this.cleanup.push(this.input.onKey((c) => { if (c === 'Enter' || c === 'Space') done(); }));

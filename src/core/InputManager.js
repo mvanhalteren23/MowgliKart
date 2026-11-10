@@ -1,6 +1,6 @@
 import { blankInput } from '../controllers/KartController.js';
 
-const ACTIONS = ['hop', 'item', 'weapon', 'shield'];
+const ACTIONS = ['hop', 'item', 'weapon', 'shield', 'use'];
 // SPEC 3.7.4 keyboard layouts (two simultaneous local keyboard players)
 const KEYMAPS = [
   { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', hop: 'Space', item: 'ShiftLeft', weapon: 'KeyE', shield: 'KeyQ' },
@@ -24,6 +24,7 @@ export class InputManager {
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
     this.autoGas = false; this.touch = null; this.touchWanted = false;
+    this.vr = null; // VRManager (set by main): the headset remote drives player 1 while a VR session is active
     this.padListeners = new Set();
     // hot-plug: browsers only expose a pad after its first button press, so the event is the cue to refresh the UI
     addEventListener('gamepadconnected', (e) => { this.flash(`🎮 Controller ${e.gamepad.index + 1} connected`); this._padChanged(); });
@@ -43,6 +44,7 @@ export class InputManager {
   }
   /** Rumble a pad (Chrome/Edge/Android) or buzz the phone for player 1 when no pad is attached. */
   rumble(i, strong = 0.6, weak = 0.6, ms = 180) {
+    if (i === 0 && this.vr?.mode === 'xr') this.vr.rumble(Math.max(strong, weak), ms);
     const gp = this.pads()[i];
     try {
       if (gp?.vibrationActuator?.playEffect) gp.vibrationActuator.playEffect('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: strong, weakMagnitude: weak });
@@ -108,7 +110,7 @@ export class InputManager {
   read(i, out = blankInput()) {
     const k = this.keys, m = KEYMAPS[i];
     let steer = 0, throttle = 0, brake = 0;
-    const hold = { hop: false, item: false, weapon: false, shield: false };
+    const hold = { hop: false, item: false, weapon: false, shield: false, use: false };
     if (m) {
       steer += (k.has(m.right) ? 1 : 0) - (k.has(m.left) ? 1 : 0);
       throttle = k.has(m.up) ? 1 : 0; brake = k.has(m.down) ? 1 : 0;
@@ -134,6 +136,22 @@ export class InputManager {
       brake = Math.max(brake, t.brake ? 1 : 0);
       for (const a of ACTIONS) hold[a] = hold[a] || t[a];
     }
+    if (i === 0 && this.vr?.active) {
+      const vr = this.vr, vi = vr.in, e = vr.takeEdges();
+      steer += vi.steer;
+      if (vr.mode === 'xr') {
+        if (this.autoGas) { // racing: gas is automatic; trigger = hop/drift/trick; touchpad click = item or weapon (lower third = shield); touch the lower edge = brake
+          const braking = vi.touching && vi.padY > 0.5 && !vi.click;
+          throttle = braking ? 0 : 1; brake = Math.max(brake, braking ? 1 : 0);
+          hold.hop = hold.hop || vi.trigger;
+          if (e.trigger) this.latch[0].hop = true;
+          if (e.click) this.latch[0][e.clickY > 0.55 ? 'shield' : 'use'] = true;
+        } else { // push-start: click the pad in rhythm, squeeze the trigger for throttle on DROP!
+          throttle = Math.max(throttle, vi.trigger ? 1 : 0);
+          if (e.click) this.latch[0].hop = true;
+        }
+      }
+    }
     out.steer = Math.max(-1, Math.min(1, steer));
     out.throttle = throttle; out.brake = brake;
     for (const a of ACTIONS) {
@@ -147,6 +165,7 @@ export class InputManager {
   throttleHeld(i) {
     const m = KEYMAPS[i], gp = this.pads()[i];
     if (i === 0 && this.touch?.held.gas) return true;
+    if (i === 0 && this.vr?.mode === 'xr' && this.vr.in.trigger) return true;
     return (m && this.keys.has(m.up)) || (gp && ((gp.buttons[7]?.value ?? 0) > 0.3 || gp.buttons[0]?.pressed)) || false;
   }
 }

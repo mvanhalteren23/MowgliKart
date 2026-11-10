@@ -1,3 +1,4 @@
+import { detail } from '../core/Lod.js';
 import * as THREE from 'three';
 import { DamageModel } from './DamageModel.js';
 import { DRIFT_TIERS, FSM } from './KartController.js';
@@ -42,6 +43,14 @@ export class KartVisual {
       this.flip.add(f); return f;
     });
     this.flame = this.flames[0];
+    this.proxy = null;
+    if (kart.lodProxy) { // headset tier: beyond ~55 m a kart is a 100-triangle stand-in
+      const col = new THREE.Color(kart.def.color ?? '#cc3333'), pm = new THREE.MeshToonMaterial({ color: col });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.55, 2.3), pm); body.position.y = 0.1;
+      const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0), new THREE.MeshToonMaterial({ color: 0xffd9a0 })); head.position.set(0, 0.95, 0.2);
+      this.proxy = new THREE.Group(); this.proxy.add(body, head); this.proxy.visible = false; this.root.add(this.proxy);
+      if (!kart.isHuman) { const cp = this.model.getObjectByName('Cockpit'); if (cp) cp.visible = false; } // nobody sees another kart's dashboard
+    }
     this.shadow = makeShadowDecal(scene, 2.8); // soft contact shadow, re-projected onto the road every frame
     this.trails = kart.trailsOn ? [new Trail(scene), new Trail(scene)] : null;
     this.sparkTrails = [new Trail(scene, { max: 40, width: 0.09, additive: true, alpha: 0.95, fade: 0.93, every: 0.025 }), new Trail(scene, { max: 40, width: 0.09, additive: true, alpha: 0.95, fade: 0.93, every: 0.025 })];
@@ -70,7 +79,7 @@ export class KartVisual {
       if (this.weaponMesh) this.weaponMount?.remove(this.weaponMesh);
       this.weaponMesh = null; this.weaponId = lo.weapon?.id ?? null;
       if (this.weaponId && this.weaponMount) {
-        this.weaponMesh = WEAPONS[this.weaponId].proceduralFallback(THREE);
+        this.weaponMesh = WEAPONS[this.weaponId].proceduralFallback(detail.T);
         this.weaponMesh.scale.setScalar(0.45);
         this.weaponMount.add(this.weaponMesh);
       }
@@ -79,7 +88,7 @@ export class KartVisual {
       if (this.aura) (this.shieldMount ?? this.flip).remove(this.aura);
       this.aura = null; this.auraId = lo.shield?.id ?? null;
       if (this.auraId) {
-        this.aura = SHIELDS[this.auraId].proceduralFallback(THREE);
+        this.aura = SHIELDS[this.auraId].proceduralFallback(detail.T);
         this.aura.visible = false;
         (this.shieldMount ?? this.flip).add(this.aura);
       }
@@ -92,6 +101,7 @@ export class KartVisual {
     this.root.position.copy(this._p);
     this.root.quaternion.copy(this._q);
     this._syncLoadout();
+    if (this.weaponMesh) this.weaponMesh.scale.setScalar(this.isCockpit ? 0.2 : 0.45); // hood-mounted weapon must not block the driver's view
 
     // cosmetic drift slip & trick flip
     const drifting = k.fsm === FSM.DRIFTING;
@@ -126,7 +136,7 @@ export class KartVisual {
     const lo = k.loadout;
     if (this.aura) {
       const on = lo.shieldActive > 0;
-      this.aura.visible = on;
+      this.aura.visible = on && !this.isCockpit; // from the driver's seat a bubble would wall off the view (the HUD shows ON!)
       if (on) {
         this.aura.rotation.y += dt * 6;
         const s = 1 + Math.sin(time * 10) * 0.03;
@@ -226,6 +236,9 @@ export class KartVisual {
       line.material.opacity = 0.25 + 0.35 * Math.min(1, k.slip.draftTimer / 1.5);
     }
   }
+
+  /** Level of detail: far karts swap to the proxy. */
+  setFar(far) { if (!this.proxy || this.isCockpit) far = false; if (this.far === far) return; this.far = far; this.flip.visible = !far; if (this.proxy) this.proxy.visible = far; }
 
   /** First-person view: hide the driver (so the camera isn't inside the head) and keep the dashboard/wheel. */
   setCockpit(on) { this.isCockpit = on; this.kid.visible = !on; }

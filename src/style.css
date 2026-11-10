@@ -187,3 +187,13 @@ body.touch .hud-bl { display: none; }
   animation: slj .12s steps(2) infinite; }
 @keyframes slj { 50% { transform: rotate(2.2deg) scale(1.035); } }
 .tb.cam { width: 9vmin; height: 9vmin; right: 3vmin; top: 3vmin; bottom: auto; font-size: 4.4vmin; background: #101830aa; }
+
+/* VR + rooms */
+#vrbtn { position: fixed; right: 10px; top: 10px; z-index: 70; font: 800 15px system-ui, sans-serif; color: #fff; background: #5b3df5; border: 2px solid #fff6; border-radius: 99px; padding: 9px 16px; cursor: pointer; }
+body.racing #vrbtn { opacity: .55; padding: 5px 10px; font-size: 12px; } body.touch.racing #vrbtn { right: 14vmin; }
+body.vr #hud, body.vr #touch, body.vr #rotate { display: none !important; }
+body.vr #ui { opacity: 0; } body.vr-xr #ui { opacity: 1; }
+.roomcode { font: 900 64px system-ui, sans-serif; letter-spacing: 8px; color: #44ff88; margin: 6px 0; text-align: center; }
+.vrline { margin: 4px 0; font-size: 17px; } .vrline.err { color: #ff8a8a; font-weight: 800; } .vrline small { opacity: .7; }
+.codebox { font: 900 26px ui-monospace, monospace; letter-spacing: 4px; background: #0b1024; border: 2px solid #3d4a80; border-radius: 10px; padding: 4px 12px; color: #44ff88; }
+.pill.key { min-width: 38px; }

@@ -1,3 +1,4 @@
+import { detail } from '../core/Lod.js';
 import * as THREE from 'three';
 import { WEAPONS, SHIELDS, weaponEffectiveness, weaponCooldown, shieldPower, shieldCooldown } from '../registries/CircuitDraftRegistry.js';
 import { ITEMS, ITEM_IDS, makeMysteryBox } from '../registries/ItemRegistry.js';
@@ -31,7 +32,7 @@ export class ItemManager {
     const { track } = this.s;
     for (let d = 300; d < track.length - 350; d += 450) {
       for (const lat of [-6, -2, 2, 6]) {
-        const mesh = makeMysteryBox(THREE);
+        const mesh = makeMysteryBox(detail.T);
         const pos = track.surface(d, lat).add(new V(0, 1.4, 0));
         mesh.position.copy(pos);
         this.group.add(mesh);
@@ -127,7 +128,7 @@ export class ItemManager {
         const tgt = this.nearestAhead(kart, W.range, W.homingCone);
         const n = lvl >= 2 ? 3 : 1;
         for (let i = 0; i < n; i++) {
-          const mesh = W.proceduralFallback(THREE); mesh.scale.setScalar(0.8); this.group.add(mesh);
+          const mesh = W.proceduralFallback(detail.T); mesh.scale.setScalar(0.8); this.group.add(mesh);
           this.projectiles.push({ kind: 'chicken', owner: kart, d: kart.d + 3, lat: kart.lat, latVel: n === 1 ? 0 : (i - 1) * 7, dir: 1, speed: W.projectileSpeed,
             target: i === (n === 1 ? 0 : 1) ? tgt : (tgt && n > 1 ? tgt : null), traveled: 0, range: W.range * 1.4, mesh, level: lvl, eff, grace: 0.25, y: 1.0, homing: !!tgt });
         }
@@ -146,7 +147,7 @@ export class ItemManager {
       case 'mentos_mortar': {
         const tgt = this.nearestAhead(kart, W.range);
         const land = tgt ? clamp(tgt.d + tgt.speed * 0.9, kart.d + 15, kart.d + W.range) : kart.d + 45;
-        const mesh = W.proceduralFallback(THREE); this.group.add(mesh);
+        const mesh = W.proceduralFallback(detail.T); this.group.add(mesh);
         this.timed.push({ kind: 'lob', owner: kart, from: kart.pos.clone(), d0: kart.d, d1: land, lat: tgt ? tgt.lat : kart.lat, t: 0, dur: 1.05, mesh, eff, item: false });
         kart.addBoost(1.05, 0.3, 'recoil');
         s.sfx('thunk', kart);
@@ -159,7 +160,7 @@ export class ItemManager {
           const dist = r.pos.distanceTo(kart.pos);
           if (dist < W.range && Math.abs(r.d - kart.d) < 14 && dist < bd) { bd = dist; tgt = r; }
         }
-        const mesh = W.proceduralFallback(THREE); mesh.scale.setScalar(1.4); this.group.add(mesh);
+        const mesh = W.proceduralFallback(detail.T); mesh.scale.setScalar(1.4); this.group.add(mesh);
         this.timed.push({ kind: 'glove', owner: kart, target: tgt, t: 0, dur: 0.22, mesh, eff });
         kart.addBoost(1.05, 0.3, 'recoil');
         if (!tgt) { lo.weaponCd = cd * 0.5; s.sfx('whiff', kart); return true; }
@@ -199,7 +200,7 @@ export class ItemManager {
         break;
       case 'banana_rocket': {
         const tgt = this.nearestAhead(kart, 150, 180);
-        const mesh = I.proceduralFallback(THREE); mesh.scale.setScalar(1.2); this.group.add(mesh);
+        const mesh = I.proceduralFallback(detail.T); mesh.scale.setScalar(1.2); this.group.add(mesh);
         this.projectiles.push({ kind: 'banana', owner: kart, d: kart.d + 4, lat: kart.lat, latVel: 0, dir: 1, speed: I.speed, target: tgt, traveled: 0, range: 220, mesh, level: 1, eff: 1, grace: 0.25, y: 1.0, homing: true });
         this.s.sfx('whistle', kart);
         break;
@@ -207,7 +208,7 @@ export class ItemManager {
       case 'flaming_poo_bag': {
         const tgt = this.nearestAhead(kart, 30);
         if (tgt) {
-          const mesh = I.proceduralFallback(THREE); this.group.add(mesh);
+          const mesh = I.proceduralFallback(detail.T); this.group.add(mesh);
           this.timed.push({ kind: 'lob', owner: kart, from: kart.pos.clone(), d0: kart.d, d1: tgt.d + tgt.speed * 0.6, lat: tgt.lat, t: 0, dur: 0.8, mesh, eff: 1, item: true });
         } else this.spawnHazard({ kind: 'poo', owner: kart, d: kart.d - 4, lat: kart.lat, radius: I.radius, life: 14, eff: 1, grace: 2 });
         this.s.sfx('thunk', kart);
@@ -227,13 +228,13 @@ export class ItemManager {
     const pos = fr.P.clone().addScaledVector(fr.B, lat);
     let mesh;
     if (kind === 'puddle') {
-      mesh = WEAPONS.baby_oil_puddle.proceduralFallback(THREE);
+      mesh = WEAPONS.baby_oil_puddle.proceduralFallback(detail.T);
       mesh.scale.set(radius, 1, radius);
     } else if (kind === 'foam') {
       mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshToonMaterial({ color: 0xfff6e0 }));
       mesh.scale.set(radius * 0.8, radius * 0.35, radius * 0.8);
     } else if (kind === 'poo') {
-      mesh = ITEMS.flaming_poo_bag.proceduralFallback(THREE);
+      mesh = ITEMS.flaming_poo_bag.proceduralFallback(detail.T);
       mesh.scale.setScalar(radius * 0.7);
     } else { // peel
       mesh = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.25, 5), new THREE.MeshToonMaterial({ color: 0xffe135 }));

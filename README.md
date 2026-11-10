@@ -14,6 +14,48 @@ npm run validate-assets && npm run gen-pipeline   # AI-asset tooling, see ASSET_
 ```
 Add `?auto=1&players=N` to the URL for an attract/test mode where human karts drive themselves (add `&stay=1` to stop after race 1).
 
+
+## 🥽 Pico G2 4K — first-person VR
+
+The game is played from the driver's seat and runs as a WebXR app in the headset's browser. There is one build (this site); the headset, phones and computers all open the same URL.
+
+**Target device:** Pico G2 4K only (3DoF headset, Snapdragon 835, 3840×2160 panel, one 3DoF remote with trigger + clickable touchpad).
+
+**Start it**
+1. In the G2 4K, open the site in a WebXR-capable browser (Firefox Reality for Pico; Wolvic if it installs on your firmware). The stock 2D browser can show the game as a flat panel but cannot enter VR.
+2. Point the remote at **🥽 Enter VR** (top right) and pull the trigger. Menus then appear on a floating panel: point + trigger.
+3. `Headset` row in the lobby picks the steering style; `VR detail` (Low / Medium / High) sets render resolution — lower it if the picture stutters.
+
+**Remote**
+
+| Input | Racing | Countdown |
+| --- | --- | --- |
+| Tilt remote (roll) | Steer (alternatives: touchpad left/right, head tilt) | — |
+| Trigger | Hold = hop + drift, release = mini-turbo; tap at a ramp lip = trick | Hold on **DROP!** for the launch |
+| Touchpad click | Use item, else fire weapon; click the lower third = shield | Pump in the green zone |
+| Touch lower edge of pad | Brake / reverse (gas is automatic) | — |
+| App / Back, Home | Browser / system (Back leaves VR) | |
+
+Shields also auto-trigger in VR. Haptics pulse on hits, boosts and menu hover where the browser exposes them.
+
+**Comfort:** the view is horizon-locked (no roll), pitch follows the road smoothly, the heading freezes while you are spun or thrown by the yeti, and the edges of the view darken during hard turns and boosts.
+
+**Headset graphics tier (`vr`, chosen automatically in VR)** — mobile-budget assets from the same models:
+- Skybox trick (`src/core/SkyBake.js`): sky, three mountain ranges and a 5,000-tree forest carpet (~157k triangles) are rendered once into a 360° cube map and drawn as the background; nothing distant is drawn per frame. To use your own 360° picture instead, put an equirectangular JPEG at `public/assets/skyboxes/<trackId>.jpg`.
+- Lite geometry (`src/core/Lod.js`): every kart, kid, obstacle and item is rebuilt with half the curve segments (karts ≈ 24k → 11k triangles), no outline hulls, coarser mesh merging.
+- Track and scenery are split into 220 m chunks that are frustum- and distance-culled; karts beyond 32 m become 100-triangle stand-ins; no shadow pass or post-processing; contact-shadow decals remain.
+- Measured in the stereo test mode: ~1.1 M → ~185k triangles per eye on the start grid (worst case). **Not yet measured on a real G2 4K.**
+
+**Without a headset:** add `?vr=sim` to the URL for a side-by-side stereo view (Cardboard-style on a phone; this is also what the automated checks drive).
+
+## 🌐 Multiplayer rooms
+
+Lobby → **Host a room** shows a 4-digit code; other devices choose **Join a room** and enter it (or open `/?join=1234`). Every device is one racer (the host can also run 1–4 split-screen players, or 0 = big-screen spectator that follows the leader). AI fills the grid to 8. Drafts happen on each player's own screen.
+
+- Peer-to-peer over WebRTC (PeerJS public broker) — no game server, works from the static Vercel site.
+- Each device simulates its own kart locally (no steering lag in the headset) and streams it 15×/s; other karts are interpolated. The host owns the AI and referees the finishing order. If a player drops, the AI takes over their kart.
+- `?transport=bc` uses BroadcastChannel between tabs of one browser for local testing.
+
 ## How to play
 1. **Lobby** — pick 1–4 players, a kart (Rocket Grocery Kart / Motorized Chicken Coop) and a kid for each.
 2. **Pre-race draft** — each race you pick **one of three** dealt cards: a stacking *Stat Boost*, a rechargeable *Weapon*, or a rechargeable *Shield*
@@ -102,4 +144,4 @@ real keyboard control, and a GLB hot-swap round-trip. Physics regression helpers
 - `src/core/Toon.js`: 3-step nearest-filtered toon ramp, inverted-hull ink outlines (`#14141f`), per-unit mesh baking (big draw-call cut), soft drop-shadow decals.
 - Compound meshes in `src/registries/_detail.js`; roadside flags/banners/crowds/guardrails via `InstancedMesh` in `Scenery.js`.
 - First-person cockpit camera: `V` key / gamepad R3 / 👁 touch button.
-- `npm test` runs `scripts/test.mjs` (node:test: asset contracts, track geometry, AI sessions on all tracks, yeti, trees, powder, cup rules); `npm run check` = test + build.
+- `npm test` runs `scripts/test.mjs` (node:test: asset contracts, track geometry, AI sessions on all tracks, yeti, trees, powder, cup rules, headset tier, skybox bake, two-device multiplayer sync); `npm run check` = test + build.

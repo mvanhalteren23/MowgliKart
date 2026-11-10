@@ -130,3 +130,95 @@ test('cup: 4 races, points table, diminishing-return stats, weapon/shield upgrad
   c.recordResults([3, 1, 0, 2, 4, 5, 6, 7]); assert.equal(c.byId.get(3).points, 15); assert.equal(c.byId.get(7).points, 1);
   for (let i = 0; i < 3; i++) assert.ok(c.advance()); assert.equal(c.advance(), false);
 });
+
+/* ---------------------------------------------------------------- headset tier + multiplayer */
+import { NetRace } from '../src/net/NetRace.js';
+import { chunkMesh, liteThree } from '../src/core/Lod.js';
+
+test('headset tier: lite geometry namespace cuts kart + kid triangles by more than a third, same node contract', () => {
+  const L = liteThree(0.5);
+  for (const k of PLAYABLE_KARTS) {
+    const full = tris(k.proceduralFallback(THREE)), g = k.proceduralFallback(L), lite = tris(g);
+    assert.ok(lite < full * 0.67, `${k.id}: ${lite} vs ${full}`);
+    for (const n of ['Wheel_FL', 'Driver_Seat', 'Cockpit_Wheel']) assert.ok(g.getObjectByName(n), n);
+  }
+  const kid = CHARACTERS[CHARACTER_IDS[0]];
+  assert.ok(tris(kid.proceduralFallback(L)) < tris(kid.proceduralFallback(THREE)) * 0.67);
+});
+test('headset tier: chunkMesh splits a long mesh into cullable pieces without losing triangles', () => {
+  const g = new THREE.PlaneGeometry(1000, 10, 200, 2).rotateX(-Math.PI / 2), parent = new THREE.Group();
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial()); parent.add(m);
+  const parts = chunkMesh(m, 160);
+  assert.ok(parts.length >= 6);
+  assert.equal(parts.reduce((a, c) => a + c.geometry.index.count, 0), g.index.count);
+  assert.ok(parts.every((c) => c.geometry.boundingSphere.radius < 200));
+  assert.equal(m.parent, null);
+});
+test('headset quality session ("vr"): chunked world, far karts become proxies, AI still races', async () => {
+  const s = await mk('whistler_run', racersOf(8, true));
+  s.dispose();
+  const v = new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(8), seed: 1, quality: 'vr' });
+  assert.ok(v.lod.length > 20, 'static world is chunked: ' + v.lod.length);
+  assert.ok(v.visuals.every((x) => x.proxy));
+  for (let i = 0; i < 60 * 8; i++) { v.step(1 / 60); if (i % 30 === 0) v.updateVisuals(1 / 60, 1); }
+  assert.ok(v.karts.filter((k) => k.maxD > 60).length >= 6);
+  v.dispose();
+  new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(2), seed: 1, quality: 'high' }).dispose(); // resets the global detail tier
+});
+
+/** Two in-memory "devices" wired back to back with a little latency, same message shapes as the real transport. */
+function loopback(delaySteps = 2) {
+  const mk1 = (isHost, id) => ({ isHost, id, h: new Map(), raceHook: null, q: [], on(t, f) { this.h.set(t, f); return this; }, off(t) { this.h.delete(t); }, clientIds: isHost ? ['c1'] : [], peer: null,
+    send(msg) { const m = JSON.parse(JSON.stringify(msg)); if (isHost) delete m.from; else m.from = id; this.peer.q.push({ m, at: this.peer.tick + delaySteps }); }, tick: 0,
+    pump() { this.tick++; while (this.q.length && this.q[0].at <= this.tick) { const { m } = this.q.shift(); this.h.get(m.t)?.(m); } } });
+  const host = mk1(true, 'host'), client = mk1(false, 'c1'); host.peer = client; client.peer = host;
+  return { host, client };
+}
+test('multiplayer: host + joined device stay in sync (puppets track owners, events relay, host referees the result)', async () => {
+  const { host, client } = loopback();
+  const grid = Array.from({ length: 4 }, (_, i) => ({ id: i, owner: i === 1 ? 'c1' : 'host', name: 'R' + i, isHuman: i < 2, humanIndex: i === 0 ? 0 : undefined, persona: 'balanced_hybrid', kartId: PLAYABLE_KARTS[i % 2].id, charId: CHARACTER_IDS[i], build: newBuildState(), weapon: { id: 'ballistic_chicken', level: 1 }, shield: { id: 'bubble_wrap_shield', level: 1 } }));
+  const view = (me) => grid.map((r) => (r.owner === me ? { ...r, humanIndex: r.isHuman ? 0 : undefined, autopilot: r.isHuman } : { ...r, isHuman: false, humanIndex: undefined, puppet: true, remoteHuman: r.isHuman }));
+  const mkS = async (net, me) => new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'san_diego_streets', racers: view(me), seed: 7, quality: 'low', net });
+  const H = await mkS(host, 'host'), C = await mkS(client, 'c1');
+  const hh = new NetRace(H, host), ch = new NetRace(C, client);
+  assert.equal(C.karts.filter((k) => k.puppet).length, 3); assert.equal(H.karts.filter((k) => k.puppet).length, 1);
+  assert.equal(H.allHumans.length, 2);
+  for (let i = 0; i < 30; i++) { H.step(1 / 60); C.step(1 / 60); host.pump(); client.pump(); }
+  assert.equal(H.time, 0, 'held on the grid until go'); assert.equal(C.time, 0);
+  hh.go();
+  let fired = 0; const of = C.items.fireWeapon.bind(C.items); C.items.fireWeapon = (k) => { if (k.puppet) fired++; return of(k); };
+  const realNow = performance.now; let fake = realNow.call(performance); performance.now = () => fake; // deterministic snapshot ages
+  try {
+    for (let i = 0; i < 60 * 30; i++) { fake += 1000 / 60; H.step(1 / 60); C.step(1 / 60); host.pump(); client.pump(); }
+  } finally { performance.now = realNow; }
+  const byId = (s, id) => s.karts.find((k) => k.id === id);
+  for (const id of [0, 2, 3]) { const a = byId(H, id), b = byId(C, id); assert.ok(a.maxD > 150, `host kart ${id} raced: ${a.maxD}`); assert.ok(a.pos.distanceTo(b.pos) < 6, `kart ${id} puppet within 6 m of its owner: ${a.pos.distanceTo(b.pos).toFixed(1)}`); }
+  { const a = byId(C, 1), b = byId(H, 1); assert.ok(a.maxD > 150, 'client kart raced'); assert.ok(a.pos.distanceTo(b.pos) < 6, `client kart mirrored on host: ${a.pos.distanceTo(b.pos).toFixed(1)}`); }
+  assert.ok(fired > 0, 'weapon fire by host-owned karts is replayed on the client');
+  // a puppet never takes status effects locally
+  const p = byId(C, 0); p.spinOut(2); p.addBoost(2, 2, 'x'); assert.equal(p.t.spin, 0); assert.equal(p.boosts.filter((b) => b.src === 'x').length, 0);
+  // client never ends the race by itself; the host's results do
+  C.karts.forEach((k) => { k.finished = true; }); C.step(1 / 60); assert.equal(C.done, false);
+  hh.results([1, 0, 2, 3]); client.pump(); client.pump(); client.pump();
+  assert.equal(C.done, true); assert.deepEqual(C.results, [1, 0, 2, 3]);
+  // player drops: host hands the kart to the AI
+  host.h.get('left')({ t: 'left', from: 'c1' });
+  assert.equal(byId(H, 1).puppet, false); assert.ok(H.ais.has(1));
+  hh.dispose(); ch.dispose(); H.dispose(); C.dispose();
+});
+
+test('skybox trick: the distant landscape is one baked cube map (fake renderer captures 6 faces, live sky + mountains switch off)', async () => {
+  const { bakeSkybox } = await import('../src/core/SkyBake.js');
+  const s = new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(2), seed: 1, quality: 'vr' });
+  let faces = 0, sceneTris = 0;
+  const gl = { toneMapping: 0, autoClear: false, shadowMap: { enabled: true }, xr: { enabled: false }, coordinateSystem: THREE.WebGLCoordinateSystem,
+    getRenderTarget: () => null, getActiveCubeFace: () => 0, getActiveMipmapLevel: () => 0, setRenderTarget() {}, render(sc) { faces++; sceneTris = 0; sc.traverse((o) => { if (o.isMesh) sceneTris += ((o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3) * (o.isInstancedMesh ? o.count : 1); }); } };
+  const rt = bakeSkybox(gl, s, 256);
+  assert.equal(faces, 6);
+  assert.ok(s.skyboxTris > 100000, 'detailed bake scene: ' + s.skyboxTris);
+  assert.ok(s.scene.background === rt.texture && rt.texture.isCubeTexture);
+  assert.equal(s.sky.visible, false); assert.equal(s.mountains.visible, false);
+  assert.equal(gl.shadowMap.enabled, true, 'renderer state restored');
+  s.dispose();
+  new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(2), seed: 1, quality: 'high' }).dispose();
+});

@@ -74,9 +74,9 @@ export class HUD {
 
   set(p, key, val, fn) { if (p.cache[key] !== val) { p.cache[key] = val; fn(val); } }
 
-  update(i, session, t) {
+  update(i, session, kartOverride = null) {
     const p = this.panels[i];
-    const kart = session.humans[i];
+    const kart = kartOverride ?? session.humans[i];
     if (!p || !kart) return;
     const total = session.karts.length;
     this.set(p, 'rank', kart.rank + '/' + total, () => { p.rank.innerHTML = `<b>${kart.rank}</b><sup>${ord(kart.rank).replace(/^\d+/, '')}</sup><span> / ${total}</span>`; });

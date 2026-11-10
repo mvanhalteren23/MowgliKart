@@ -46,7 +46,11 @@ function smoothGeometry(src) {
   smoothCache.set(src, g); return g;
 }
 /** Add ink outlines around every opaque mesh under `root` (skips decals, transparent glass, wireframes, instanced meshes). */
+/** Global switches set per race from the quality tier. */
+export const toonCfg = { outlines: true, coarse: false }; // coarse: merge cosmetics/exhausts/eyes into their parent (fewer draw calls)
+
 export function addOutlines(root, width = 0.028) {
+  if (!toonCfg.outlines) return root; // headset tier: no inverted-hull pass (halves vertices + draw calls)
   const meshes = [];
   root.traverse((o) => { if (o.isMesh && !o.isInstancedMesh && !o.userData.outline && !o.userData.noOutline && !o.material.wireframe && !o.material.transparent && !o.material.isMeshBasicMaterial) meshes.push(o); });
   for (const m of meshes) {
@@ -61,7 +65,7 @@ let bakedMat = null;
 const bakedMaterial = () => (bakedMat ??= new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true }));
 
 /** Names of nodes that animate/detach independently: they become their own bake unit instead of being merged into the body. */
-const isUnit = (o) => /^(Wheel_|Cosmetic_|Driver_Seat|Weapon_Mount|Shield_Mount|Exhaust|Cockpit|Eye|rocket)/.test(o.name) || o.userData.unit;
+const isUnit = (o) => (toonCfg.coarse ? /^(Wheel_|Driver_Seat|Weapon_Mount|Shield_Mount|Cockpit_Wheel)/ : /^(Wheel_|Cosmetic_|Driver_Seat|Weapon_Mount|Shield_Mount|Exhaust|Cockpit|Eye|rocket)/).test(o.name) || o.userData.unit;
 
 /**
  * Collapse runs of plain toon primitives into one vertex-coloured mesh per bake unit (kart body, each wheel, each detachable
