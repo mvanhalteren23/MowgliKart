@@ -74,9 +74,21 @@ export function iridescentTexture(THREE, alpha = 1) {
   if (typeof document === 'undefined') return null;
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d');
-  const cone = g.createConicGradient(0, 128, 128);
-  ['#ff6ad5', '#ffd86a', '#7dff9a', '#6ad8ff', '#a28bff', '#ff6ad5'].forEach((col, i, a) => cone.addColorStop(i / (a.length - 1), col));
-  g.globalAlpha = alpha; g.fillStyle = cone; g.fillRect(0, 0, 256, 256);
+  const stops = ['#ff6ad5', '#ffd86a', '#7dff9a', '#6ad8ff', '#a28bff', '#ff6ad5'];
+  g.globalAlpha = alpha;
+  if (g.createConicGradient) { // Chrome 99+, Firefox 112+, Safari 16.4+
+    const cone = g.createConicGradient(0, 128, 128);
+    stops.forEach((col, i, a) => cone.addColorStop(i / (a.length - 1), col));
+    g.fillStyle = cone; g.fillRect(0, 0, 256, 256);
+  } else { // older headset browsers (Firefox Reality, stock Pico): paint the same sweep as 180 coloured wedges
+    const n = 180, hex = (c) => [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16));
+    for (let i = 0; i < n; i++) {
+      const f = (i / n) * (stops.length - 1), k = Math.min(stops.length - 2, Math.floor(f)), t = f - k, c0 = hex(stops[k]), c1 = hex(stops[k + 1]);
+      const a0 = (i / n) * Math.PI * 2 - Math.PI / 2, a1 = ((i + 1.5) / n) * Math.PI * 2 - Math.PI / 2;
+      g.fillStyle = `rgb(${c0.map((v, j) => Math.round(v + (c1[j] - v) * t)).join(',')})`;
+      g.beginPath(); g.moveTo(128, 128); g.arc(128, 128, 200, a0, a1); g.closePath(); g.fill();
+    }
+  }
   const fade = g.createRadialGradient(128, 128, 20, 128, 128, 128);
   fade.addColorStop(0, 'rgba(255,255,255,0.55)'); fade.addColorStop(0.6, 'rgba(255,255,255,0.1)'); fade.addColorStop(1, 'rgba(255,255,255,0)');
   g.globalAlpha = 1; g.globalCompositeOperation = 'lighter'; g.fillStyle = fade; g.fillRect(0, 0, 256, 256);

@@ -222,3 +222,15 @@ test('skybox trick: the distant landscape is one baked cube map (fake renderer c
   s.dispose();
   new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(2), seed: 1, quality: 'high' }).dispose();
 });
+
+test('old headset browsers: bubble/iridescent texture still builds when canvas has no createConicGradient', async () => {
+  const calls = []; const noop = () => {};
+  const ctx = { fillRect: noop, createRadialGradient: () => ({ addColorStop: noop }), beginPath: noop, moveTo: noop, closePath: noop, arc: (...a) => calls.push(a), fill: noop, set fillStyle(v) { this._fs = v; }, get fillStyle() { return this._fs; } };
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
+  try {
+    const { iridescentTexture } = await import('../src/registries/_mesh.js');
+    const stub = { CanvasTexture: class { constructor() {} }, SRGBColorSpace: 'srgb' };
+    assert.ok(iridescentTexture(stub));
+    assert.equal(calls.length, 180, 'wedge fallback painted');
+  } finally { delete globalThis.document; }
+});
