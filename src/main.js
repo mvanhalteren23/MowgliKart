@@ -50,7 +50,7 @@ gl.setAnimationLoop((now) => {
 // 🥽 button: enter / leave the headset session at any time (lobby, draft or mid-race)
 const vrBtn = document.getElementById('vrbtn');
 const vrLabel = () => { vrBtn.textContent = vr.active ? '✕ Exit VR' : vr.supported || navigator.xr ? '🥽 Enter VR' : '📱 Stereo view'; };
-vr.ready.then(() => { vrBtn.classList.toggle('hidden', !(vr.supported || !!navigator.xr || params.has('vr') || matchMedia('(pointer: coarse)').matches)); // some headset browsers report "not supported" until asked: always offer the button when WebXR exists vrLabel(); });
+vr.ready.then(() => { vrBtn.classList.toggle('hidden', !(vr.supported || !!navigator.xr || params.has('vr') || matchMedia('(pointer: coarse)').matches)); vrLabel(); }); // some headset browsers report "not supported" until asked: always offer the button when WebXR exists
 vr.onChange(vrLabel);
 vrBtn.onclick = () => { (vr.active ? vr.exit() : vr.enter(vr.supported || navigator.xr ? 'xr' : 'sim')).catch((e) => input.flash('VR unavailable: ' + (e.message ?? e))); };
 if (params.get('vr') === 'sim') vr.enter('sim');
