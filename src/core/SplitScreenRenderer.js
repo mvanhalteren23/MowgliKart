@@ -196,8 +196,15 @@ export class SplitScreenRenderer {
     session.messages.length = 0;
   }
 
+  /** Light tiers render at 1 CSS pixel per pixel (a 2x screen would otherwise shade 4x the pixels). */
+  _pixelRatio() {
+    const want = this.quality === 'vr' || this.quality === 'low' ? 1 : Math.min(devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2);
+    if (this.renderer.getPixelRatio() !== want) { this.renderer.setPixelRatio(want); this.resize(); }
+  }
+
   render(session, dt) {
     const r = this.renderer;
+    this._pixelRatio();
     if (this.vr?.active) return this._renderVR(session, dt);
     this.vrHud?.hide();
     if (this.quality !== 'low' && this.quality !== 'vr' && this.players === 1 && session.humans[0]) return this._renderPost(session, dt);

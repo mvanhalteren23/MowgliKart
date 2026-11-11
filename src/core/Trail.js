@@ -21,6 +21,10 @@ export class Trail {
     this.t += dt;
     if (this.t < this.every) return;
     this.t = 0;
+    // idle: once every sample has scrolled out, stop re-uploading the buffers and stop drawing it
+    this.idle = active ? 0 : (this.idle ?? 0) + 1;
+    if (this.idle > this.max) { if (this.mesh.visible) { this.mesh.visible = false; this.n = 0; this.geo.setDrawRange(0, 0); } return; }
+    this.mesh.visible = true;
     const { pos, col, max, w } = this;
     pos.copyWithin(6, 0, (max - 1) * 6); col.copyWithin(8, 0, (max - 1) * 8);
     pos[0] = p.x - right.x * w; pos[1] = p.y + 0.05; pos[2] = p.z - right.z * w;

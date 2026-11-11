@@ -67,7 +67,7 @@ export class ObstacleManager {
   update(dt, time) {
     for (const o of this.list) {
       o.cooldown = Math.max(0, o.cooldown - dt);
-      o.shadow.visible = o.away <= 0;
+      o.shadow.visible = o.away <= 0 && o.mesh.visible; // follows the headset tier's distance culling
       if (o.away > 0) { // batted aside by a shield / nitro: fly off then pop back
         o.away -= dt; o.mesh.position.y += 14 * dt; o.mesh.rotation.z += 9 * dt;
         o.sensor.body.setNextKinematicTranslation({ x: 0, y: -9999, z: 0 });

@@ -50,6 +50,8 @@ export class KartVisual {
       const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0), new THREE.MeshToonMaterial({ color: 0xffd9a0 })); head.position.set(0, 0.95, 0.2);
       this.proxy = new THREE.Group(); this.proxy.add(body, head); this.proxy.visible = false; this.root.add(this.proxy);
       if (!kart.isHuman) { const cp = this.model.getObjectByName('Cockpit'); if (cp) cp.visible = false; } // nobody sees another kart's dashboard
+      const panel = this.model.getObjectByName('Cockpit_Panel'); // 6-material rounded box = 6 draw calls; one textured material is plenty in the headset
+      if (panel && Array.isArray(panel.material)) { panel.geometry = panel.geometry.clone(); panel.geometry.clearGroups(); panel.material = panel.material[4]; }
     }
     this.shadow = makeShadowDecal(scene, 2.8); // soft contact shadow, re-projected onto the road every frame
     this.trails = kart.trailsOn ? [new Trail(scene), new Trail(scene)] : null;

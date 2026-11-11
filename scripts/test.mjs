@@ -234,3 +234,30 @@ test('old headset browsers: bubble/iridescent texture still builds when canvas h
     assert.equal(calls.length, 180, 'wedge fallback painted');
   } finally { delete globalThis.document; }
 });
+
+test('performance: karts run without CCD and every tree trunk is one merged collider (physics step stays cheap)', async () => {
+  const s = await mk('whistler_run');
+  let colliders = 0, ccd = 0; s.physics.world.forEachCollider(() => colliders++);
+  for (const k of s.karts) if (k.body.isCcdEnabled()) ccd++;
+  assert.equal(ccd, 0);
+  assert.ok((s.trees?.length ?? 0) + (s.forestTrees?.length ?? 0) > 500, 'Whistler still has its forest');
+  assert.ok(colliders < 80, 'trees are not separate bodies: ' + colliders + ' colliders');
+  for (let i = 0; i < 120; i++) s.step(1 / 60);
+  const t0 = performance.now(); for (let i = 0; i < 300; i++) s.step(1 / 60);
+  const ms = (performance.now() - t0) / 300;
+  assert.ok(ms < 4, `8-kart physics step ${ms.toFixed(2)} ms (was ~10 ms with CCD + 2,000 tree bodies)`);
+  s.dispose();
+});
+test('performance: headset tier merges multi-part trees into one instanced batch and small props per material', async () => {
+  const count = (s) => { let n = 0; s.scene.traverse((o) => { if (o.isMesh && o.visible) n++; }); return n; };
+  const hi = await mk('whistler_run');
+  const nHi = count(hi); hi.dispose();
+  const v = new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(8), seed: 1, quality: 'vr' });
+  for (let i = 0; i < 12; i++) v.updateVisuals(1 / 60, 1);
+  let merged = 0; v.scene.traverse((o) => { if (o.isInstancedMesh && o.material.vertexColors && o.geometry.attributes.color) merged++; });
+  assert.ok(merged > 0, 'vertex-coloured merged tree batches exist');
+  const nV = count(v);
+  assert.ok(nV < nHi * 0.75, `headset tier has far fewer drawable meshes: ${nV} vs ${nHi}`);
+  v.dispose();
+  new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(2), seed: 1, quality: 'high' }).dispose();
+});

@@ -20,8 +20,8 @@ export class GameLoop {
     if (!this.paused) {
       this.acc += dt;
       let n = 0;
-      while (this.acc >= STEP && n < 5) { this.step(STEP); this.acc -= STEP; n++; }
-      if (n === 5) this.acc = 0;
+      while (this.acc >= STEP && n < 3) { this.step(STEP); this.acc -= STEP; n++; } // max 3 catch-up steps: a slow frame slows the game a little instead of snowballing
+      if (n === 3) this.acc = Math.min(this.acc, STEP);
     }
     this.render(this.paused ? 1 : this.acc / STEP, this.paused ? 0 : dt);
     if (!this.driver) this.raf = requestAnimationFrame(this._frame);

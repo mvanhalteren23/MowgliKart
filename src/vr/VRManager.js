@@ -8,6 +8,9 @@ const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch {
 export const STEER_MODES = ['tilt', 'pad', 'head'];
 export const STEER_LABEL = { tilt: 'Tilt the remote', pad: 'Touchpad left/right', head: 'Tilt your head' };
 export const SHARPNESS = { low: 0.5, medium: 0.65, high: 0.85 };
+
+/** Standalone headset / headset browser (Pico, Quest, Firefox Reality, Wolvic...): these get the light 'vr' graphics tier by default. */
+export const IS_HEADSET = typeof navigator !== 'undefined' && /Pico|OculusBrowser|Quest|Wolvic|Mobile VR|Firefox Reality|VR\b/i.test(navigator.userAgent ?? '');
 const TILT_FULL = (34 * Math.PI) / 180, HEAD_FULL = (20 * Math.PI) / 180;
 
 /**
@@ -32,7 +35,7 @@ export class VRManager {
     this.gl = gl;
     this.mode = 'off';
     this.steerMode = STEER_MODES.includes(store.get('mk_vr_steer')) ? store.get('mk_vr_steer') : 'tilt';
-    this.sharpness = SHARPNESS[store.get('mk_vr_sharp')] ? store.get('mk_vr_sharp') : 'medium';
+    this.sharpness = SHARPNESS[store.get('mk_vr_sharp2')] ? store.get('mk_vr_sharp2') : 'low'; // G2 4K: 0.5 x 3840x2160 is still ~1k per eye
     this.supported = false;
     this.ready = (navigator.xr?.isSessionSupported?.('immersive-vr') ?? Promise.resolve(false)).then((ok) => (this.supported = !!ok)).catch(() => false);
     this.listeners = new Set();
@@ -77,7 +80,7 @@ export class VRManager {
   onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   _emit() { document.body.classList.toggle('vr', this.active); document.body.classList.toggle('vr-xr', this.mode === 'xr'); for (const f of this.listeners) f(this.mode); }
   setSteer(m) { this.steerMode = m; store.set('mk_vr_steer', m); }
-  setSharpness(s) { this.sharpness = s; store.set('mk_vr_sharp', s); }
+  setSharpness(s) { this.sharpness = s; store.set('mk_vr_sharp2', s); }
 
   /** Must be called from a user gesture (click / controller select) for kind 'xr'. */
   async enter(kind = 'xr') {

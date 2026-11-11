@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * Headset detail tier helpers. A whole 4.5 km track is built as a handful of huge meshes / instance batches, which is fine
@@ -73,6 +74,55 @@ export function chunkInstanced(mesh, cell = 160) {
   return out;
 }
 
+/**
+ * Merge the many small one-off static props (posts, signs, chalets, rocks, start/finish parts...) that share a material into
+ * one mesh per material, so they cost one draw call (then get chunked like everything else). Only direct mesh children of
+ * the given roots / of plain groups are touched; animated groups (judges, gondola, flags) are left alone.
+ */
+export function mergeSmallStatic(roots) {
+  const byMat = new Map(), V = new THREE.Vector3();
+  const consider = (m) => {
+    if (!m.isMesh || m.isInstancedMesh || m.isSkinnedMesh || Array.isArray(m.material) || m.userData.chunk || m.userData.noChunk || m.userData.decal) return;
+    const mat = m.material;
+    if (!mat || mat.transparent || mat.isShaderMaterial || mat.onBeforeCompile?.toString().length > 30) return;
+    const g = m.geometry, tris = (g.index ? g.index.count : g.attributes.position.count) / 3;
+    if (tris > 2500) return;
+    // group by appearance, not object identity: builders often create a fresh material per prop
+    const key = [mat.type, mat.color?.getHexString(), mat.map?.uuid ?? '', mat.side, !!mat.vertexColors, mat.emissive?.getHexString() ?? '', mat.fog].join('|');
+    if (!byMat.has(key)) byMat.set(key, []);
+    byMat.get(key).push(m);
+  };
+  const walk = (o, depth) => { // static groups only (nothing under them moves at runtime)
+    if (o.isMesh) { consider(o); return; }
+    if ((o.type === 'Group' || o.type === 'Object3D') && !o.userData.animated && depth < 4) for (const c of [...o.children]) walk(c, depth + 1);
+  };
+  for (const r of roots) walk(r, 0);
+  let merged = 0;
+  for (const list of byMat.values()) {
+    if (list.length < 3) continue;
+    const mat = list[0].material;
+    const parent = list[0].parent;
+    parent.updateWorldMatrix(true, false);
+    const geos = list.map((m) => {
+      m.updateWorldMatrix(true, false);
+      const g = m.geometry.clone();
+      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
+      if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+      g.applyMatrix4(new THREE.Matrix4().copy(parent.matrixWorld).invert().multiply(m.matrixWorld));
+      return g;
+    });
+    const keys = Object.keys(geos[0].attributes).join();
+    if (!geos.every((g) => Object.keys(g.attributes).join() === keys)) { geos.forEach((g) => g.dispose()); continue; }
+    const g = mergeGeometries(geos, false);
+    geos.forEach((x) => x.dispose());
+    if (!g) continue;
+    const mesh = new THREE.Mesh(g, mat); mesh.castShadow = list[0].castShadow; mesh.receiveShadow = list[0].receiveShadow;
+    for (const m of list) m.parent?.remove(m);
+    parent.add(mesh); merged += list.length;
+  }
+  return merged;
+}
+
 /** Chunk every large static mesh / instance batch under `roots`. Returns [{ obj, center, radius }] for distance culling. */
 export function chunkStatic(roots, cell = 160) {
   const big = [];
@@ -80,7 +130,7 @@ export function chunkStatic(roots, cell = 160) {
     if (!o.isMesh || o.userData.chunk || o.userData.noChunk) return;
     if (o.isInstancedMesh) { if (o.count > 24) big.push(o); return; }
     const g = o.geometry, tris = (g.index ? g.index.count : g.attributes.position?.count ?? 0) / 3;
-    if (tris > 2500 && !o.material?.isShaderMaterial) big.push(o);
+    if (tris > 1200 && !o.material?.isShaderMaterial) big.push(o);
   });
   const chunks = [], s = new THREE.Sphere();
   for (const o of big) for (const c of (o.isInstancedMesh ? chunkInstanced(o, cell) : chunkMesh(o, cell))) {

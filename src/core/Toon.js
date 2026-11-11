@@ -75,7 +75,7 @@ const isUnit = (o) => (toonCfg.coarse ? /^(Wheel_|Driver_Seat|Weapon_Mount|Shiel
 export function bakeAssembly(root) {
   root.updateMatrixWorld(true);
   const bake = (unit) => {
-    const geos = [], remove = [];
+    const geos = [], remove = [], byMat = new Map();
     const walk = (o) => {
       for (const c of [...o.children]) {
         if (c !== unit && isUnit(c) && c !== unit) { bake(c); continue; }
@@ -90,6 +90,14 @@ export function bakeAssembly(root) {
           for (let i = 0; i < n; i++) { col[i * 3] = c0.r; col[i * 3 + 1] = c0.g; col[i * 3 + 2] = c0.b; }
           g.setAttribute('color', new THREE.BufferAttribute(col, 3));
           geos.push(g); remove.push(m);
+        } else if (toonCfg.coarse && m.isMesh && !m.isInstancedMesh && !Array.isArray(m.material) && m.material?.map && !m.userData.keep && !/^Cockpit_/.test(m.name) && m.geometry.attributes.uv) {
+          // headset tier: textured parts that share one material (wood planks, brushed metal, decals) merge too, UVs kept
+          const g = m.geometry.clone();
+          for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+          if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+          g.applyMatrix4(new THREE.Matrix4().copy(unit.matrixWorld).invert().multiply(m.matrixWorld));
+          if (!byMat.has(m.material)) byMat.set(m.material, { geos: [], meshes: [] });
+          byMat.get(m.material).geos.push(g); byMat.get(m.material).meshes.push(m);
         }
         walk(c);
       }
@@ -104,6 +112,15 @@ export function bakeAssembly(root) {
       }
     }
     for (const g of geos) g.dispose();
+    for (const [mat, e] of byMat) {
+      if (e.geos.length < 2) continue;
+      const merged = mergeGeometries(e.geos, false);
+      if (!merged) continue;
+      const mesh = new THREE.Mesh(merged, mat); mesh.name = (unit.name || 'body') + '_tex'; mesh.renderOrder = e.meshes[0].renderOrder;
+      for (const m of e.meshes) m.parent?.remove(m);
+      unit.add(mesh);
+      e.geos.forEach((g) => g.dispose());
+    }
   };
   bake(root);
 }

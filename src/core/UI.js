@@ -2,7 +2,7 @@ import { PLAYABLE_KARTS, KARTS } from '../registries/KartRegistry.js';
 import { CHARACTERS, CHARACTER_IDS } from '../registries/CharacterRegistry.js';
 import { TRACKS, TRACK_ORDER } from '../registries/TrackRegistry.js';
 import { STAT_BOOSTS, WEAPONS, SHIELDS } from '../registries/CircuitDraftRegistry.js';
-import { STEER_MODES, STEER_LABEL, SHARPNESS } from '../vr/VRManager.js';
+import { STEER_MODES, STEER_LABEL, SHARPNESS, IS_HEADSET } from '../vr/VRManager.js';
 
 const PCOL = ['#44ff88', '#44aaff', '#ffcc33', '#ff66cc'];
 const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]);
@@ -21,7 +21,7 @@ export class UI {
   showLobby(defaults = {}) {
     return new Promise((resolve) => {
       const st = {
-        players: defaults.players ?? 1, autoShield: false, net: defaults.net ?? 'solo', code: defaults.code ?? '', error: defaults.error ?? '', quality: (() => { try { return localStorage.getItem('mk_q') || (matchMedia('(pointer: coarse)').matches ? 'high' : 'ultra'); } catch { return 'high'; } })(),
+        players: defaults.players ?? 1, autoShield: false, net: defaults.net ?? 'solo', code: defaults.code ?? '', error: defaults.error ?? '', quality: (() => { const def = IS_HEADSET ? 'vr' : matchMedia('(pointer: coarse)').matches ? 'high' : 'ultra'; try { return localStorage.getItem('mk_q2') || def; } catch { return def; } })(),
         karts: [PLAYABLE_KARTS[0].id, PLAYABLE_KARTS[1].id, PLAYABLE_KARTS[0].id, PLAYABLE_KARTS[1].id],
         kids: ['barnaby', 'chloe', 'max', 'zoe'],
       };
@@ -50,7 +50,7 @@ export class UI {
             <div class="row"><b>🥽 Headset</b> ${STEER_MODES.map((m) => `<button class="pill ${vr?.steerMode === m ? 'sel' : ''}" data-steer="${m}">${STEER_LABEL[m]}</button>`).join('')}<em>steering in VR</em></div>
             <div class="row"><b>VR detail</b> ${Object.keys(SHARPNESS).map((k) => `<button class="pill ${vr?.sharpness === k ? 'sel' : ''}" data-sharp="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}<em>${inVR ? 'applies the next time you enter VR' : vr?.supported ? 'press the 🥽 button (top right) to race in the headset' : 'open this page in the headset\'s WebXR browser to race in VR'}</em></div>
             <div class="row padrow" data-vr-hide><b>🎮 Controllers</b> ${pads ? `<span class="padok">${pads} connected</span> — P1${pads > 1 ? '–P' + pads : ''} use pad${pads > 1 ? 's' : ''} (keyboard still works)` : '<em>none yet — press any button on a controller (USB / Bluetooth) to wake it</em>'}${pads && st.players < pads ? `<button class="pill" data-usepads>Use ${pads} players</button>` : ''}</div>
-            <div class="row" data-vr-hide><b>Graphics</b> ${['ultra', 'high', 'low', 'vr'].map((k) => `<button class="pill ${q === k ? 'sel' : ''}" data-q="${k}">${k === 'vr' ? 'Headset' : k[0].toUpperCase() + k.slice(1)}</button>`).join('')}<em>Ultra = +ambient occlusion · 4K shadows · High = shadows, bloom, speed blur (1P) · Low = none</em></div>
+            <div class="row"><b>Graphics</b> ${['ultra', 'high', 'low', 'vr'].map((k) => `<button class="pill ${q === k ? 'sel' : ''}" data-q="${k}">${k === 'vr' ? 'Headset' : k[0].toUpperCase() + k.slice(1)}</button>`).join('')}<em>${IS_HEADSET ? 'Headset detected → Headset is the smooth choice · ' : ''}Ultra = +ambient occlusion · 4K shadows · High = shadows, bloom, speed blur (1P) · Low = none · Headset = light models + baked sky (fastest)</em></div>
             ${rows}
             <label class="chk" data-vr-hide><input type="checkbox" ${st.autoShield ? 'checked' : ''} data-auto> Auto-Shield assist (reactive counter-measure when a charged shield cell is held)</label>
             <button class="go" data-go>${st.net === 'host' ? 'CREATE ROOM ▶' : st.net === 'join' ? 'JOIN ROOM ▶' : 'START THE CUP ▶'}</button>
@@ -76,7 +76,7 @@ export class UI {
         el.querySelectorAll('[data-steer]').forEach((b) => (b.onclick = () => { vr?.setSteer(b.dataset.steer); render(); }));
         el.querySelectorAll('[data-sharp]').forEach((b) => (b.onclick = () => { vr?.setSharpness(b.dataset.sharp); render(); }));
         el.querySelector('[data-usepads]')?.addEventListener('click', () => { st.players = Math.min(4, pads); render(); });
-        el.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { st.quality = b.dataset.q; try { localStorage.setItem('mk_q', st.quality); } catch { /* private mode */ } render(); }));
+        el.querySelectorAll('[data-q]').forEach((b) => (b.onclick = () => { st.quality = b.dataset.q; try { localStorage.setItem('mk_q2', st.quality); } catch { /* private mode */ } render(); }));
         el.querySelectorAll('[data-kart]').forEach((b) => (b.onclick = () => { st.karts[+b.dataset.p] = b.dataset.kart; render(); }));
         el.querySelectorAll('[data-kid]').forEach((s) => (s.onchange = () => { st.kids[+s.dataset.kid] = s.value; }));
         el.querySelector('[data-auto]').onchange = (e) => { st.autoShield = e.target.checked; };

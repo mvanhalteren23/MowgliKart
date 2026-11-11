@@ -36,7 +36,8 @@ export class ItemManager {
         const pos = track.surface(d, lat).add(new V(0, 1.4, 0));
         mesh.position.copy(pos);
         this.group.add(mesh);
-        const sh = makeShadowDecal(this.s.scene, 2.2); const fr = track.atDist(d); sh.position.copy(fr.P).addScaledVector(fr.B, lat).addScaledVector(fr.N, 0.06); sh.quaternion.setFromUnitVectors(new V(0, 1, 0), fr.N); sh.material.opacity = 0.55;
+        let sh = { visible: true }; // headset tier: no contact-shadow decal under item boxes (one draw call each)
+        if (!this.s.lite) { sh = makeShadowDecal(this.s.scene, 2.2); const fr = track.atDist(d); sh.position.copy(fr.P).addScaledVector(fr.B, lat).addScaledVector(fr.N, 0.06); sh.quaternion.setFromUnitVectors(new V(0, 1, 0), fr.N); sh.material.opacity = 0.55; }
         this.boxes.push({ mesh, d, lat, pos, active: true, respawn: 0, shadow: sh });
       }
     }

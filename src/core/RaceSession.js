@@ -14,10 +14,10 @@ import { buildGondola } from '../track/Gondola.js';
 import { StartSequence, COUNTDOWN } from './StartSequence.js';
 import { ParticleSystem } from './FX.js';
 import { DRIFT_TIERS } from '../controllers/KartController.js';
-import { buildScenery, buildRoadside, buildMountains, buildRampOverlays, terrainMaterial, powderMaterial, wind } from '../track/Scenery.js';
+import { buildScenery, buildRoadside, buildMountains, buildRampOverlays, terrainMaterial, powderMaterial, wind, sceneryCfg } from '../track/Scenery.js';
 import { makeSky, Snowfall } from './Atmosphere.js';
 import { applyToon, toonCfg } from './Toon.js';
-import { chunkStatic, detail } from './Lod.js';
+import { chunkStatic, mergeSmallStatic, detail } from './Lod.js';
 import { TextureFactory } from './TextureFactory.js';
 
 const V = THREE.Vector3;
@@ -78,12 +78,20 @@ export class RaceSession {
     this.humans = this.karts.filter((k) => k.isHuman).sort((a, b) => a.index - b.index); // viewport order = player order (local players only)
     this.allHumans = this.karts.filter((k) => k.isHuman || k.remoteHuman); // + network players (for the end-of-race rule)
     const nBefore = this.scene.children.length;
+    sceneryCfg.merge = quality === 'vr';
     buildScenery(this); buildRoadside(this);
-    if (quality === 'vr') this.lod = chunkStatic([...trackRoots, ...this.scene.children.slice(nBefore)], 220); // frustum + distance culling for the headset
+    if (quality === 'vr') { // headset: merge small props per material, then chunk everything for frustum + distance culling
+      const scenery = this.scene.children.slice(nBefore), loose = this.scene.children.filter((o) => o.isMesh && !trackRoots.includes(o) && !o.userData.decal && o !== this.sky);
+      mergeSmallStatic([...trackRoots, ...loose, ...scenery]);
+      const roots = this.scene.children.filter((o) => (o.isMesh && o !== this.sky && !o.userData.decal) || scenery.includes(o));
+      this.lod = chunkStatic(roots, 260);
+    }
     this._buildJudges();
     assets.loadSkybox?.(trackId).then((tex) => { if (tex) { this.scene.background = tex; this.sky.visible = false; this.mountains.visible = false; } }); // a supplied 360 image wins over the baked one
-    for (const t of this.trees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 1.25 * t.scale, 3.5); // trunk + low boughs
-    for (const t of this.forestTrees ?? []) physics.addTree(t.p.x, t.p.y, t.p.z, 0.9 * t.scale, 3.5);
+    physics.addTrees([ // trunk + low boughs, merged into one static mesh collider
+      ...(this.trees ?? []).map((t) => ({ x: t.p.x, y: t.p.y, z: t.p.z, r: 1.25 * t.scale, halfH: 3.5 })),
+      ...(this.forestTrees ?? []).map((t) => ({ x: t.p.x, y: t.p.y, z: t.p.z, r: 0.9 * t.scale, halfH: 3.5 })),
+    ]);
     applyToon(this.scene);
     this.markShadows();
     this.rank();
@@ -162,7 +170,7 @@ export class RaceSession {
     Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 600 });
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.45;
     scene.add(sun, sun.target); this.sun = sun;
-    scene.fog = this.quality === 'vr' ? new THREE.Fog(th.fog, 150, 640) : new THREE.Fog(th.fog, 320, 1500);
+    scene.fog = this.quality === 'vr' ? new THREE.Fog(th.fog, 110, 460) : new THREE.Fog(th.fog, 320, 1500);
     this.mountains = buildMountains(th); this.mountains.userData.noShadow = true; scene.add(this.mountains);
     scene.background = new THREE.Color(th.sky[1]);
     this.sky = makeSky(th, this.sunDir);
@@ -413,10 +421,10 @@ export class RaceSession {
     }
     if ((this._tc = (this._tc ?? 0) + 1) % 25 === 1) applyToon(this.scene);
     if (this.quality === 'vr' && this._tc % 6 === 2) { // headset tier: nothing is drawn beyond the fog
-      const vp = this.viewPos.lengthSq() ? this.viewPos : f?.pos ?? this.viewPos, far = 620;
+      const vp = this.viewPos.lengthSq() ? this.viewPos : f?.pos ?? this.viewPos, far = 470; // = fog end: beyond it only the baked skybox shows
       for (const c of this.lod) c.obj.visible = c.center.distanceTo(vp) < far + c.radius;
-      for (const o of this.obstacles.list) if (o.away <= 0) o.mesh.visible = o.pos.distanceToSquared(vp) < 300 * 300;
-      for (const b of this.items.boxes) if (b.active) b.mesh.visible = b.pos.distanceToSquared(vp) < 300 * 300;
+      for (const o of this.obstacles.list) if (o.away <= 0) o.mesh.visible = o.pos.distanceToSquared(vp) < 260 * 260;
+      for (const b of this.items.boxes) if (b.active) b.mesh.visible = b.pos.distanceToSquared(vp) < 220 * 220;
       for (const v of this.visuals) v.setFar(v.root.position.distanceToSquared(vp) > 32 * 32);
     }
   }

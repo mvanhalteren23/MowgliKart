@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32, moguls } from './TrackSpline.js';
 import { TextureFactory } from '../core/TextureFactory.js';
 
@@ -84,8 +85,42 @@ export function terrainMaterial(theme) {
   return new THREE.MeshToonMaterial({ color: map ? 0xffffff : theme.ground, map, side: THREE.DoubleSide, normalMap: snow ? snowNormal() : null, normalScale: new THREE.Vector2(0.9, 0.9) });
 }
 
+/** Set by RaceSession before building: merge multi-part scatter props (tree = trunk + cones + caps) into one draw call. */
+export const sceneryCfg = { merge: false };
+
+/** Bake parts into one vertex-coloured geometry (each part's y-offset / stretch applied), for a single InstancedMesh. */
+function mergeParts(parts) {
+  const geos = parts.map((p) => {
+    const g = p.geo.clone();
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    if (!g.index) g.setIndex([...Array(g.attributes.position.count).keys()]);
+    g.applyMatrix4(new THREE.Matrix4().makeScale(p.sx ?? 1, p.sy ?? 1, p.sx ?? 1).premultiply(new THREE.Matrix4().makeTranslation(0, p.y ?? 0, 0)));
+    const c = new THREE.Color(p.color), n = g.attributes.position.count, col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  });
+  const g = mergeGeometries(geos, false); geos.forEach((x) => x.dispose());
+  return g;
+}
+
 /** Instanced scatter helper: parts = [{geo, color, y, s?}], places `n` instances via fn(i)->{p, scale, rot} (or null). */
 function scatter(group, parts, n, fn) {
+  if (sceneryCfg.merge && parts.length > 1 && parts.every((p) => !p.every || p.every === 1)) { // headset tier: one draw call per prop type, not per part
+    const geo = mergeParts(parts);
+    if (geo) {
+      const mat = parts.some((p) => p.sway) ? swayMat(0xffffff) : M(0xffffff); mat.vertexColors = true;
+      const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; m.userData.outline = true;
+      const o = new THREE.Object3D();
+      for (let i = 0; i < n; i++) {
+        const a = fn(i);
+        if (!a) o.scale.setScalar(0.0001); else { o.scale.setScalar(a.scale); o.position.set(a.p.x, a.p.y, a.p.z); o.rotation.set(0, a.rot, 0); }
+        o.updateMatrix(); m.setMatrixAt(i, o.matrix);
+      }
+      m.instanceMatrix.needsUpdate = true; group.add(m);
+      return;
+    }
+  }
   const meshes = parts.map((p) => { const m = new THREE.InstancedMesh(p.geo, p.sway ? swayMat(p.color) : M(p.color), n); m.frustumCulled = false; m.userData.outline = true; m.castShadow = m.receiveShadow = true; return m; });
   const o = new THREE.Object3D();
   for (let i = 0; i < n; i++) {
