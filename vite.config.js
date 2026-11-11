@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 // esnext target keeps top-level await working in production builds.
 export default defineConfig({
   base: './',
-  build: { target: ['es2020', 'firefox78', 'chrome80', 'safari14'], chunkSizeWarningLimit: 3500 },
+  build: { target: ['es2017', 'chrome61', 'firefox60', 'safari11'], chunkSizeWarningLimit: 3500 },
   esbuild: { target: 'esnext' },
   optimizeDeps: { exclude: ['@dimforge/rapier3d-compat'], esbuildOptions: { target: 'esnext' } },
   server: { host: true },
