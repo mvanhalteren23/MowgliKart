@@ -49,10 +49,10 @@ gl.setAnimationLoop((now) => {
 
 // 🥽 button: enter / leave the headset session at any time (lobby, draft or mid-race)
 const vrBtn = document.getElementById('vrbtn');
-const vrLabel = () => { vrBtn.textContent = vr.active ? '✕ Exit VR' : vr.supported ? '🥽 Enter VR' : '📱 Stereo view'; };
-vr.ready.then(() => { vrBtn.classList.toggle('hidden', !(vr.supported || params.has('vr') || matchMedia('(pointer: coarse)').matches)); vrLabel(); });
+const vrLabel = () => { vrBtn.textContent = vr.active ? '✕ Exit VR' : vr.supported || navigator.xr ? '🥽 Enter VR' : '📱 Stereo view'; };
+vr.ready.then(() => { vrBtn.classList.toggle('hidden', !(vr.supported || !!navigator.xr || params.has('vr') || matchMedia('(pointer: coarse)').matches)); // some headset browsers report "not supported" until asked: always offer the button when WebXR exists vrLabel(); });
 vr.onChange(vrLabel);
-vrBtn.onclick = () => { (vr.active ? vr.exit() : vr.enter(vr.supported ? 'xr' : 'sim')).catch((e) => input.flash('VR unavailable: ' + (e.message ?? e))); };
+vrBtn.onclick = () => { (vr.active ? vr.exit() : vr.enter(vr.supported || navigator.xr ? 'xr' : 'sim')).catch((e) => input.flash('VR unavailable: ' + (e.message ?? e))); };
 if (params.get('vr') === 'sim') vr.enter('sim');
 const pauseEl = document.getElementById('pause');
 const game = window.__game = { renderer, audio, vr, room, session: null, circuit: null, errors: [] };
@@ -259,6 +259,7 @@ async function joinRoom(cfg) {
 function shuffle(a, rnd) { const r = [...a]; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; }
 
 (async () => {
+  window.__booted = true; document.getElementById('bootlog')?.remove();
   ui.loading('Warming up the physics engine…');
   await initRapier();
   await assets.init();

@@ -16,6 +16,22 @@
   <button id="vrbtn" class="hidden">🥽 Enter VR</button>
   <div id="pause" class="hidden">PAUSED — press P</div>
   <div id="rotate"><div>↻<p>Rotate your phone to landscape to race</p></div></div>
+  <script>
+    /* Startup self-check: an old headset browser that cannot run the game would otherwise show a plain black page. */
+    (function () {
+      if (!Array.prototype.at) Object.defineProperty(Array.prototype, 'at', { value: function (n) { n = Math.trunc(n) || 0; if (n < 0) n += this.length; return this[n]; }, writable: true, configurable: true });
+      var errs = [], box = null;
+      function webgl2() { try { return !!document.createElement('canvas').getContext('webgl2'); } catch (e) { return false; } }
+      function show(extra) {
+        if (!box) { box = document.createElement('pre'); box.id = 'bootlog'; box.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;margin:0;padding:14px;background:#300;color:#fff;font:14px/1.35 monospace;white-space:pre-wrap;max-height:100%;overflow:auto'; document.body.appendChild(box); }
+        box.textContent = 'Mowgli Kart could not start\n' + (extra ? extra + '\n' : '') + errs.slice(0, 5).join('\n') +
+          '\n\nWebGL2: ' + webgl2() + '  WebXR: ' + !!navigator.xr + '\n' + navigator.userAgent;
+      }
+      window.addEventListener('error', function (e) { errs.push((e.message || 'error') + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : '')); show(); });
+      window.addEventListener('unhandledrejection', function (e) { errs.push('promise: ' + ((e.reason && (e.reason.message || e.reason)) || 'rejected')); show(); });
+      window.__bootCheck = setTimeout(function () { if (!window.__booted) show('Nothing started after 10 s (the browser may be too old, or blocked the script).'); }, 10000);
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
