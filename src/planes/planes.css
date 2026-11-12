@@ -1,0 +1,18 @@
+/* Sky Canyon additions on top of the shared menu styles */
+#phud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#phud canvas { position: absolute; left: 50%; transform: translateX(-50%); }
+#phud canvas:first-child { top: 6%; width: min(70vw, 760px); }
+#phud canvas:last-child { bottom: 2%; width: min(62vw, 620px); }
+body.vr #phud { display: none; }
+.pill.sw { border-left: 14px solid var(--sw); }
+.vrline.me { color: #8dffb5; font-weight: 800; }
+.screen.standings2 .vrline { font-size: 19px; margin: 6px 0; }
+#ptouch { position: fixed; inset: 0; z-index: 20; pointer-events: none; touch-action: none; }
+#ptouch .stick { position: absolute; left: 4vmin; bottom: 6vmin; width: 38vmin; height: 38vmin; border-radius: 50%; background: #ffffff22; border: 2px solid #ffffff55; pointer-events: auto; display: grid; place-items: center; touch-action: none; }
+#ptouch .stick i { width: 14vmin; height: 14vmin; border-radius: 50%; background: #ffffffaa; }
+#ptouch button { position: absolute; right: 4vmin; pointer-events: auto; border: 0; border-radius: 5vmin; color: #fff; font: 800 4vmin system-ui, sans-serif; touch-action: none; }
+#ptouch button small { display: block; font-size: 2vmin; opacity: .85; }
+#ptouch [data-b=sharp] { bottom: 6vmin; width: 26vmin; height: 26vmin; background: #ff3d71cc; }
+#ptouch [data-b=use] { bottom: 36vmin; width: 18vmin; height: 18vmin; background: #2f8de0cc; }
+#ptouch button.on { transform: scale(.93); filter: brightness(1.3); }
+.note a { color: #9bd0ff; }

@@ -43,6 +43,7 @@ export class UI {
           <div class="panel">
             <h1>MOWGLI<span>KART</span></h1>
             <p class="tag">Downhill Soapbox Circuit · 4-Race Roguelite Draft Cup</p>
+            <p class="note" data-vr-hide><a href="planes/" style="color:#9bd0ff">✈ Try Sky Canyon — plane racing →</a></p>
             ${st.error ? `<p class="vrline err">${st.error}</p>` : ''}
             <div class="row"><b>Mode</b> ${[['solo', 'This device'], ['host', 'Host a room'], ['join', 'Join a room']].map(([k, l]) => `<button class="pill ${st.net === k ? 'sel' : ''}" data-net="${k}">${l}</button>`).join('')}<em>Rooms: every headset, phone or computer is one racer (or split-screen); AI fills the grid to 8</em></div>
             ${st.net === 'join' ? `<div class="row vrrow"><b>Room code</b> <span class="codebox">${(st.code + '____').slice(0, 4).split('').join(' ')}</span> ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((n) => `<button class="pill key" data-key="${n}">${n}</button>`).join('')}<button class="pill key" data-key="del">⌫</button></div>` : `

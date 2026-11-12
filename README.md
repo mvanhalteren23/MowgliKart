@@ -15,6 +15,34 @@ npm run validate-assets && npm run gen-pipeline   # AI-asset tooling, see ASSET_
 Add `?auto=1&players=N` to the URL for an attract/test mode where human karts drive themselves (add `&stay=1` to stop after race 1).
 
 
+
+## ✈ Sky Canyon — plane racing (second game, `/planes/`)
+
+Mario-Kart-style plane racing built for the Pico G2 4K first: 3 laps of a canyon circuit, 8 planes (up to 4 pilots on their own headsets, AI fills the rest). Open `/planes/` on the same site; rooms work the same way as the kart game (host shows a 4-digit code, others join).
+
+**Flying with the Pico remote — hold it like a toy plane**
+
+| Input | Action |
+| --- | --- |
+| Roll the remote left / right | Bank and turn |
+| Tip the remote up / down | Climb / dive (whatever angle you hold during the countdown becomes "level") |
+| Trigger (hold) | Sharp turn: tighter, slightly slower, charges a 3-tier mini-boost released when you let go. Squeeze just before GO = rocket start |
+| Touchpad click | Use item |
+
+Gas is automatic. Keyboard (arrows / WASD, Space, Shift), gamepad and touch also work.
+
+**Mechanics:** gold rings = boost · balloons = items (boost, homing rocket, shield, storm-cloud mine; weighted by race position) · slipstream behind a rival · walls, floor, ceiling and rock pillars scrape speed off rather than crash you · a steering assist and a wall "cushion" keep imprecise hands in the canyon · AI rubber-bands to the best human.
+
+**VR comfort:** the camera never rolls — your plane banks around you — and the view edges darken in hard turns. A hit barrel-rolls the plane, not your head.
+
+**How it is built (for developing it further)**
+- `src/planes/sim.js` — all rules and flight physics, pure logic, no rendering. Every gameplay number is in the `TUNE` table at the top. No physics engine: the canyon is described in track coordinates (distance, sideways, height), so collisions are a few comparisons (8 planes step in < 0.2 ms).
+- `src/planes/course.js` — the circuit: centre-line points, width/ceiling profiles, arches, pillars, rings, balloons. Add a course by adding an entry.
+- `src/planes/skin/basic.js` — **every visual** (canyon, sky, planes, cockpit, rings, items). To upgrade the graphics, copy this file, change what the functions return (or load models), and set `SKIN` in `main.js`. Flight, race and network code do not change.
+- `src/planes/view.js` (scene sync), `hud.js`, `input.js`, `netrace.js`, `main.js` (menus + loop). VR, menus-in-headset and room transport are shared with the kart game (`src/vr`, `src/net`).
+- Budget of the basic skin: no lights (lighting baked into vertex colours), ~8k triangles and ~30 draw calls per view (the kart game's headset tier is ~150k / ~115).
+- Tests: `scripts/test-planes.mjs` (course, flight, items, AI finishing 3 laps, two-device sync, skin contract). Test URLs: `/planes/?auto=1` (autopilot), `&vr=sim` (stereo view).
+
 ## 🥽 Pico G2 4K — first-person VR
 
 The game is played from the driver's seat and runs as a WebXR app in the headset's browser. There is one build (this site); the headset, phones and computers all open the same URL.

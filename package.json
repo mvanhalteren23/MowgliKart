@@ -10,7 +10,7 @@
     "validate-assets": "node scripts/validate-assets.js",
     "sim": "node scripts/sim.mjs",
     "gen-pipeline": "node scripts/gen-pipeline.js",
-    "test": "node --test scripts/test.mjs",
+    "test": "node --test scripts/test.mjs scripts/test-planes.mjs",
     "check": "npm test && npm run build"
   },
   "dependencies": {
