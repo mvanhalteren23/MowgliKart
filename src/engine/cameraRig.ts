@@ -31,7 +31,7 @@ export const CAMERA_YAW = 0;
 export const COMBAT_BLEND_SECONDS = 0.8;
 
 export const OVERWORLD_FRAMING: Framing = { pitch: (35 * Math.PI) / 180, distance: 34, lookHeight: 1 };
-export const COMBAT_FRAMING: Framing = { pitch: (11 * Math.PI) / 180, distance: 16, lookHeight: 1.25 };
+export const COMBAT_FRAMING: Framing = { pitch: (13 * Math.PI) / 180, distance: 19, lookHeight: -0.9 };
 
 export function cameraPose(target: V3, framing: Framing, yaw: number = CAMERA_YAW): CameraPose {
   const look = { x: target.x, y: target.y + framing.lookHeight, z: target.z };

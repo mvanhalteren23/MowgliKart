@@ -7,9 +7,11 @@
  * materials (MeshBasicMaterial / MeshLambertMaterial) are therefore also safe.
  *
  * GEOMETRY CONVENTIONS
- *  - Terrain mesh: world-space positions, `uv` (0,0) at the chunk's north-west
- *    (min x, min z) corner and (1,1) at the south-east. Needs vertex normals.
- *  - Water mesh: a flat quad covering the chunk at y = WATER_LEVEL with the same uv.
+ *  - Terrain mesh: world-space positions, needs vertex normals. The albedo is a
+ *    canvas texture (flipY), so its uv is u = x across the chunk (west→east) and
+ *    v = 1 at the north (min z) edge, 0 at the south edge.
+ *  - Water mesh: a flat quad covering the chunk at y = WATER_LEVEL. It samples the
+ *    height DataTexture (no flip): u west→east, v = 0 at the north edge, 1 at the south.
  *  - Billboards (sprite / aura / foliage): `createBillboardGeometry()`; put the
  *    object's position at the feet and its scale = (width, height, 1) in metres.
  */

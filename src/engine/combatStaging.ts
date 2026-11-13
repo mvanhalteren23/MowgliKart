@@ -11,7 +11,7 @@ export interface StagePlacement {
   readonly heading: number;
 }
 
-export const STAGE_HALF_GAP = 3.4;
+export const STAGE_HALF_GAP = 1.8;
 const ROW_SPACING = 1.7;
 
 /** Party in a staggered line on the left, enemies mirrored on the right. */
@@ -24,8 +24,9 @@ export function stageLayout(combatants: readonly Combatant[], anchor: Vec2): Map
     list.forEach((c, i) => {
       const lane = i - (n - 1) / 2;
       out.set(c.id, {
-        x: anchor.x + dir * (STAGE_HALF_GAP + Math.abs(lane) * 0.55 + (i % 2) * 0.35),
-        z: anchor.z + lane * ROW_SPACING,
+        // The battle camera is low and side-on, so separation must come from x, not depth.
+        x: anchor.x + dir * (STAGE_HALF_GAP + i * 1.9),
+        z: anchor.z + lane * ROW_SPACING * 0.6,
         heading: side === 'party' ? 0 : Math.PI,
       });
     });
