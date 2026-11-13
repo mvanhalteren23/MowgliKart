@@ -13,6 +13,7 @@ const world: WorldMapDef = {
   props: [{ kind: 'well', position: { x: 90, z: 104 } }], npcs: [], encounterZones: [], fishingSpots: [],
   paths: [{ points: [{ x: 20, z: 110 }, { x: 90, z: 110 }, { x: 200, z: 150 }], width: 4 }],
   water: [{ center: { x: 118, z: 96 }, radius: 16, kind: 'lake' }, { center: { x: 330, z: 125 }, radius: 110, kind: 'sea' }],
+  chunks: [{ cx: 0, cz: 0, name: 'Test', biome: 'frontier', act: 1, scatterProps: [], foliageDensity: 1 }], traversalGates: [],
 };
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });

@@ -9,8 +9,12 @@
  */
 import { create } from 'zustand';
 import { runtime } from '@/app/runtime';
+import { COMBAT_PARTY_SIZE } from '@/types/contracts';
 import type {
   CombatState,
+  EndingDef,
+  ClueDef,
+  FieldActionOptions,
   CoreServices,
   FieldActionId,
   FusedProfile,
@@ -63,7 +67,7 @@ const EMPTY_STATE: GameState = {
   questLog: {},
   trackedQuestId: null,
   liberatedRegions: [],
-  township: { recruited: [], built: {} },
+  township: { recruited: [], built: {}, levels: {} },
   combat: null,
   combatZoneId: null,
   dialogue: null,
@@ -102,6 +106,32 @@ export function deriveHeroSheet(state: Pick<GameState, 'roster' | 'liberatedRegi
   const withGear = core.gear.statsWithLoadout(hero, progress.loadout, ctx);
   const fused = core.fusion.compose(hero, withGear, core.progression.skillsAt(hero, progress.level), progress.fusion);
   return { heroId, level: progress.level, base, withGear, fused };
+}
+
+/** Highest-priority ending whose condition currently holds (null before any is reachable). */
+export function resolveEnding(state: Pick<GameState, 'flags' | 'questLog'>): EndingDef | null {
+  const { db, core } = getServices();
+  const reached = db.endings.filter((e) => core.quests.evaluate(e.when, state.flags, state.questLog));
+  return reached.sort((a, b) => b.priority - a.priority)[0] ?? null;
+}
+
+/** Investigation clues found so far. */
+export function foundClues(state: Pick<GameState, 'flags' | 'questLog'>): readonly ClueDef[] {
+  const { db, core } = getServices();
+  return db.clues.filter((c) => core.quests.evaluate(c.foundWhen, state.flags, state.questLog));
+}
+
+/** Heroes who fight: the leader first, then party order, capped at COMBAT_PARTY_SIZE. */
+export function combatParty(state: Pick<GameState, 'party' | 'leader'>): readonly HeroId[] {
+  const rest = state.party.filter((h) => h !== state.leader);
+  return [state.leader, ...rest].filter((h) => state.party.includes(h)).slice(0, COMBAT_PARTY_SIZE);
+}
+
+function freshProgress(s: Services, heroId: HeroId, level: number): HeroProgress {
+  const hero = s.db.heroes[heroId];
+  const loadout = s.db.start.loadouts[heroId] ?? {};
+  const stats = s.core.gear.statsWithLoadout(hero, loadout, { level, liberatedRegions: 0 });
+  return { level, xp: 0, hp: stats.maxHp, ap: stats.maxAp, loadout, fusion: [] };
 }
 
 function newGame(s: Services): GameState {
@@ -199,6 +229,17 @@ export const useGame = create<GameStore>()((set, get) => {
           break;
         case 'flag':
           break; // already folded into flags by the quest engine
+        case 'hero': {
+          const st = get();
+          if (st.party.includes(r.heroId)) break;
+          // Newcomers join at the party's average level so they are immediately useful.
+          const levels = st.party.map((h) => st.roster[h]?.level ?? 1);
+          const level = Math.max(1, Math.round(levels.reduce((a, b) => a + b, 0) / Math.max(1, levels.length)));
+          const progress = st.roster[r.heroId] ?? freshProgress(getServices(), r.heroId, level);
+          set({ party: [...st.party, r.heroId], roster: { ...st.roster, [r.heroId]: progress } });
+          toast(`${db.heroes[r.heroId].name} joins the party!`, 'reward');
+          break;
+        }
       }
     }
   };
@@ -345,16 +386,26 @@ export const useGame = create<GameStore>()((set, get) => {
         case 'build':
           get().toggleTownship(true);
           break;
+        case 'traverse':
+          get().performFieldAction(ctx.action);
+          break;
       }
     },
 
-    performFieldAction(action: FieldActionId) {
+    performFieldAction(action: FieldActionId, options: FieldActionOptions = {}) {
       const st = get();
       if (st.mode !== 'overworld' || action === 'none') return;
       const { db, systems } = getServices();
       const def = db.fieldActions[action];
+      if (!def) return;
       if (!db.heroes[st.leader].fieldActions.includes(action)) {
         const who = st.party.find((h) => db.heroes[h].fieldActions.includes(action));
+        if (who && def.clears) {
+          // Traversal is zero-menu: the right companion steps forward automatically.
+          get().setLeader(who);
+          get().performFieldAction(action, options);
+          return;
+        }
         toast(who ? `Swap to ${db.heroes[who].name} to ${def.label.toLowerCase()}.` : `No one here can ${def.label.toLowerCase()}.`, 'warn');
         return;
       }
@@ -370,7 +421,8 @@ export const useGame = create<GameStore>()((set, get) => {
           const lure = Object.keys(st.inventory).find((id) => db.items[id]?.kind === 'lure' && (st.inventory[id] ?? 0) > 0) ?? null;
           if (lure) addItem(lure, -1);
           const seed = (Math.floor(st.worldTime * 1000) ^ (encounterSeq++ * 2654435761)) >>> 0;
-          set({ fishing: systems.fishing.cast(ctx.spotId, lure, seed), mode: 'fishing', fieldCooldowns: cooldowns });
+          const quality = Math.max(0, Math.min(1, options.castQuality ?? 0.5));
+          set({ fishing: systems.fishing.cast(ctx.spotId, lure, seed, quality), mode: 'fishing', fieldCooldowns: cooldowns });
           break;
         }
         case 'drakeSight':
@@ -379,10 +431,32 @@ export const useGame = create<GameStore>()((set, get) => {
           get().dispatchWorldEvent({ type: 'fieldAction', action: 'drakeSight', targetId: 'area' });
           break;
         case 'huntShot':
+          set({ fieldCooldowns: cooldowns });
+          runtime.requests.huntAim =
+            options.aimAngle !== undefined ? { angle: options.aimAngle, power: Math.max(0, Math.min(1, options.aimPower ?? 1)) } : null;
+          runtime.requests.fieldAction = action;
+          break;
         case 'huntDash':
           set({ fieldCooldowns: cooldowns });
           runtime.requests.fieldAction = action;
           break;
+        case 'roll':
+        case 'glide':
+        case 'grapple':
+        case 'leap':
+        case 'commune':
+        case 'unseal': {
+          const ctx = st.contextAction;
+          if (ctx?.kind !== 'traverse' || ctx.action !== action) {
+            toast(`Nothing here to ${def.label.toLowerCase()}.`, 'info');
+            return;
+          }
+          set({ fieldCooldowns: cooldowns });
+          runtime.requests.traverseGate = ctx.gateId;
+          runtime.requests.fieldAction = action;
+          get().dispatchWorldEvent({ type: 'fieldAction', action, targetId: ctx.gateId });
+          break;
+        }
       }
     },
 
@@ -448,12 +522,12 @@ export const useGame = create<GameStore>()((set, get) => {
       const st = get();
       const { db, core } = getServices();
       if (st.mode === 'combat' || !db.encounters[encounterId]) return;
-      const party = st.party.flatMap((heroId) => {
+      const party = combatParty(st).flatMap((heroId) => {
         const p = st.roster[heroId];
         return p ? [{ heroId, level: p.level, hp: p.hp, ap: p.ap, loadout: p.loadout, fusion: p.fusion }] : [];
       });
       const seed = (Math.imul(encounterSeq++, 0x9e3779b1) ^ Math.floor(st.worldTime * 997) ^ db.world.seed) >>> 0;
-      const combat = core.combat.start({ encounterId, party, liberatedRegions: st.liberatedRegions.length }, seed);
+      const combat = core.combat.start({ encounterId, party, liberatedRegions: st.liberatedRegions.length, flags: st.flags }, seed);
       set({ combat, combatZoneId: zoneId, mode: 'combat', dialogue: null, contextAction: null });
       if (isOver(combat)) settleCombat(combat);
       else pumpEnemies();
@@ -591,6 +665,25 @@ export const useGame = create<GameStore>()((set, get) => {
       for (const e of r.events) get().dispatchWorldEvent(e);
     },
 
+    upgradeBuilding(plotId) {
+      const st = get();
+      const { db, core, systems } = getServices();
+      const r = systems.township.upgrade(plotId, st.township, st.coin, st.inventory, st.flags, core.quests.evaluate, st.questLog);
+      if (!r.ok) {
+        toast(r.reason, 'warn');
+        return;
+      }
+      const inventory = { ...st.inventory };
+      for (const it of r.spend.items) inventory[it.itemId] = Math.max(0, (inventory[it.itemId] ?? 0) - it.qty);
+      set({ township: r.state, coin: st.coin - r.spend.coin, inventory });
+      const buildingId = r.state.built[plotId];
+      const def = db.township.buildings.find((b) => b.id === buildingId);
+      const level = r.state.levels[plotId] ?? 1;
+      const up = def?.upgrades.find((u) => u.level === level);
+      toast(`${def?.name ?? 'Building'} upgraded: ${up?.name ?? `level ${level}`}`, 'reward');
+      for (const e of r.events) get().dispatchWorldEvent(e);
+    },
+
     trackQuest(questId) {
       set({ trackedQuestId: questId });
     },
@@ -631,6 +724,8 @@ export function bindServices(s: Services): void {
   toastSeq = 1;
   encounterSeq = 1;
   runtime.requests.fieldAction = null;
+  runtime.requests.huntAim = null;
+  runtime.requests.traverseGate = null;
   useGame.setState(newGame(s));
   const start = s.db.world.playerStart;
   runtime.player.x = start.x;

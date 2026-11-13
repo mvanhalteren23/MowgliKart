@@ -12,6 +12,8 @@
  */
 import {
   CHUNK_SIZE,
+  type BiomeChunkDef,
+  type BiomeId,
   type HeroId,
   type SpriteAnim,
   type SpriteSheetId,
@@ -117,15 +119,76 @@ export function pathDistance(world: WorldMapDef, x: number, z: number): number {
   return best;
 }
 
+const DEFAULT_CHUNKS: readonly BiomeChunkDef[] = [{ cx: 0, cz: 0, name: 'Frontier', biome: 'frontier', act: 1, scatterProps: [], foliageDensity: 1 }];
+const chunkIndex = new WeakMap<WorldMapDef, Map<string, BiomeChunkDef>>();
+
+function authoredChunks(world: WorldMapDef): readonly BiomeChunkDef[] {
+  return world.chunks && world.chunks.length > 0 ? world.chunks : DEFAULT_CHUNKS;
+}
+
+/** The authored chunk containing (x, z), if any. */
+export function chunkAt(world: WorldMapDef, x: number, z: number): BiomeChunkDef | undefined {
+  let idx = chunkIndex.get(world);
+  if (!idx) {
+    idx = new Map(authoredChunks(world).map((c) => [`${c.cx},${c.cz}`, c]));
+    chunkIndex.set(world, idx);
+  }
+  return idx.get(`${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`);
+}
+
+/** Distance (m) from (x, z) to the nearest authored chunk; 0 inside one. */
+export function distanceToAuthored(world: WorldMapDef, x: number, z: number): number {
+  let best = Infinity;
+  for (const c of authoredChunks(world)) {
+    const dx = Math.max(0, c.cx * CHUNK_SIZE - x, x - (c.cx + 1) * CHUNK_SIZE);
+    const dz = Math.max(0, c.cz * CHUNK_SIZE - z, z - (c.cz + 1) * CHUNK_SIZE);
+    const d = Math.hypot(dx, dz);
+    if (d < best) best = d;
+    if (best === 0) break;
+  }
+  return best;
+}
+
+/** Biome at any point: the containing authored chunk, else the nearest one's (wilderness blends outward). */
+export function biomeAt(world: WorldMapDef, x: number, z: number): BiomeId {
+  const here = chunkAt(world, x, z);
+  if (here) return here.biome;
+  let best: BiomeChunkDef | undefined;
+  let bestD = Infinity;
+  for (const c of authoredChunks(world)) {
+    const d = Math.hypot((c.cx + 0.5) * CHUNK_SIZE - x, (c.cz + 0.5) * CHUNK_SIZE - z);
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best?.biome ?? 'frontier';
+}
+
+/** Terrain relief per biome: [base amplitude, extra rugged amplitude]. */
+const BIOME_RELIEF: Readonly<Record<BiomeId, readonly [number, number]>> = {
+  frontier: [3.4, 0],
+  coast: [2.6, 0],
+  forest: [3.8, 1.5],
+  highland: [5, 7],
+  marsh: [1.4, 0],
+  desert: [3, 2.5],
+  tundra: [4, 4],
+  volcanic: [4.5, 8],
+  skyreach: [5, 10],
+  ruin: [3, 1.5],
+};
+
 /** Continuous ground height in metres at any world position (any chunk). */
 export function sampleHeight(world: WorldMapDef, x: number, z: number): number {
   const seed = world.seed | 0;
-  let h = 0.7 + fbm(x / 70, z / 70, seed, 4) * 3.4;
+  const biome = biomeAt(world, x, z);
+  const [amp, rugged] = BIOME_RELIEF[biome];
+  let h = 0.7 + fbm(x / 70, z / 70, seed, 4) * amp;
+  if (rugged > 0) h += Math.pow(fbm(x / 45, z / 45, seed + 31, 3), 2) * rugged;
 
-  // Wilderness rises into rolling highlands outside the authored chunk.
-  const outX = Math.max(0, -x, x - CHUNK_SIZE);
-  const outZ = Math.max(0, -z, z - CHUNK_SIZE);
-  const out = Math.hypot(outX, outZ);
+  // Wilderness rises into rolling highlands away from the authored continent.
+  const out = distanceToAuthored(world, x, z);
   if (out > 0) h += smoothstep(10, 160, out) * (fbm(x / 110, z / 110, seed + 77, 3) * 16 - 3);
 
   // Settlements sit on levelled ground.
@@ -188,13 +251,27 @@ export interface TerrainChunk {
   readonly hasWater: boolean;
 }
 
-const KIND_COLORS: Readonly<Record<TerrainKind, readonly [number, number, number]>> = {
+type Rgb = readonly [number, number, number];
+const KIND_COLORS: Readonly<Record<TerrainKind, Rgb>> = {
   grass: [96, 142, 74],
   path: [176, 146, 104],
   sand: [214, 196, 146],
   water: [58, 96, 122],
   rock: [128, 122, 120],
   plaza: [164, 156, 150],
+};
+/** Per-biome repaint of the base kinds (ground = what "grass" means in that biome). */
+const BIOME_COLORS: Readonly<Record<BiomeId, Partial<Record<TerrainKind, Rgb>>>> = {
+  frontier: {},
+  coast: { grass: [110, 150, 82], sand: [226, 210, 160] },
+  forest: { grass: [70, 118, 62], path: [140, 112, 80] },
+  highland: { grass: [118, 140, 88], rock: [140, 132, 126] },
+  marsh: { grass: [92, 112, 66], path: [112, 98, 70], sand: [120, 112, 80], water: [60, 84, 70] },
+  desert: { grass: [212, 178, 118], path: [190, 150, 100], rock: [176, 128, 92], sand: [226, 196, 140] },
+  tundra: { grass: [226, 232, 238], path: [190, 196, 206], rock: [150, 160, 176], sand: [208, 214, 222] },
+  volcanic: { grass: [72, 62, 60], path: [110, 70, 54], rock: [52, 46, 48], sand: [96, 82, 76] },
+  skyreach: { grass: [150, 186, 150], path: [214, 206, 182], rock: [190, 194, 206] },
+  ruin: { grass: [108, 124, 92], path: [150, 146, 138], plaza: [138, 134, 128] },
 };
 
 /** Heightmap only — pure, usable without a DOM. */
@@ -240,13 +317,14 @@ export function generateTerrainChunk(world: WorldMapDef, cx: number, cz: number,
       const jx = (hash2(px, py, seed + 3) - 0.5) * 1.4;
       const jz = (hash2(py, px, seed + 4) - 0.5) * 1.4;
       const kind = terrainKindAt(world, wx + jx, wz + jz);
-      const base = KIND_COLORS[kind];
+      const biome = biomeAt(world, wx, wz);
+      const base = BIOME_COLORS[biome][kind] ?? KIND_COLORS[kind];
       const patch = fbm(wx / 18, wz / 18, seed + 21, 3);
       const grain = hash2(px, py, seed + 9);
       let r = base[0];
       let g = base[1];
       let b = base[2];
-      if (kind === 'grass') {
+      if (kind === 'grass' && (biome === 'frontier' || biome === 'coast' || biome === 'forest' || biome === 'highland' || biome === 'ruin')) {
         // Sun-bleached meadows vs. deep clover, in broad painterly patches.
         const dry = smoothstep(0.52, 0.72, patch);
         r = lerp(r, 148, dry * 0.6);
@@ -646,10 +724,16 @@ function creatureLook(id: string): CreatureLook {
   const hue = rnd();
   const base = { antlers: false, tusks: false, longEars: false, mane: false, tail: 'short' as const };
   if (id.startsWith('dragon.')) {
-    const fiery = !/frost|tide|water|mire/.test(id);
-    const body = fiery ? hsl(0.01 + rnd() * 0.05, 0.7, 0.45) : hsl(0.55 + rnd() * 0.06, 0.55, 0.5);
-    const big = /drake|wyrm|elder|great/.test(id);
-    return { ...base, kind: 'dragon', body, belly: '#f2d28a', detail: fiery ? '#ffd166' : '#d6f3ff', size: big ? 1.3 : 0.95, tail: 'long', worldHeight: big ? 3.6 : 2.4 };
+    const frost = /frost|ice|rime|snow|tide|water|mire/.test(id);
+    const storm = /thunder|storm|spark|volt|gale/.test(id);
+    const apex = /apex|sovereign|crown|ascend|elder/.test(id);
+    const whelp = /pup|hatch|whelp|kit/.test(id);
+    const body = apex ? '#e8c75a' : storm ? hsl(0.13 + rnd() * 0.03, 0.75, 0.5) : frost ? hsl(0.55 + rnd() * 0.06, 0.55, 0.55) : hsl(0.01 + rnd() * 0.05, 0.7, 0.45);
+    const detail = apex ? '#fff6d8' : storm ? '#fff3a0' : frost ? '#d6f3ff' : '#ffd166';
+    const big = !whelp && /drake|wyrm|great/.test(id);
+    const size = apex ? 1.4 : big ? 1.3 : whelp ? 0.62 : 0.95;
+    const worldHeight = apex ? 4.4 : big ? 3.6 : whelp ? 1.5 : 2.4;
+    return { ...base, kind: 'dragon', body, belly: apex ? '#fff1c2' : '#f2d28a', detail, size, tail: 'long', worldHeight };
   }
   if (id.startsWith('animal.deer')) return { ...base, kind: 'quadruped', body: '#a9744a', belly: '#e6cfa8', detail: '#f1e6cf', size: 0.85, antlers: true, worldHeight: 1.7 };
   if (id.startsWith('animal.boar')) return { ...base, kind: 'quadruped', body: '#5d4a42', belly: '#7a655a', detail: '#efe9dc', size: 0.75, tusks: true, mane: true, worldHeight: 1.2 };

@@ -75,7 +75,35 @@ export type Affinities = Readonly<Partial<Record<Element, number>>>;
  * 3. Heroes, skills, dragon forms
  * ════════════════════════════════════════════════════════════════════════ */
 
-export type FieldActionId = 'fish' | 'drakeSight' | 'huntShot' | 'huntDash' | 'none';
+export type FieldActionId =
+  | 'fish'
+  | 'drakeSight'
+  | 'huntShot'
+  | 'huntDash'
+  /** Traversal actions: each clears one `TraversalGateKind` (see `TRAVERSAL_FOR_GATE`). */
+  | 'roll'
+  | 'glide'
+  | 'grapple'
+  | 'leap'
+  | 'commune'
+  | 'unseal'
+  | 'none';
+
+/**
+ * Overworld obstacles that block the open world until the right leader clears them.
+ *  boulder → roll (smash through)      chasm → glide (cross a gap on the wind)
+ *  cliff   → grapple (pull up a ledge) river → leap (bound across water / lily-stones)
+ *  grove   → commune (the forest parts) ward  → unseal (dispel a Covenant seal)
+ */
+export type TraversalGateKind = 'boulder' | 'chasm' | 'cliff' | 'river' | 'grove' | 'ward';
+export const TRAVERSAL_FOR_GATE: Readonly<Record<TraversalGateKind, FieldActionId>> = {
+  boulder: 'roll',
+  chasm: 'glide',
+  cliff: 'grapple',
+  river: 'leap',
+  grove: 'commune',
+  ward: 'unseal',
+};
 
 export interface FieldActionDef {
   readonly id: FieldActionId;
@@ -84,8 +112,14 @@ export interface FieldActionDef {
   readonly glyph: string;
   readonly description: string;
   readonly cooldownSec: number;
-  /** Effective radius or range in metres (meaning depends on the action). */
+  /**
+   * Effective radius or range in metres (meaning depends on the action):
+   * huntShot = max arrow range at full draw; huntDash = strike radius at the dash end (dash length is 8 m);
+   * drakeSight = reveal radius; traversal actions = how close (m) the leader must be to the gate.
+   */
   readonly range: number;
+  /** Set on traversal actions: the gate kind this action clears. */
+  readonly clears?: TraversalGateKind;
 }
 
 export interface HeroDef {
@@ -93,8 +127,16 @@ export interface HeroDef {
   readonly name: string;
   readonly title: string;
   readonly blurb: string;
-  /** Playable in the vertical slice. Locked heroes still appear (greyed) in the hot-swap rail. */
+  /**
+   * Has full playable content. Being playable does not mean being in the party: heroes outside
+   * `db.start.party` join through a `{ type: 'hero' }` quest reward (see `joinQuest`).
+   * Non-party heroes appear greyed (locked) in the hot-swap rail.
+   */
   readonly playable: boolean;
+  /** Quest whose completion recruits this hero (absent for starting members). */
+  readonly joinQuest?: QuestId;
+  /** Chain id of this hero's personal multi-stage quest line (see `QuestDef.chain`). */
+  readonly personalChain?: string;
   readonly sprite: SpriteSheetId;
   readonly accent: string; // CSS colour
   readonly baseStats: Stats; // at level 1
@@ -150,6 +192,10 @@ export interface DragonFormDef {
   readonly apCostToEnter: number;
   readonly apDrainPerTurn: number;
   readonly maxTurns: number;
+  /** Form is only usable when this world flag is truthy (passed in via `EncounterSetup.flags`). */
+  readonly requiresFlag?: string;
+  /** The apex form: shown last, typically gated by `requiresFlag` from the Act III story. */
+  readonly apex?: boolean;
   /** Multipliers applied to effective stats while in form (after gear + fusion). */
   readonly statMultipliers: StatBlock;
   readonly affinities: Affinities;
@@ -303,6 +349,31 @@ export interface CombatHookInfo {
 
 /** Hook ids the core registry MUST implement for the slice. */
 export const HOOK_COUNTER_ATTACK: CombatHookId = 'hook.counterAttack';
+
+/**
+ * Every hook the core registry MUST implement for the full campaign. Signature gear
+ * references these ids; params are forwarded from `SignatureGearDef.hookParams`.
+ *  counterAttack  onDamaged      chance, power — basic-attack counter after a single-target physical hit (never chains).
+ *  dragonSurge    onTurnStart    sync, ap      — while transformed: +sync and refund AP each turn.
+ *  markedQuarry   onAttackLanded chance, turns, potency — apply `defDown` to the target.
+ *  mendingEcho    onTurnStart    fraction      — heal the lowest-HP-fraction living ally by fraction × owner maxHp.
+ *  bulwark        onGuard        armor, turns, potency — gain `guardUp` and grant `guardUp` to all allies for `turns`.
+ *  pilfer         onAttackLanded chance, coin  — steal: add `coin` to the encounter's coin reward (once per enemy).
+ *  spellEcho      onAttackLanded chance, power — after a magical skill lands, repeat it once at `power`× (never chains).
+ *  rootbind       onDamaged      chance, turns — stun the attacker for `turns`.
+ *  reap           onKill         ap, potency, turns — restore `ap` and gain `atkUp`.
+ */
+export const HOOK_IDS = {
+  counterAttack: 'hook.counterAttack',
+  dragonSurge: 'hook.dragonSurge',
+  markedQuarry: 'hook.markedQuarry',
+  mendingEcho: 'hook.mendingEcho',
+  bulwark: 'hook.bulwark',
+  pilfer: 'hook.pilfer',
+  spellEcho: 'hook.spellEcho',
+  rootbind: 'hook.rootbind',
+  reap: 'hook.reap',
+} as const satisfies Record<string, CombatHookId>;
 /** Params: `chance` (0..1), `power` (multiplier of a basic attack). Trigger: onDamaged by an enemy's single-target physical hit while alive. Never chains off another counter. */
 
 export interface ConsumableDef {
@@ -356,7 +427,12 @@ export interface PartyMemberSetup {
   readonly fusion: readonly SpiritId[];
 }
 
+/** Combat fields the leader plus the next members in party order, up to this many. */
+export const COMBAT_PARTY_SIZE = 4;
+
 export interface EncounterSetup {
+  /** World flags at encounter start (gates `DragonFormDef.requiresFlag`). Absent = no flags. */
+  readonly flags?: WorldFlags;
   readonly encounterId: EncounterId;
   readonly party: readonly PartyMemberSetup[];
   readonly liberatedRegions: number;
@@ -479,7 +555,9 @@ export type Condition =
   | { readonly kind: 'questAtLeast'; readonly questId: QuestId; readonly status: QuestStatus }
   | { readonly kind: 'all'; readonly of: readonly Condition[] }
   | { readonly kind: 'any'; readonly of: readonly Condition[] }
-  | { readonly kind: 'not'; readonly of: Condition };
+  | { readonly kind: 'not'; readonly of: Condition }
+  /** True when at least `atLeast` of the sub-conditions hold (clue counts, ending thresholds). */
+  | { readonly kind: 'count'; readonly of: readonly Condition[]; readonly atLeast: number };
 
 /** Strictly ordered; a quest only ever moves forward. */
 export const QUEST_STATUS_ORDER = ['HIDDEN', 'DISCOVERED', 'ACTIVE', 'COMPLETED'] as const;
@@ -493,7 +571,9 @@ export type Reward =
   | { readonly type: 'coin'; readonly amount: number }
   | { readonly type: 'xp'; readonly amount: number }
   | { readonly type: 'spirit'; readonly spiritId: SpiritId }
-  | { readonly type: 'flag'; readonly key: string; readonly value: FlagValue };
+  | { readonly type: 'flag'; readonly key: string; readonly value: FlagValue }
+  /** Recruit a hero into the travelling party. */
+  | { readonly type: 'hero'; readonly heroId: HeroId };
 
 export interface ObjectiveDef {
   readonly id: ObjectiveId;
@@ -509,6 +589,8 @@ export interface ObjectiveDef {
 
 export interface QuestDef {
   readonly id: QuestId;
+  /** Multi-stage quest lines (personal quests): stages of one chain share `id`, `stage` is 1-based. */
+  readonly chain?: { readonly id: string; readonly stage: number; readonly of: number; readonly title: string };
   readonly title: string;
   readonly kind: QuestKind;
   readonly act: 1 | 2 | 3;
@@ -554,7 +636,7 @@ export interface QuestStepResult {
 export const CHUNK_SIZE = 250;
 export const ACTIVE_RADIUS = 500;
 
-export type BiomeId = 'frontier' | 'coast' | 'forest' | 'highland';
+export type BiomeId = 'frontier' | 'coast' | 'forest' | 'highland' | 'marsh' | 'desert' | 'tundra' | 'volcanic' | 'skyreach' | 'ruin';
 export type TerrainKind = 'grass' | 'path' | 'sand' | 'water' | 'rock' | 'plaza';
 
 export interface RegionDef {
@@ -569,7 +651,11 @@ export interface RegionDef {
 }
 
 export interface PropDef {
-  readonly kind: 'house' | 'chapel' | 'arena' | 'dock' | 'stall' | 'well' | 'sign' | 'lantern' | 'fence' | 'ruin' | 'campfire' | 'shrine';
+  readonly kind:
+    | 'house' | 'chapel' | 'arena' | 'dock' | 'stall' | 'well' | 'sign' | 'lantern' | 'fence' | 'ruin' | 'campfire' | 'shrine'
+    // campaign biomes
+    | 'tent' | 'windmill' | 'tower' | 'fortWall' | 'gateArch' | 'bridge' | 'cactus' | 'iceSpire' | 'mangrove'
+    | 'basalt' | 'crystal' | 'obelisk' | 'cathedral' | 'stiltHouse' | 'skyPlatform' | 'statue';
   readonly position: Vec2;
   readonly rotation?: number; // radians about y
   readonly scale?: number;
@@ -624,6 +710,22 @@ export interface EncounterZoneDef {
 
 /* ── Township ─────────────────────────────────────────────────────────── */
 
+export interface BuildingUpgradeDef {
+  /** Level reached by this upgrade (2, 3, …). A freshly built building is level 1. */
+  readonly level: number;
+  readonly name: string;
+  readonly description: string;
+  readonly cost: { readonly coin: number; readonly items: readonly { readonly itemId: ItemId; readonly qty: number }[] };
+  /** Flag set to true once this level is reached (e.g. `township.smithy.2`). */
+  readonly unlocksFlag: string;
+  readonly perk: string;
+  /** Must hold before the upgrade is offered (e.g. a story chapter). Default: always. */
+  readonly requires?: Condition;
+  readonly requirementText?: string;
+  /** Visual growth of the building prop at this level. */
+  readonly propScale: number;
+}
+
 export interface BuildingDef {
   readonly id: BuildingId;
   readonly name: string;
@@ -635,6 +737,8 @@ export interface BuildingDef {
   /** Flag set to true once built — unlocks services (e.g. `township.smithy`). */
   readonly unlocksFlag: string;
   readonly perk: string;
+  /** Architectural upgrades, ascending by level. */
+  readonly upgrades: readonly BuildingUpgradeDef[];
 }
 
 export interface PlotDef {
@@ -667,6 +771,8 @@ export interface TownshipState {
   readonly recruited: readonly NpcId[];
   /** plot → building instantiated on it. */
   readonly built: Readonly<Record<PlotId, BuildingId>>;
+  /** plot → current architectural level (1 once built). */
+  readonly levels: Readonly<Record<PlotId, number>>;
 }
 
 export type TownshipResult =
@@ -773,6 +879,38 @@ export interface FishingSession {
  * 9. Game database (authored by world-lore, consumed by everyone)
  * ════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * One authored 250 m × 250 m chunk of the continent. Chunk (cx, cz) covers world
+ * x ∈ [cx·250, (cx+1)·250), z ∈ [cz·250, (cz+1)·250). Unauthored chunks are wilderness.
+ */
+export interface BiomeChunkDef {
+  readonly cx: number;
+  readonly cz: number;
+  readonly name: string;
+  readonly biome: BiomeId;
+  readonly act: 1 | 2 | 3;
+  /** Prop kinds the engine scatters procedurally (instanced) as biome dressing in this chunk. */
+  readonly scatterProps: readonly PropDef['kind'][];
+  /** 0..1 multiplier on foliage density; 0 = barren. */
+  readonly foliageDensity: number;
+}
+
+export interface TraversalGateDef {
+  readonly id: string;
+  readonly kind: TraversalGateKind;
+  readonly label: string;
+  readonly position: Vec2;
+  /** Blocking footprint: a box `width` (across the path) × `depth`, rotated about y. */
+  readonly width: number;
+  readonly depth: number;
+  readonly rotation?: number;
+  /** Two sides of the gate; a successful traversal moves the leader from the nearer to the other. */
+  readonly sides: readonly [Vec2, Vec2];
+  /** Gate stays cleared for good once crossed (boulders smashed, wards broken, groves opened). */
+  readonly clearsPermanently: boolean;
+  readonly presentWhen?: Condition;
+}
+
 export interface WorldMapDef {
   readonly seed: number;
   readonly playerStart: Vec2;
@@ -784,6 +922,38 @@ export interface WorldMapDef {
   /** Painted features the terrain generator must respect. */
   readonly paths: readonly { readonly points: readonly Vec2[]; readonly width: number }[];
   readonly water: readonly { readonly center: Vec2; readonly radius: number; readonly kind: 'lake' | 'sea' }[];
+  /** Every authored chunk. Must include (0, 0) — the Lanternwick frontier. */
+  readonly chunks: readonly BiomeChunkDef[];
+  readonly traversalGates: readonly TraversalGateDef[];
+}
+
+export interface StoryNodeDef {
+  readonly id: string;
+  readonly act: 1 | 2 | 3;
+  readonly title: string;
+  readonly regionId: RegionId;
+  /** The main quest that plays this chapter. */
+  readonly questId: QuestId;
+  readonly next: readonly string[];
+}
+
+export interface ClueDef {
+  readonly id: string;
+  readonly title: string;
+  readonly text: string;
+  readonly regionId: RegionId;
+  /** Investigation quest this clue belongs to. */
+  readonly investigationId: QuestId;
+  /** Found once this holds. Convention: also set flag `clue:<id>` via a quest/dialogue so it is countable. */
+  readonly foundWhen: Condition;
+}
+
+export interface EndingDef {
+  readonly id: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly priority: number;
+  readonly when: Condition;
 }
 
 export interface StoryActDef {
@@ -808,6 +978,12 @@ export interface GameDatabase {
   readonly quests: readonly QuestDef[];
   readonly dialogues: Readonly<Record<DialogueId, DialogueDef>>;
   readonly acts: readonly StoryActDef[];
+  /** Main story graph: nodes in play order; `next` lists the nodes it opens. */
+  readonly storyGraph: readonly StoryNodeDef[];
+  /** Hollow Covenant investigation clues, found non-linearly across the continent. */
+  readonly clues: readonly ClueDef[];
+  /** Endings, highest `priority` whose `when` holds wins (see `resolveEnding` in the store). */
+  readonly endings: readonly EndingDef[];
   readonly world: WorldMapDef;
   readonly township: TownshipDef;
   readonly species: Readonly<Record<SpeciesId, SpeciesDef>>;
@@ -876,6 +1052,9 @@ export interface CoreServices {
 export interface WorldSystems {
   readonly township: {
     initial(): TownshipState;
+    canUpgrade(plotId: PlotId, state: TownshipState, coin: number, inventory: Readonly<Record<ItemId, number>>, flags: WorldFlags, evaluate: CoreServices['quests']['evaluate'], log: QuestLog): { readonly ok: boolean; readonly reason?: string };
+    /** Raise the building on `plotId` one level. Events include `{ type: 'setFlag', key: upgrade.unlocksFlag, value: true }`. */
+    upgrade(plotId: PlotId, state: TownshipState, coin: number, inventory: Readonly<Record<ItemId, number>>, flags: WorldFlags, evaluate: CoreServices['quests']['evaluate'], log: QuestLog): TownshipResult;
     canRecruit(npcId: NpcId, state: TownshipState, flags: WorldFlags, evaluate: CoreServices['quests']['evaluate'], log: QuestLog): { readonly ok: boolean; readonly reason?: string };
     recruit(npcId: NpcId, state: TownshipState): TownshipResult;
     canBuild(plotId: PlotId, buildingId: BuildingId, state: TownshipState, coin: number, inventory: Readonly<Record<ItemId, number>>): { readonly ok: boolean; readonly reason?: string };
@@ -896,7 +1075,11 @@ export interface WorldSystems {
     dashStrike(animals: readonly AnimalState[], dashEnd: Vec2, radius: number, rng: number): HuntResult;
   };
   readonly fishing: {
-    cast(spotId: FishingSpotId, lureId: ItemId | null, seed: number): FishingSession;
+    /**
+     * `castQuality` 0..1 from the cast gesture (default 0.5): better casts bite sooner and
+     * shift weight toward rarer fish (≤ +50 % for uncommon and rarer at 1.0).
+     */
+    cast(spotId: FishingSpotId, lureId: ItemId | null, seed: number, castQuality?: number): FishingSession;
     /** `holding` = player is holding the reel button; `tapped` = pressed this frame. */
     tick(session: FishingSession, input: { readonly holding: boolean; readonly tapped: boolean }, dt: number): FishingSession;
     /** Catch for a landed session. */
@@ -925,7 +1108,19 @@ export type ContextAction =
   | { readonly kind: 'talk'; readonly npcId: NpcId; readonly label: string }
   | { readonly kind: 'fish'; readonly spotId: FishingSpotId; readonly label: string }
   | { readonly kind: 'encounter'; readonly zoneId: string; readonly encounterId: EncounterId; readonly label: string }
-  | { readonly kind: 'build'; readonly plotId: PlotId; readonly label: string };
+  | { readonly kind: 'build'; readonly plotId: PlotId; readonly label: string }
+  /** Near a traversal gate the current party can clear: pressing performs `action`. */
+  | { readonly kind: 'traverse'; readonly gateId: string; readonly action: FieldActionId; readonly label: string };
+
+/** Gesture results from the touch mini-games. */
+export interface FieldActionOptions {
+  /** Hunting: world aim angle (atan2(dz, dx) convention) from the drag-to-aim gesture. */
+  readonly aimAngle?: number;
+  /** Hunting: draw strength 0..1 (scales range; < 0.25 is a weak, short shot). */
+  readonly aimPower?: number;
+  /** Fishing: cast quality 0..1 from the flick gesture. */
+  readonly castQuality?: number;
+}
 
 export interface ActiveDialogue {
   readonly dialogueId: DialogueId;
@@ -985,7 +1180,7 @@ export interface GameActions {
   /** UI → store: press the contextual action button. */
   triggerContextAction(): void;
   /** UI → store: press a leader field-action button. Fishing needs a `fish` context. */
-  performFieldAction(action: FieldActionId): void;
+  performFieldAction(action: FieldActionId, options?: FieldActionOptions): void;
   /** Engine → store: result of a hunt resolved against live animals. */
   reportHunt(result: HuntResult): void;
   dispatchWorldEvent(event: WorldEvent): void;
@@ -1000,6 +1195,7 @@ export interface GameActions {
   setFusion(heroId: HeroId, spirits: readonly SpiritId[]): void;
   recruit(npcId: NpcId): void;
   build(plotId: PlotId, buildingId: BuildingId): void;
+  upgradeBuilding(plotId: PlotId): void;
   trackQuest(questId: QuestId | null): void;
   toggleChronicle(open?: boolean): void;
   toggleInspector(open?: boolean, heroId?: HeroId): void;
@@ -1024,7 +1220,13 @@ export interface RuntimeBus {
   /** Engine writes: 0 = overworld framing, 1 = combat framing. */
   camera: { combatBlend: number; yaw: number };
   /** Store writes one-shot requests; engine consumes and clears. */
-  requests: { fieldAction: FieldActionId | null };
+  requests: {
+    fieldAction: FieldActionId | null;
+    /** Set with a huntShot request when it came from the aim gesture; engine consumes and clears. */
+    huntAim: { angle: number; power: number } | null;
+    /** Set with a traversal request: the gate to cross (engine validates proximity). */
+    traverseGate: string | null;
+  };
   /** Engine writes each frame (dev overlay + perf test). */
   perf: { drawCalls: number; fps: number; triangles: number };
 }
