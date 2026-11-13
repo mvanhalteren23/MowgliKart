@@ -84,7 +84,7 @@ export class NetRace {
 
   /* called from RaceSession._events for karts this device owns */
   onKartEvent(kart, e) {
-    if (e.type !== 'useItem' && e.type !== 'fire' && e.type !== 'shield') return;
+    if (e.type !== 'useItem' && e.type !== 'fire' && e.type !== 'shield' && e.type !== 'lasso') return;
     this.net.send({ t: 'e', id: kart.id, ev: e.type, item: e.data?.id });
   }
   _onEvent(m) {
@@ -94,6 +94,7 @@ export class NetRace {
       if (m.ev === 'useItem') { lo.pickup = m.item; items.usePickup(kart); }
       else if (m.ev === 'fire' && lo.weapon) { lo.weaponCd = 0; items.fireWeapon(kart); }
       else if (m.ev === 'shield' && lo.shield) { lo.shieldCd = 0; lo.shieldActive = 0; items.activateShield(kart); }
+      else if (m.ev === 'lasso') { const tg = this.byId.get(m.item); if (tg) this.s.lasso.apply(kart, tg); }
     }
     if (this.net.isHost) this.net.send(m, null, m.from);
   }

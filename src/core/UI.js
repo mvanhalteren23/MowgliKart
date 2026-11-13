@@ -61,11 +61,13 @@ export class UI {
               <tr><td colspan="4" class="note">Controllers: up to 4 pads (Xbox / PlayStation / Switch Pro / generic) on PC, Mac, Android and iPhone. Menus: ◀ ▶ change players, A start/select.</td></tr><tr><td>Hop · Drift · Trick · Push-start</td><td>Space</td><td>Enter</td><td>R1</td></tr>
               <tr><td>Use Mystery Item</td><td>Left Shift</td><td>Right Shift</td><td>L1</td></tr>
               <tr><td>Fire Circuit Weapon</td><td>E</td><td>/</td><td>X</td></tr>
-              <tr><td>Activate Circuit Shield</td><td>Q</td><td>.</td><td>B / Y</td></tr></table>
+              <tr><td>Activate Circuit Shield</td><td>Q</td><td>.</td><td>B</td></tr>
+              <tr><td>🤠 Lasso the rival ahead (reels you in, slows them)</td><td>F</td><td>,</td><td>Y</td></tr></table>
               <table class="ctl"><tr><th colspan="2">🥽 Pico G2 4K remote (in VR)</th></tr>
               <tr><td>Steer</td><td>Tilt the remote like a handlebar (or touchpad / head tilt — Headset row above)</td></tr>
               <tr><td>Trigger</td><td>Hold = hop + drift, release = mini-turbo · tap at a ramp lip = trick · countdown: hold on DROP!</td></tr>
               <tr><td>Touchpad click</td><td>Use item, otherwise fire weapon · click the lower third = shield · countdown: pump in the green</td></tr>
+              <tr><td>🤠 Lasso</td><td>Point the remote at a rival until a green ring appears on them, then click the touchpad: you are reeled in, they slow down</td></tr>
               <tr><td>Touch lower edge of pad</td><td>Brake / reverse (gas is automatic)</td></tr>
               <tr><td>Menus</td><td>Point the remote, pull the trigger</td></tr></table>
               <p class="note">V / R3 / 👁 switches between the driver's seat and the chase camera. M mutes audio · P pauses · 10 more pre-registered karts unlock in Milestone 2.</p>

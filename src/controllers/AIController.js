@@ -30,6 +30,7 @@ export class AIController {
     const k = this.kart, track = ctx.track, inp = k.input;
     // reset edge flags each step
     inp.hopPressed = inp.itemPressed = inp.weaponPressed = inp.shieldPressed = false;
+    inp.lassoPressed = k.lassoCd <= 0 && this.s.state === 'RACING' && this.rnd() < 0.006; // throws when a rival is in front (fire() needs a target)
     const s = this.s;
     const speed = k.speed;
 

@@ -1,12 +1,12 @@
 import { blankInput } from '../controllers/KartController.js';
 
-const ACTIONS = ['hop', 'item', 'weapon', 'shield', 'use'];
+const ACTIONS = ['hop', 'item', 'weapon', 'shield', 'use', 'lasso'];
 // SPEC 3.7.4 keyboard layouts (two simultaneous local keyboard players)
 const KEYMAPS = [
-  { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', hop: 'Space', item: 'ShiftLeft', weapon: 'KeyE', shield: 'KeyQ' },
-  { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', hop: 'Enter', item: 'ShiftRight', weapon: 'Slash', shield: 'Period' },
+  { left: 'KeyA', right: 'KeyD', up: 'KeyW', down: 'KeyS', hop: 'Space', item: 'ShiftLeft', weapon: 'KeyE', shield: 'KeyQ', lasso: 'KeyF' },
+  { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', hop: 'Enter', item: 'ShiftRight', weapon: 'Slash', shield: 'Period', lasso: 'Comma' },
 ];
-const GAMEPAD = { throttleBtn: [7, 0], brake: 6, hop: 5, item: 4, weapon: [2], shield: [1, 3], axis: 0 };
+const GAMEPAD = { throttleBtn: [7, 0], brake: 6, hop: 5, item: 4, weapon: [2], shield: [1], lasso: 3, axis: 0 };
 
 /**
  * Keyboard + Web Gamepad multiplexer. Player i reads gamepad i (if connected) merged with keyboard scheme i (i < 2).
@@ -58,10 +58,10 @@ export class InputManager {
   _initTouch() {
     if (!(('ontouchstart' in window) || navigator.maxTouchPoints > 0)) return;
     document.body.classList.add('touch');
-    const held = { left: false, right: false, gas: false, brake: false, hop: false, item: false, weapon: false, shield: false };
+    const held = { left: false, right: false, gas: false, brake: false, hop: false, item: false, weapon: false, shield: false, lasso: false };
     const root = document.createElement('div'); root.id = 'touch'; root.className = 'hidden';
     const defs = [['left', '◀', 'steer l'], ['right', '▶', 'steer r'], ['hop', 'DRIFT<small>hop · trick</small>', 'act big'], ['gas', 'GAS', 'act mid'], ['brake', 'BRAKE', 'act small'],
-      ['cam', '👁', 'act cam'], ['item', '🎁', 'act sm2 i1'], ['weapon', '⚔', 'act sm2 i2'], ['shield', '🛡', 'act sm2 i3']];
+      ['cam', '👁', 'act cam'], ['lasso', '🤠', 'act sm2 i4'], ['item', '🎁', 'act sm2 i1'], ['weapon', '⚔', 'act sm2 i2'], ['shield', '🛡', 'act sm2 i3']];
     for (const [name, label, cls] of defs) {
       const b = document.createElement('button'); b.className = 'tb ' + cls; b.innerHTML = label; b.dataset.t = name; b.setAttribute('aria-label', name);
       const down = (e) => { e.preventDefault(); if (name === 'cam') { this.camToggle?.(); return; } b.setPointerCapture?.(e.pointerId); if (!held[name] && this.latch[0][name] !== undefined) this.latch[0][name] = true; held[name] = true; b.classList.add('on'); };
@@ -96,7 +96,7 @@ export class InputManager {
     pads.slice(0, 4).forEach((gp, i) => {
       const b = (n) => !!gp.buttons[n]?.pressed;
       const held = {
-        hop: b(GAMEPAD.hop), item: b(GAMEPAD.item), weapon: GAMEPAD.weapon.some(b), shield: GAMEPAD.shield.some(b),
+        hop: b(GAMEPAD.hop), item: b(GAMEPAD.item), weapon: GAMEPAD.weapon.some(b), shield: GAMEPAD.shield.some(b), lasso: b(GAMEPAD.lasso),
       };
       for (const a of ACTIONS) { if (held[a] && !this.padHeld[i][a]) this.latch[i][a] = true; this.padHeld[i][a] = held[a]; }
       const edge = (name, val) => { if (val && !this.padPrev[i][name]) this.menuEdges.push({ player: i, name }); this.padPrev[i][name] = val; };
@@ -110,7 +110,7 @@ export class InputManager {
   read(i, out = blankInput()) {
     const k = this.keys, m = KEYMAPS[i];
     let steer = 0, throttle = 0, brake = 0;
-    const hold = { hop: false, item: false, weapon: false, shield: false, use: false };
+    const hold = { hop: false, item: false, weapon: false, shield: false, use: false, lasso: false };
     if (m) {
       steer += (k.has(m.right) ? 1 : 0) - (k.has(m.left) ? 1 : 0);
       throttle = k.has(m.up) ? 1 : 0; brake = k.has(m.down) ? 1 : 0;
@@ -145,7 +145,7 @@ export class InputManager {
           throttle = braking ? 0 : 1; brake = Math.max(brake, braking ? 1 : 0);
           hold.hop = hold.hop || vi.trigger;
           if (e.trigger) this.latch[0].hop = true;
-          if (e.click) this.latch[0][e.clickY > 0.55 ? 'shield' : 'use'] = true;
+          if (e.click) this.latch[0][this.lassoLocked ? 'lasso' : e.clickY > 0.55 ? 'shield' : 'use'] = true; // pointing at a rival (ring on them): the click throws the lasso
         } else { // push-start: click the pad in rhythm, squeeze the trigger for throttle on DROP!
           throttle = Math.max(throttle, vi.trigger ? 1 : 0);
           if (e.click) this.latch[0].hop = true;

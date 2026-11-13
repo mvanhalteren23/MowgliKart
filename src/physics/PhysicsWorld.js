@@ -86,7 +86,7 @@ export class PhysicsWorld {
     const body = this.world.createRigidBody(bd);
     const cd = RAPIER.ColliderDesc.cuboid(0.58, 0.3, 1.05).setTranslation(0, -0.08, 0)
       .setDensity(0).setFriction(0.0).setRestitution(0.25)
-      .setCollisionGroups(ig(GROUPS.KART, GROUPS.TRACK | GROUPS.KART | GROUPS.OBSTACLE | GROUPS.HAZARD));
+      .setCollisionGroups(ig(GROUPS.KART, GROUPS.TRACK | GROUPS.OBSTACLE | GROUPS.HAZARD)); // kart-vs-kart is an arcade bump in RaceSession (no rigid-body pile-ups / flips)
     const collider = this.world.createCollider(cd, body);
     this.owners.set(collider.handle, { kind: 'kart', ref });
     return { body, collider };

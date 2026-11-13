@@ -72,7 +72,8 @@ export class KartController {
     this.fsm = FSM.NORMAL;
     this.drift = { dir: 0, charge: 0, tier: 0, hopT: 0, releaseT: 0 };
     this.boosts = [];
-    this.t = { stall: 0, stun: 0, spin: 0, oil: 0, mud: 0, foam: 0, blind: 0, stink: 0, surge: 0, gripLoss: 0 };
+    this.t = { stall: 0, stun: 0, spin: 0, oil: 0, mud: 0, foam: 0, blind: 0, stink: 0, surge: 0, gripLoss: 0, lasso: 0, bump: 0 };
+    this.lassoCd = 3; this.lassoAim = null;
     this.spinDir = 1; this.spinTorque = 0;
     this.trick = { armedAt: -9, leftLipAt: -9, active: false, pending: false, flipT: 0, ramp: null };
     this.grounded = false; this.airTime = 0; this.prevVel = new V(); this.lastNormalVel = 0;
@@ -232,6 +233,7 @@ export class KartController {
     this.onPowder = sus.tag === 'powder';
     if (this.onPowder && !nitro) vEff *= 0.8; // deep powder is slower than the groomed groove
     if (this.t.foam > 0) vEff *= 0.4;
+    if (this.t.lasso > 0) vEff *= 0.7; // roped by a rival's lasso
     if (this.finished) vEff *= 0.5;
     if (this.t.stall > 0) vEff *= 0.45; // blown-gasket start
     if (this.vtopScale) vEff *= this.vtopScale; // AI rubber-banding / skill
@@ -294,6 +296,20 @@ export class KartController {
     }
     if (anyGround) this.groundNormalPrev = (this.groundNormalPrev ?? new V()).copy(n);
 
+    // ---- stay upright: on the ground the chassis is pulled level with the road and roll/pitch wobble is damped hard,
+    //      so bumps and landings rock the kart instead of rolling it over
+    if (anyGround && !this.trick.active) {
+      const a2 = b.angvel(); _v.set(a2.x, a2.y, a2.z);
+      const yawW = _v.dot(this.up);
+      _t2.crossVectors(this.up, n);
+      const keep = Math.max(0, 1 - 7 * dt);
+      b.setAngvel({
+        x: this.up.x * yawW + (_v.x - this.up.x * yawW) * keep + _t2.x * 9 * dt,
+        y: this.up.y * yawW + (_v.y - this.up.y * yawW) * keep + _t2.y * 9 * dt,
+        z: this.up.z * yawW + (_v.z - this.up.z * yawW) * keep + _t2.z * 9 * dt,
+      }, true);
+    }
+
     // ---- spin torque (oil slick, banana, poo)
     if (this.t.oil > 0 && !this.shieldImmuneOil) {
       b.applyTorqueImpulse({ x: 0, y: 950 * clamp(this.t.oil / 1.8, 0, 1) * this.spinDir * dt, z: 0 }, true);
@@ -309,6 +325,7 @@ export class KartController {
     if (!locked || inp.shieldPressed) {
       if (inp.itemPressed) ctx.items.usePickup(this);
       if (inp.usePressed && !ctx.items.usePickup(this)) ctx.items.fireWeapon(this); // one-button "smart use" (VR remote / touch)
+      if (inp.lassoPressed) ctx.lasso?.fire(this);
       if (inp.weaponPressed) ctx.items.fireWeapon(this);
       if (inp.shieldPressed) ctx.items.activateShield(this);
     }
@@ -370,7 +387,19 @@ export class KartController {
     if (!this.finished && !this.controlLocked && this.input.throttle > 0.5 && this.speed < 1.2 && ctx.time > 6) this.stuckT = (this.stuckT ?? 0) + dt; else this.stuckT = 0;
     if (this.stuckT > 4) { this.stuckT = 0; this._respawn(ctx, false, 'stuck'); }
     // flipped for too long
-    if (this.up.y < 0.1 && this.grounded) { this.flipT = (this.flipT ?? 0) + dt; if (this.flipT > 2) this._respawn(ctx, false, 'flipped'); } else this.flipT = 0;
+    // tipped over: pop back onto the wheels right where it is (no trip back to the last checkpoint)
+    if (this.up.y < 0.35 && this.airTime < 1.2) {
+      this.flipT = (this.flipT ?? 0) + dt;
+      if (this.flipT > 0.6) {
+        this.flipT = 0;
+        const f = _t.copy(this.fwd).setY(0); if (f.lengthSq() < 0.01) f.copy(track.atDist(this.d).T).setY(0); f.normalize();
+        _m.makeBasis(_r.crossVectors(f, UPV).normalize(), UPV, _t2.copy(f).negate()); _q.setFromRotationMatrix(_m);
+        this.body.setRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w }, true);
+        const p = this.body.translation(); this.body.setTranslation({ x: p.x, y: p.y + 0.6, z: p.z }, true);
+        this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        this.emit('righted');
+      }
+    } else this.flipT = 0;
     if (!this.finished && this.d >= track.finishD) { this.finished = true; this.finishTime = ctx.time; this.emit('finish'); }
   }
 
@@ -479,5 +508,5 @@ export class KartController {
 }
 
 export function blankInput() {
-  return { steer: 0, throttle: 0, brake: 0, hop: false, hopPressed: false, item: false, itemPressed: false, use: false, usePressed: false, weapon: false, weaponPressed: false, shield: false, shieldPressed: false };
+  return { steer: 0, throttle: 0, brake: 0, hop: false, hopPressed: false, item: false, itemPressed: false, use: false, usePressed: false, lasso: false, lassoPressed: false, weapon: false, weaponPressed: false, shield: false, shieldPressed: false };
 }

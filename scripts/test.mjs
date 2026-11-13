@@ -261,3 +261,60 @@ test('performance: headset tier merges multi-part trees into one instanced batch
   v.dispose();
   new RaceSession({ physics: await PhysicsWorld.create(), assets: new AssetManager(), trackId: 'whistler_run', racers: racersOf(2), seed: 1, quality: 'high' }).dispose();
 });
+
+/* ---------------------------------------------------------------- bumps, anti-flip, lasso */
+test('kart bumps: no rigid pile-ups - karts slide apart, the lighter one is thrown further, nobody flips or lifts', async () => {
+  const s = await mk('san_diego_streets', racersOf(2));
+  s.state = 'RACING'; s.karts.forEach((k) => { k.hold = false; });
+  const [light, heavy] = s.karts[0].mass < s.karts[1].mass ? s.karts : [s.karts[1], s.karts[0]];
+  assert.ok(heavy.mass > light.mass * 1.1, 'two weight classes');
+  light.placeAt(s.track, 300, -0.6, 0); heavy.placeAt(s.track, 300, 0.6, 0);
+  s.ais.clear();
+  for (let i = 0; i < 40; i++) s.step(1 / 60);            // settle on the road, overlapping
+  const fr = s.track.atDist(300), side = (k) => k.pos.clone().sub(fr.P).dot(fr.B);
+  const l0 = side(light), h0 = side(heavy); let bumped = 0, maxTilt = 0, maxUp = 0;
+  light.placeAt(s.track, 300, -0.5, 0); heavy.placeAt(s.track, 300, 0.5, 0);
+  const a0 = side(light), b0 = side(heavy);
+  for (let i = 0; i < 50; i++) { s.step(1 / 60); for (const k of s.karts) { maxTilt = Math.max(maxTilt, 1 - k.up.y); maxUp = Math.max(maxUp, k.vel.y); if (k.t.bump > 0) bumped++; } }
+  assert.ok(bumped > 0, 'bump event raised (screen flash)');
+  assert.ok(Math.abs(side(light) - side(heavy)) >= 1.6, 'separated: ' + Math.abs(side(light) - side(heavy)).toFixed(2));
+  assert.ok(Math.abs(side(light) - a0) > Math.abs(side(heavy) - b0) * 1.15, `light moved ${Math.abs(side(light) - a0).toFixed(2)} vs heavy ${Math.abs(side(heavy) - b0).toFixed(2)}`);
+  assert.ok(maxTilt < 0.12 && maxUp < 2.5, `stayed flat: tilt ${maxTilt.toFixed(3)}, lift ${maxUp.toFixed(2)}`);
+  s.dispose();
+});
+test('anti-flip: a kart dropped on its side is back on its wheels within a second, without a respawn', async () => {
+  const s = await mk('san_diego_streets', racersOf(1));
+  s.state = 'RACING'; const k = s.karts[0]; k.hold = false; s.ais.clear();
+  k.placeAt(s.track, 400, 0, 0);
+  for (let i = 0; i < 30; i++) s.step(1 / 60);
+  const q = new THREE.Quaternion().setFromAxisAngle(k.fwd, Math.PI * 0.55).multiply(k.quat);
+  k.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+  const d0 = k.d; for (let i = 0; i < 80; i++) s.step(1 / 60);
+  assert.ok(k.up.y > 0.9, 'upright: ' + k.up.y.toFixed(2)); assert.equal(k.respawns, 0); assert.ok(Math.abs(k.d - d0) < 12, 'stayed where it was');
+  s.dispose();
+});
+test('lasso: reels the thrower in and slows the target; cooldown; shield blocks; out of range does nothing', async () => {
+  const s = await mk('san_diego_streets', racersOf(3));
+  s.state = 'RACING'; s.ais.clear(); s.karts.forEach((k) => { k.hold = false; k.lassoCd = 0; });
+  const [a, b, c] = s.karts;
+  a.placeAt(s.track, 400, 0, 15); b.placeAt(s.track, 425, 1, 15); c.placeAt(s.track, 600, 0, 15);
+  s.step(1 / 60);
+  assert.equal(s.lasso.autoAim(a), b, 'auto-aims at the kart ahead');
+  // pointer aim picks the kart along the ray
+  const o = a.pos.clone().setY(a.pos.y + 1), dir = b.pos.clone().setY(b.pos.y + 0.6).sub(o).normalize();
+  assert.equal(s.lasso.aim(a, o, dir), b); assert.equal(s.lasso.aim(a, o, dir.clone().negate()), null, 'pointing away = no lock');
+  s.lasso.aim(a, o, dir);
+  assert.equal(s.lasso.fire(a), true);
+  assert.ok(b.t.lasso > 2 && a.boosts.some((x) => x.src === 'lasso') && a.lassoCd > 8 && s.lasso.ropes.length === 1);
+  assert.equal(s.lasso.fire(a), false, 'cooling down');
+  const vtopFree = c.vtop; for (let i = 0; i < 60; i++) { for (const k of s.karts) k.input.throttle = 1; s.step(1 / 60); }
+  assert.ok(b.speed < c.speed * 0.9 || b.t.lasso > 0, 'target is slowed'); assert.ok(vtopFree > 0);
+  for (let i = 0; i < 120; i++) s.step(1 / 60);
+  assert.equal(s.lasso.ropes.length, 0, 'rope lets go');
+  // shield blocks
+  b.lassoCd = 0; b.loadout.shield = { id: 'bubble_wrap_shield', level: 1 }; a.loadout.shieldActive = 0;
+  a.loadout.shield = { id: 'bubble_wrap_shield', level: 1 }; a.loadout.shieldActive = 3; a.t.lasso = 0;
+  a.placeAt(s.track, 800, 0, 10); b.placeAt(s.track, 780, 0, 10); s.step(1 / 60);
+  assert.equal(s.lasso.fire(b), true); assert.equal(a.t.lasso, 0, 'shielded kart is not slowed'); assert.ok(!b.boosts.some((x) => x.src === 'lasso'));
+  s.dispose();
+});

@@ -197,3 +197,11 @@ body.vr #ui { opacity: 0; } body.vr-xr #ui { opacity: 1; }
 .vrline { margin: 4px 0; font-size: 17px; } .vrline.err { color: #ff8a8a; font-weight: 800; } .vrline small { opacity: .7; }
 .codebox { font: 900 26px ui-monospace, monospace; letter-spacing: 4px; background: #0b1024; border: 2px solid #3d4a80; border-radius: 10px; padding: 4px 12px; color: #44ff88; }
 .pill.key { min-width: 38px; }
+
+/* drift glow, bump flash, lasso */
+.ov.driftglow { box-shadow: inset 0 0 16cqmin 3cqmin var(--dc, #ffc21a); transition: opacity .12s; }
+.ov.driftglow.on { opacity: .8; animation: dglow .5s ease-in-out infinite alternate; } .ov.driftglow.on.hot { opacity: 1; animation-duration: .26s; }
+@keyframes dglow { from { box-shadow: inset 0 0 12cqmin 2cqmin var(--dc); } to { box-shadow: inset 0 0 20cqmin 4.5cqmin var(--dc); } }
+.ov.bumpflash { background: #fff; transition: none; }
+.slot.lasso.active { border-color: #44ff88; box-shadow: 0 0 2cqmin #44ff88; }
+.tb.i4 { right: 31vmin; } body.touch .tb.i4 { right: 59vmin; bottom: 32vmin; }

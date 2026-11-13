@@ -40,16 +40,17 @@ export class HUD {
           <div class="slot pickup"><div class="ic"></div><div class="lb">ITEM</div></div>
           <div class="slot weapon"><div class="ic"></div><div class="cd"></div><div class="lb"></div></div>
           <div class="slot shield"><div class="ic"></div><div class="cd"></div><div class="lb"></div></div>
+          <div class="slot lasso"><div class="ic">🤠</div><div class="cd"></div><div class="lb">LASSO</div></div>
         </div>
         <div class="hud-br"><div class="badges"></div></div>
-        <div class="ov speedlines"></div><div class="ov feathers"></div><div class="ov stink"></div><div class="ov warn"><b></b></div><div class="ov finish"></div>`;
+        <div class="ov driftglow"></div><div class="ov bumpflash"></div><div class="ov speedlines"></div><div class="ov feathers"></div><div class="ov stink"></div><div class="ov warn"><b></b></div><div class="ov finish"></div>`;
       this.root.appendChild(el);
       const q = (s) => el.querySelector(s);
       this.panels.push({
         el, rank: q('.rank'), stage: q('.stage'), pname: q('.pname'), prog: q('.progress i'), pct: q('.pct'), count: q('.count'),
         rhythm: q('.rhythm'), needle: q('.needle'), zone: q('.zone'), score: q('.score'), hint: q('.hint'), toasts: q('.toasts'),
         speed: q('.dial .num b'), arc: q('.fgp'), timer: q('.timer'), mm: q('.mm'), badge: q('.pbadge'), draft: q('.draft i'), drift: q('.drift i'), t1: q('.drift .t1'), t2: q('.drift .t2'), t3: q('.drift .t3'),
-        driftWrap: q('.drift'), slotP: q('.slot.pickup'), slotW: q('.slot.weapon'), slotS: q('.slot.shield'), badges: q('.badges'),
+        driftWrap: q('.drift'), dglow: q('.driftglow'), bflash: q('.bumpflash'), slotL: q('.slot.lasso'), slotP: q('.slot.pickup'), slotW: q('.slot.weapon'), slotS: q('.slot.shield'), badges: q('.badges'),
         feathers: q('.feathers'), sl: q('.speedlines'), warn: q('.warn'), warnB: q('.warn b'), stink: q('.stink'), finish: q('.finish'), cache: {},
       });
       const z = q('.zone');
@@ -114,6 +115,12 @@ export class HUD {
       this.set(p, 's', lo.shield.id + lo.shield.level, () => { p.slotS.querySelector('.ic').textContent = S.icon; p.slotS.querySelector('.lb').textContent = `${S.name.split(' ').slice(0, 2).join(' ')} Lv${lo.shield.level}`; });
       this.set(p, 'scd', Math.round(f * 40) + (lo.shieldActive > 0 ? 'a' : ''), () => { p.slotS.querySelector('.cd').style.height = f * 100 + '%'; p.slotS.classList.toggle('ready', f === 0); p.slotS.classList.toggle('active', lo.shieldActive > 0); });
     } else this.set(p, 's', 'none', () => { p.slotS.querySelector('.ic').textContent = '—'; p.slotS.querySelector('.lb').textContent = 'no shield'; });
+    // lasso: ready / cooling down / locked on a rival
+    { const f = Math.min(1, kart.lassoCd / 9), tg = kart.lassoCd <= 0 ? kart.lassoAim : null;
+      this.set(p, 'lcd', Math.round(f * 40) + (tg ? tg.id + 't' : ''), () => { p.slotL.querySelector('.cd').style.height = f * 100 + '%'; p.slotL.classList.toggle('ready', f === 0); p.slotL.classList.toggle('active', !!tg); p.slotL.querySelector('.lb').textContent = tg ? '→ ' + tg.name.split(' ').pop() : 'LASSO'; }); }
+    // drift glow around the screen edge in the current mini-turbo colour; white blink on kart-to-kart bumps
+    this.set(p, 'dgl', drifting ? 'd' + kart.drift.tier : '', (v) => { p.dglow.classList.toggle('on', !!v); p.dglow.style.setProperty('--dc', kart.drift.tier ? DRIFT_TIERS[kart.drift.tier - 1].color : '#ffc21a'); p.dglow.classList.toggle('hot', kart.drift.tier > 0); });
+    p.bflash.style.opacity = kart.t.bump > 0 ? (kart.t.bump / 0.2) * 0.3 * Math.min(1, kart.bumpHard ?? 0.6) : 0;
     // stat badges
     const ids = kart.statIds ?? [];
     this.set(p, 'bd', ids.join(','), () => { p.badges.innerHTML = ids.map((id) => `<span title="${STAT_BOOSTS[id].name}">${STAT_BOOSTS[id].icon}</span>`).join(''); });

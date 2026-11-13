@@ -62,13 +62,14 @@ export class VRHud {
     slots.push({ ic: lo.pickup ? ITEMS[lo.pickup].icon : '·', lb: 'ITEM', cd: 0, on: !!lo.pickup, col: '#66ddff' });
     if (lo.weapon) { const Wp = WEAPONS[lo.weapon.id]; slots.push({ ic: Wp.icon, lb: 'Lv' + lo.weapon.level, cd: Math.min(1, lo.weaponCd / weaponCooldown(Wp, lo.weapon.level)), on: lo.weaponCd <= 0, col: '#ff9a3c' }); } else slots.push({ ic: '—', lb: 'WEAPON', cd: 0, on: false, col: '#ff9a3c' });
     if (lo.shield) { const S = SHIELDS[lo.shield.id]; slots.push({ ic: S.icon, lb: lo.shieldActive > 0 ? 'ON!' : 'Lv' + lo.shield.level, cd: Math.min(1, lo.shieldCd / shieldCooldown(S, lo.shield.level)), on: lo.shieldCd <= 0 || lo.shieldActive > 0, col: '#8be9fd' }); } else slots.push({ ic: '—', lb: 'SHIELD', cd: 0, on: false, col: '#8be9fd' });
+    { const tg = kart.lassoCd <= 0 ? kart.lassoAim : null; slots.push({ ic: '🤠', lb: tg ? '→ ' + tg.name.split(' ').pop().slice(0, 7) : 'LASSO', cd: Math.min(1, kart.lassoCd / 9), on: kart.lassoCd <= 0, col: tg ? '#44ff88' : '#d9b36a' }); }
     slots.forEach((s, i) => {
-      const x = 342 + i * 118, y = 96, sz = 104;
+      const x = 316 + i * 100, y = 100, sz = 90;
       g.fillStyle = s.on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)'; box(x, y, sz, sz, 18);
       g.strokeStyle = s.on ? s.col : 'rgba(255,255,255,0.25)'; g.lineWidth = s.on ? 6 : 3; g.beginPath(); g.roundRect ? g.roundRect(x, y, sz, sz, 18) : g.rect(x, y, sz, sz); g.stroke();
-      g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = '60px system-ui, sans-serif'; g.fillText(s.ic, x + sz / 2, y + sz / 2 + 2);
+      g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = '52px system-ui, sans-serif'; g.fillText(s.ic, x + sz / 2, y + sz / 2 + 2);
       if (s.cd > 0) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(x, y + sz * (1 - s.cd), sz, sz * s.cd); }
-      g.fillStyle = '#cfd6ea'; g.font = '700 22px system-ui, sans-serif'; g.fillText(s.lb, x + sz / 2, y + sz + 18);
+      g.fillStyle = '#cfd6ea'; g.font = '700 20px system-ui, sans-serif'; g.fillText(s.lb, x + sz / 2, y + sz + 18, sz + 8);
     });
     // drift / slipstream meters
     const drifting = kart.fsm === FSM.DRIFTING, dg = drifting ? Math.min(1, kart.drift.charge / 4) : 0, sl = Math.min(1, kart.slip.draftTimer / 1.5);

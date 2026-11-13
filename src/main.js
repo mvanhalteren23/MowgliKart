@@ -71,7 +71,7 @@ function playRace(session, humans) {
     if (session.lite && !params.has('nosky')) { try { bakeSkybox(gl, session, session.quality === 'vr' ? 1024 : 2048); } catch (e) { console.warn('skybox bake failed, using the live sky', e); } }
     document.body.classList.add('racing'); input.showTouch(true);
     session.audio = audio;
-    const HAPTIC = { hit: [0.9, 0.6, 220], impact: [0.8, 0.5, 160], miniTurbo: [0.35, 0.8, 220], boost: [0.2, 0.4, 140], slingshot: [0.3, 0.6, 260], trickLanded: [0.5, 0.5, 180], grabbed: [1, 1, 500], yetiSlam: [1, 0.8, 420], oob: [0.3, 0.9, 320], blocked: [0.3, 0.3, 90], pickup: [0.1, 0.3, 80] };
+    const HAPTIC = { hit: [0.9, 0.6, 220], impact: [0.8, 0.5, 160], miniTurbo: [0.35, 0.8, 220], boost: [0.2, 0.4, 140], slingshot: [0.3, 0.6, 260], trickLanded: [0.5, 0.5, 180], grabbed: [1, 1, 500], yetiSlam: [1, 0.8, 420], oob: [0.3, 0.9, 320], blocked: [0.3, 0.3, 90], pickup: [0.1, 0.3, 80], bump: [0.5, 0.4, 90], lasso: [0.4, 0.7, 160], lassoed: [0.8, 0.6, 260], righted: [0.4, 0.4, 120] };
     session.haptic = (i, type) => { const h = HAPTIC[type]; if (h) input.rumble(i, ...h); };
     audio.setFocus(session.humans[0] ?? null);
     let finishedAt = null;

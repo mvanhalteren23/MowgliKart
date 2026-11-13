@@ -8,6 +8,7 @@ import { KartController } from '../controllers/KartController.js';
 import { KartVisual } from '../controllers/KartVisual.js';
 import { AIController } from '../controllers/AIController.js';
 import { ItemManager } from '../items/ItemManager.js';
+import { LassoManager } from '../items/Lasso.js';
 import { ObstacleManager } from '../track/ObstacleManager.js';
 import { YetiManager } from '../track/YetiManager.js';
 import { buildGondola } from '../track/Gondola.js';
@@ -69,6 +70,7 @@ export class RaceSession {
     this._buildTrack();
     const trackRoots = this.scene.children.filter((o) => o.isMesh && o !== this.sky);
     this.items = new ItemManager(this);
+    this.lasso = new LassoManager(this);
     this.obstacles = new ObstacleManager(this);
     this.yeti = this.track.open ? new YetiManager(this) : null;
     this.items.buildBoxes();
@@ -289,7 +291,7 @@ export class RaceSession {
   step(dt) {
     if (this.netHold) { this.net?.raceHook?.step(dt); return; } // multiplayer: everyone waits on the grid for the host's "go"
     this.time += dt;
-    const ctx = { time: this.time, track: this.track, karts: this.karts, items: this.items };
+    const ctx = { time: this.time, track: this.track, karts: this.karts, items: this.items, lasso: this.lasso };
     if (this.state === 'COUNTDOWN') this._stepCountdown(dt);
     else this.raceTime += dt;
     if (this.state === 'RACING' || this.state === 'COUNTDOWN') {
@@ -308,12 +310,43 @@ export class RaceSession {
     this.rank();
     this.net?.raceHook?.step(dt);
     for (const k of this.karts) k.update(dt, ctx);
+    this._bumpKarts();
+    this.lasso.update(dt);
     this.items.update(dt);
     this.obstacles.update(dt, this.time);
     this.yeti?.update(dt);
     this.physics.step((a, b, started) => this._sensor(a, b, started));
     this._events();
     this._checkEnd(dt);
+  }
+
+  /**
+   * Arcade kart-vs-kart contact (replaces rigid-body collisions, which rolled karts over): overlapping karts are slid apart
+   * and trade a sideways shove split by weight class - the lighter kart is thrown further, the heavy one barely moves.
+   * No lift, no spin. Each contact raises a 'bump' event (screen flash + rumble).
+   */
+  _bumpKarts() {
+    const ks = this.karts, R = 1.75;
+    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
+      const a = ks[i], b = ks[j];
+      if (a.hold || b.hold || a.grab || b.grab || (a.puppet && b.puppet)) continue;
+      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, dy = b.pos.y - a.pos.y, q = dx * dx + dz * dz;
+      if (q > R * R || q < 1e-4 || Math.abs(dy) > 1.1) continue;
+      const d = Math.sqrt(q), nx = dx / d, nz = dz / d;
+      const ma = a.mass * a.knockRes, mb = b.mass * b.knockRes;
+      const wa = a.puppet ? 0 : b.puppet ? 1 : mb / (ma + mb), wb = b.puppet ? 0 : a.puppet ? 1 : ma / (ma + mb); // share of the shove each kart takes
+      const va = a.body.linvel(), vb = b.body.linvel();
+      const closing = (va.x - vb.x) * nx + (va.z - vb.z) * nz;
+      const kick = Math.max(0, closing) * 1.35 + 1.6, over = R - d;
+      if (!a.puppet) { a.body.setLinvel({ x: va.x - nx * kick * wa, y: va.y, z: va.z - nz * kick * wa }, true); const p = a.body.translation(); a.body.setTranslation({ x: p.x - nx * over * wa, y: p.y, z: p.z - nz * over * wa }, true); }
+      if (!b.puppet) { b.body.setLinvel({ x: vb.x + nx * kick * wb, y: vb.y, z: vb.z + nz * kick * wb }, true); const p = b.body.translation(); b.body.setTranslation({ x: p.x + nx * over * wb, y: p.y, z: p.z + nz * over * wb }, true); }
+      const key = a.id < b.id ? a.id * 64 + b.id : b.id * 64 + a.id;
+      if (this.time - ((this._bumpAt ??= new Map()).get(key) ?? -9) > 0.35) {
+        this._bumpAt.set(key, this.time);
+        const hard = Math.min(1, 0.35 + Math.max(0, closing) / 9);
+        a.emit('bump', { hard: hard * (0.5 + wa), heavy: ma >= mb }); b.emit('bump', { hard: hard * (0.5 + wb), heavy: mb > ma });
+      }
+    }
   }
 
   _stepCountdown(dt) {
@@ -365,6 +398,9 @@ export class RaceSession {
             if (vis.damage.detachNextPart(k.vel)) { this.sfx('crash', k); this.fx.burst(k.pos, 10, 6, '#ffcc66', 0.5, 8); }
             break;
           case 'snap': if (vis.damage.repairAll()) { this.sfx('tape', k); this.say(k, 'DUCT-TAPE SNAP!', '#cfd8dc'); } break;
+          case 'bump': k.t.bump = 0.2; k.bumpHard = e.data.hard; if (k.isHuman) this.sfx('bonk', k); break;
+          case 'lasso': this.say(k, 'LASSO! Reeling in…', '#d9b36a'); break;
+          case 'lassoed': this.say(k, `ROPED by ${e.data?.by ?? 'a rival'}! Slowed`, '#ffb03a'); break;
           case 'trick': this.say(k, 'TRICK!', '#ffe14a'); break;
           case 'trickLanded': this.say(k, 'TRICK BOOST!', '#ffe14a'); this.sfx('boost', k); break;
           case 'driftTier': this.sfx('spark', k); break;
@@ -430,7 +466,7 @@ export class RaceSession {
   }
 
   dispose() {
-    this.items.dispose(); this.obstacles.dispose(); this.yeti?.dispose();
+    this.items.dispose(); this.lasso.dispose(); this.obstacles.dispose(); this.yeti?.dispose();
     this.visuals.forEach((v) => v.dispose());
     this.scene.traverse((o) => {
       o.geometry?.dispose?.();

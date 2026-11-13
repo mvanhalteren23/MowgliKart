@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GROUPS } from '../physics/PhysicsWorld.js';
 import { HUD } from './HUD.js';
+import { DRIFT_TIERS, FSM } from '../controllers/KartController.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -191,6 +192,13 @@ export class SplitScreenRenderer {
     if (this._vrVis && this._vrVis !== vis) this._vrVis.setCockpit(false);
     this._vrVis = vis; vis.setCockpit(true);
     this.vr.follow(kart, vis, dt); session.viewPos.copy(this.vr.rig.position);
+    // drifting: the edge of the view glows in the mini-turbo colour (pulsing as it charges); a bump is a quick white flash
+    const drifting = kart.fsm === FSM.DRIFTING, tier = kart.drift.tier;
+    this.vr.setFx(drifting ? (tier ? DRIFT_TIERS[tier - 1].color : '#ffc21a') : null, drifting ? 0.62 + 0.1 * tier + 0.14 * Math.sin(session.time * (8 + tier * 5)) : 0, kart.t.bump > 0 ? (kart.t.bump / 0.2) * Math.min(1, kart.bumpHard ?? 0.6) : 0);
+    // lasso: the remote is the aim; a ring marks the rival it points at
+    if (this.vr.mode === 'xr' && session.humans[0] === kart) { this.vr.ray((this._ro ??= new V()), (this._rd ??= new V())); session.lasso.aim(kart, this._ro, this._rd); }
+    if (session.input) session.input.lassoLocked = this.vr.mode === 'xr' && !!kart.lassoAim && kart.lassoCd <= 0;
+    session.lasso.showReticle(kart, this.vr.rig.position);
     this.vrHud.attach(this.vr.rig); this.vrHud.update(session, kart, dt, this.vr);
     this.vr.render(session.scene);
     session.messages.length = 0;
@@ -217,6 +225,7 @@ export class SplitScreenRenderer {
       if (!session.humans[i]) { c.cockpit = false; if (c.subject !== kart) { c.subject = kart; c.init = false; } } // spectator: chase cam on the leader
       this._updateCam(c, kart, vis, dt, session);
       r.setViewport(v.x, v.y, v.w, v.h); r.setScissor(v.x, v.y, v.w, v.h);
+      if (i === 0) session.lasso.showReticle(this.players === 1 ? kart : null, c.camera.position);
       r.render(session.scene, c.camera);
       this.hud.update(i, session, kart);
     });
@@ -238,6 +247,7 @@ export class SplitScreenRenderer {
     const want = kart.isBoosting ? 1 : Math.min(0.25, kart.speed / 120);
     this.boostBlur += (want - this.boostBlur) * Math.min(1, 6 * dt);
     fx.grade.uniforms.boost.value = this.boostBlur;
+    session.lasso.showReticle(kart, c.camera.position);
     fx.composer.render(dt);
     this.hud.update(0, session);
     session.messages.length = 0;

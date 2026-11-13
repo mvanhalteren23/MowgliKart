@@ -64,9 +64,18 @@ export class VRManager {
 
     // comfort vignette: darkens the periphery while turning hard / boosting (reduces vection on a 3DoF headset)
     this.vig = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
-      transparent: true, depthTest: false, depthWrite: false, uniforms: { k: { value: 0 } },
+      transparent: true, depthTest: false, depthWrite: false, uniforms: { k: { value: 0 }, glow: { value: new THREE.Color(0xffffff) }, g: { value: 0 }, f: { value: 0 } },
       vertexShader: 'varying vec2 v; void main(){ v = uv - 0.5; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'varying vec2 v; uniform float k; void main(){ float r = length(v) * 2.0; gl_FragColor = vec4(0.0, 0.0, 0.02, smoothstep(1.0 - 0.62 * k, 1.15 - 0.3 * k, r) * min(1.0, k * 1.6)); }',
+      // k: comfort darkening at the edges · glow/g: coloured rim light (drift charge) · f: brief white flash (bumps)
+      fragmentShader: `varying vec2 v; uniform float k; uniform vec3 glow; uniform float g; uniform float f;
+        void main(){
+          float r = length(v) * 2.0;
+          float dark = smoothstep(1.0 - 0.62 * k, 1.15 - 0.3 * k, r) * min(1.0, k * 1.6);
+          float rim = smoothstep(0.3, 0.74, r) * g;
+          vec3 col = mix(vec3(0.0, 0.0, 0.02), glow, clamp(rim * 1.6, 0.0, 1.0));
+          col = mix(col, vec3(1.0), f);
+          gl_FragColor = vec4(col, max(max(dark * (1.0 - rim), rim * 0.85), f * 0.28));
+        }`,
     }));
     this.vig.position.z = -0.35; this.vig.scale.setScalar(0.62); this.vig.renderOrder = 999; this.vig.frustumCulled = false; this.vig.userData.noOutline = true;
     this.camera.add(this.vig);
@@ -222,6 +231,9 @@ export class VRManager {
     this.vigK += (Math.min(1, want) - this.vigK) * Math.min(1, 6 * dt);
     this.vig.material.uniforms.k.value = this.comfort === false ? 0 : this.vigK;
   }
+
+  /** Screen-edge feedback: glow colour + strength (0..1) and a white flash (0..1). */
+  setFx(color, g, flash) { const u = this.vig.material.uniforms; if (color != null) u.glow.value.set(color); u.g.value = g; u.f.value = flash; }
 
   /** Draw `scene` from the rig: the XR compositor in 'xr', two half-screen eye views in 'sim'. */
   render(scene) {
