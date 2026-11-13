@@ -46,7 +46,10 @@ export const dialogues = {
   },
   'dlg.wenna.after': {
     id: 'dlg.wenna.after',
-    lines: [{ speaker: 'Wenna', text: 'If you find Pell, tell him the mule is fine and I\'m furious. In that order.' }],
+    lines: [
+      { speaker: 'Wenna', text: 'If you find Pell, tell him the mule is fine and I\'m furious. In that order.' },
+      { speaker: 'Wenna', text: 'And if you find the grain, tell it to come home.' },
+    ],
   },
   'dlg.wenna.idle': {
     id: 'dlg.wenna.idle',
@@ -93,7 +96,10 @@ export const dialogues = {
   },
   'dlg.pell.after': {
     id: 'dlg.pell.after',
-    lines: [{ speaker: 'Pell', text: 'I\'ll stay hidden till the wagon\'s gone. Tell Wenna… tell her the mule knew the way home.' }],
+    lines: [
+      { speaker: 'Pell', text: 'I\'ll stay hidden till the wagon\'s gone.' },
+      { speaker: 'Pell', text: 'Tell Wenna… tell her the mule knew the way home.' },
+    ],
   },
 
   /* ── Bram the carpenter (recruit) ─────────────────────────────────── */
@@ -113,14 +119,18 @@ export const dialogues = {
   },
   'dlg.bram.idle': {
     id: 'dlg.bram.idle',
-    lines: [{ speaker: 'Bram', text: 'Lanternwick\'s full up. Every board I cut, the chapel taxes twice. Somebody ought to build somewhere new.' }],
+    lines: [
+      { speaker: 'Bram', text: 'Lanternwick\'s full up. Every board I cut, the chapel taxes twice.' },
+      { speaker: 'Bram', text: 'Somebody ought to build somewhere new. Somebody braver than me.' },
+    ],
   },
 
   /* ── Gilda the blacksmith (recruit) ───────────────────────────────── */
   'dlg.gilda.township': {
     id: 'dlg.gilda.township',
     lines: [
-      { speaker: 'Gilda', text: 'Covenant iron melts like any other. Bring me some and I\'ll make it useful.' },
+      { speaker: 'Gilda', text: 'Covenant iron melts like any other.' },
+      { speaker: 'Gilda', text: 'Bring me some and a boar tusk for the quench, and I\'ll make it useful.' },
     ],
   },
   'dlg.gilda.ready': {
@@ -139,7 +149,10 @@ export const dialogues = {
   },
   'dlg.gilda.idle': {
     id: 'dlg.gilda.idle',
-    lines: [{ speaker: 'Gilda', text: 'Hooks, hinges, harpoons. If it bends wrong, it\'s not mine.' }],
+    lines: [
+      { speaker: 'Gilda', text: 'Hooks, hinges, harpoons. If it bends wrong, it\'s not mine.' },
+      { speaker: 'Gilda', text: 'If it bends the Covenant\'s way, it\'s definitely not mine.' },
+    ],
   },
 
   /* ── Surveyor Lark — township giver ───────────────────────────────── */
@@ -157,7 +170,8 @@ export const dialogues = {
   'dlg.lark.progress': {
     id: 'dlg.lark.progress',
     lines: [
-      { speaker: 'Lark', text: 'Recruit folk through the Hearthstead ledger, then pick a plot and build. Hides from the meadow, iron from the Covenant — you\'ll manage.' },
+      { speaker: 'Lark', text: 'Recruit folk through the Hearthstead ledger, then pick a plot and build.' },
+      { speaker: 'Lark', text: 'Hides and tusks from the meadow, iron off Covenant thugs. You\'ll manage.' },
     ],
   },
   'dlg.lark.built': {
@@ -222,7 +236,8 @@ export const dialogues = {
   'dlg.drava.hint': {
     id: 'dlg.drava.hint',
     lines: [
-      { speaker: 'Drava', text: 'Bramblemeadow, south-west. Boars bed down in the bracken. Come at them downwind, or they\'ll smell you a field away.' },
+      { speaker: 'Drava', text: 'Bramblemeadow, south-west. Boars bed down in the bracken.' },
+      { speaker: 'Drava', text: 'Come at them downwind, or they\'ll smell you a field away.' },
     ],
   },
   'dlg.drava.tribute': {
@@ -237,7 +252,10 @@ export const dialogues = {
   },
   'dlg.drava.rematch': {
     id: 'dlg.drava.rematch',
-    lines: [{ speaker: 'Drava', text: 'Back for more? The crowd loves a comeback. Into the ring!' }],
+    lines: [
+      { speaker: 'Drava', text: 'Back for more? The crowd loves a comeback.' },
+      { speaker: 'Vesna', text: 'Then let\'s give them one.' },
+    ],
     startsEncounter: ENC.cinderRing,
   },
   'dlg.drava.burn': {
@@ -251,7 +269,10 @@ export const dialogues = {
   },
   'dlg.drava.after': {
     id: 'dlg.drava.after',
-    lines: [{ speaker: 'Drava', text: 'Free woman, Vesna. Strange look on you. Come fight for coin sometime — your own, this time.' }],
+    lines: [
+      { speaker: 'Drava', text: 'Free woman, Vesna. Strange look on you.' },
+      { speaker: 'Drava', text: 'Come fight for coin sometime — your own, this time.' },
+    ],
   },
 
   /* ── Saltmarket & tarn folk ───────────────────────────────────────── */
@@ -271,7 +292,10 @@ export const dialogues = {
   },
   'dlg.odo.barge': {
     id: 'dlg.odo.barge',
-    lines: [{ speaker: 'Harbormaster Odo', text: 'Brinefolk barge just tied up off the pier — that lantern eel of yours called it in. Go trade before the tide turns.' }],
+    lines: [
+      { speaker: 'Harbormaster Odo', text: 'Brinefolk barge just tied up off the pier — that lantern eel of yours called it in.' },
+      { speaker: 'Harbormaster Odo', text: 'Go say hello before the tide turns.' },
+    ],
   },
   'dlg.odo.harbour': {
     id: 'dlg.odo.harbour',

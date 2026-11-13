@@ -110,7 +110,7 @@ export function sparkPoints(values: readonly number[], max: number, w: number, h
   return values
     .map((v, i) => {
       const x = pad + i * step;
-      const y = h - pad - (Math.max(0, v) / top) * (h - pad * 2);
+      const y = h - pad - (Math.min(Math.max(0, v), top) / top) * (h - pad * 2);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
