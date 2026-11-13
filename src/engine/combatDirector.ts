@@ -1,0 +1,187 @@
+/**
+ * Seamless battle staging: on `mode === 'combat'` the combatants are spawned as
+ * `combatActor` entities in a line around the player's position (no scene
+ * swap) and animated from the combat event log.
+ */
+import { sampleHeight, WATER_LEVEL } from '@/engine/bootstrapAssets';
+import type { CombatantId, CombatState, GameDatabase, Vec2, WorldMapDef } from '@/types/contracts';
+import { cuesFromEvents, lungeCurve, stageLayout, type ActorCue } from './combatStaging';
+import { setAnim, type EngineEntity, type EngineWorld } from './ecs';
+
+interface Actor {
+  readonly entity: EngineEntity;
+  readonly home: { x: number; z: number };
+  readonly side: 'party' | 'enemy';
+  baseHeading: number;
+  lungeT: number;
+  lungeDir: { x: number; z: number };
+  hurtT: number;
+  flash: number;
+  healT: number;
+}
+
+const LUNGE_DISTANCE = 1.5;
+
+export class CombatDirector {
+  private actors = new Map<CombatantId, Actor>();
+  private snapshot: readonly EngineEntity[] = [];
+  private readonly listeners = new Set<() => void>();
+  private pending: { cue: ActorCue; at: number }[] = [];
+  private lastLog = 0;
+  private active: CombatState | null = null;
+  anchor: Vec2 | null = null;
+
+  constructor(
+    private readonly ecs: EngineWorld,
+    private readonly db: GameDatabase,
+    private readonly world: WorldMapDef,
+  ) {}
+
+  /** React external-store hooks (CombatStage renders one BillboardSprite per actor). */
+  readonly subscribe = (fn: () => void): (() => void) => {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  };
+  readonly getSnapshot = (): readonly EngineEntity[] => this.snapshot;
+
+  get isStaged(): boolean {
+    return this.active !== null;
+  }
+
+  private emit(): void {
+    this.snapshot = [...this.actors.values()].map((a) => a.entity);
+    for (const fn of this.listeners) fn();
+  }
+
+  private ground(x: number, z: number): number {
+    return Math.max(sampleHeight(this.world, x, z), WATER_LEVEL - 0.3);
+  }
+
+  update(dt: number, time: number, combat: CombatState | null, inCombat: boolean, player: Vec2): void {
+    if (inCombat && combat && !this.active) this.start(combat, player);
+    else if ((!inCombat || !combat) && this.active) this.stop();
+    if (!this.active || !combat) return;
+    this.active = combat;
+
+    if (combat.log.length > this.lastLog) {
+      const cues = cuesFromEvents(combat.log.slice(this.lastLog));
+      this.lastLog = combat.log.length;
+      for (const cue of cues) this.pending.push({ cue, at: time + cue.delay });
+    }
+    this.pending = this.pending.filter((p) => {
+      if (p.at > time) return true;
+      this.apply(p.cue);
+      return false;
+    });
+
+    for (const [id, a] of this.actors) {
+      const c = combat.combatants[id];
+      const e = a.entity;
+      if (!c || !e.sprite || !e.position) continue;
+      // Dragon form sprite swap.
+      const sheet = c.dragon ? (this.db.dragonForms[c.dragon.formId]?.sprite ?? c.sprite) : c.sprite;
+      if (sheet !== e.sprite.sheet) {
+        e.sprite.sheet = sheet;
+        a.flash = Math.max(a.flash, 1);
+      }
+      // Warden aura: dims and gutters while the fusion is broken.
+      const spirits = c.fusion?.spirits ?? [];
+      if (c.fusion && spirits.length > 0) {
+        const colors = spirits.map((s) => this.db.spirits[s]?.auraColor ?? '#ffffff');
+        e.aura = { colors, intensity: c.fusion.broken ? 0.55 : c.dragon ? 1.25 : 1, broken: c.fusion.broken };
+      } else delete e.aura;
+
+      a.lungeT += dt;
+      a.hurtT = Math.max(0, a.hurtT - dt);
+      a.healT = Math.max(0, a.healT - dt);
+      a.flash = Math.max(0, a.flash - dt * 3.5);
+      const off = lungeCurve(a.lungeT) * LUNGE_DISTANCE;
+      const x = a.home.x + a.lungeDir.x * off;
+      const z = a.home.z + a.lungeDir.z * off;
+      e.position.x = x;
+      e.position.z = z;
+      e.position.y = this.ground(x, z);
+      e.heading = a.baseHeading;
+      const opTarget = c.alive ? 1 : a.side === 'party' ? 0.45 : 0;
+      const op = e.opacity ?? 1;
+      e.opacity = op + Math.sign(opTarget - op) * Math.min(Math.abs(opTarget - op), dt * 1.4);
+      setAnim(e, !c.alive || a.hurtT > 0 ? 'hurt' : a.lungeT < 0.45 ? 'action' : 'idle');
+      e.sprite.flash = a.flash;
+      e.sprite.tint = a.healT > 0 ? '#b8ffb0' : c.alive ? undefined : '#9c94a8';
+      e.scale = combat.activeId === id && c.alive ? 1 + Math.sin(time * 6) * 0.015 : 1;
+    }
+  }
+
+  private apply(cue: ActorCue): void {
+    const a = this.actors.get(cue.actorId);
+    if (!a) return;
+    switch (cue.kind) {
+      case 'lunge': {
+        const t = cue.targetId ? this.actors.get(cue.targetId) : undefined;
+        const dx = t ? t.home.x - a.home.x : a.side === 'party' ? 1 : -1;
+        const dz = t ? t.home.z - a.home.z : 0;
+        const d = Math.hypot(dx, dz) || 1;
+        a.lungeDir = { x: dx / d, z: dz / d };
+        a.lungeT = 0;
+        break;
+      }
+      case 'hit':
+        a.flash = 1;
+        a.hurtT = 0.4;
+        break;
+      case 'heal':
+        a.healT = 0.6;
+        break;
+      case 'transform':
+      case 'revert':
+      case 'armorBreak':
+      case 'armorRestore':
+        a.flash = 1;
+        break;
+      case 'guard':
+        a.lungeDir = { x: 0, z: 0 };
+        a.lungeT = 0;
+        break;
+      default:
+        break;
+    }
+  }
+
+  private start(combat: CombatState, player: Vec2): void {
+    this.active = combat;
+    this.anchor = { x: player.x, z: player.z };
+    this.lastLog = 0;
+    this.pending = [];
+    const list = Object.values(combat.combatants);
+    const layout = stageLayout(list, this.anchor);
+    for (const c of list) {
+      const p = layout.get(c.id);
+      if (!p) continue;
+      const entity: EngineEntity = {
+        id: `combat:${c.id}`,
+        position: { x: p.x, y: this.ground(p.x, p.z), z: p.z },
+        sprite: { sheet: c.sprite, facing: 0, anim: 'idle', frameTime: Math.abs(p.z) % 1 },
+        combatActor: { combatantId: c.id, home: { x: p.x, z: p.z } },
+        heading: p.heading,
+        opacity: c.alive ? 1 : 0,
+      };
+      this.ecs.add(entity);
+      this.actors.set(c.id, { entity, home: { x: p.x, z: p.z }, side: c.side, baseHeading: p.heading, lungeT: 9, lungeDir: { x: 0, z: 0 }, hurtT: 0, flash: 0, healT: 0 });
+    }
+    this.emit();
+  }
+
+  private stop(): void {
+    for (const a of this.actors.values()) this.ecs.remove(a.entity);
+    this.actors.clear();
+    this.pending = [];
+    this.active = null;
+    this.anchor = null;
+    this.emit();
+  }
+
+  dispose(): void {
+    if (this.active) this.stop();
+    this.listeners.clear();
+  }
+}
