@@ -9,6 +9,8 @@ const fresh = () => new Playthrough(gameData, createWorldSystems(gameData));
 describe('slice playthrough (events exactly as the app dispatches them)', () => {
   it('The Lanternwick Ledger is completable and liberates the tithe-post', () => {
     const p = fresh();
+    expect(p.status(QUEST.ledger)).toBe('HIDDEN');
+    p.dispatch({ type: 'enterRegion', regionId: REGION.lanternwick });
     expect(p.status(QUEST.ledger)).toBe('DISCOVERED');
     expect(p.dialogueFor(NPC.maren).id).toBe('dlg.maren.offer');
 

@@ -80,7 +80,7 @@ export class Playthrough {
     this.gear = [...db.start.gearOwned];
     this.coin = db.start.coin;
     this.township = sys.township.initial();
-    this.advance();
+    // Like core's initialLog(): nothing advances until the first event.
   }
 
   holds(c: Condition): boolean {

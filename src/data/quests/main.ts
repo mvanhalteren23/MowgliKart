@@ -1,5 +1,5 @@
 import type { QuestDef } from '@/types/contracts';
-import { accepted, always, defeated, fieldDone, flagIs, liberated, never, obtained } from '../conditions';
+import { accepted, any, defeated, entered, fieldDone, flagIs, liberated, never, obtained, talked } from '../conditions';
 import { ENC, FLAG, NPC, QUEST, REGION } from '../ids';
 
 export const lanternwickLedger: QuestDef = {
@@ -17,7 +17,8 @@ export const lanternwickLedger: QuestDef = {
     COMPLETED:
       'The true ledger page named the thief: the Covenant itself. Deacon Vash is broken, the Greyford tithe-post is free, and the grain is coming home. The Still Flame will not forgive it.',
   },
-  discoverWhen: always,
+  // initialLog() does not evaluate conditions, so discovery needs a real event.
+  discoverWhen: any(talked(NPC.maren), entered(REGION.lanternwick), accepted(QUEST.ledger)),
   activateWhen: accepted(QUEST.ledger),
   objectives: [
     {

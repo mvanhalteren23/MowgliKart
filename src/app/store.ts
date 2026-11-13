@@ -635,4 +635,8 @@ export function bindServices(s: Services): void {
   const start = s.db.world.playerStart;
   runtime.player.x = start.x;
   runtime.player.z = start.z;
+  // The party begins inside a region: announce it so "on arrival" quests are discoverable from the first frame.
+  const home = s.db.world.regions.find((r) => Math.hypot(start.x - r.center.x, start.z - r.center.z) <= r.radius);
+  if (home) useGame.getState().dispatchWorldEvent({ type: 'enterRegion', regionId: home.id });
+  useGame.setState({ toasts: [] });
 }
