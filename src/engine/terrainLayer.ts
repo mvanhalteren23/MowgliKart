@@ -1,14 +1,17 @@
 /**
  * Streams terrain chunks: one terrain mesh per chunk, plus a water plane and an
- * instanced foliage mesh for chunks near the authored slice. Chunks are built
- * one per frame (nearest first) so streaming never stalls a frame for long.
+ * instanced foliage mesh in the near/mid rings. Detail rings follow the player:
+ * a chunk is rebuilt when its ring changes (with hysteresis). Geometry LOD comes
+ * from `generateHeights` at the ring's resolution, while the painted albedo is
+ * produced once per chunk (cached by the bootstrapper) so ring changes stay cheap.
+ * Chunks are built one per frame (nearest / most detailed first).
  */
 import * as THREE from 'three';
-import { createBillboardGeometry, createFoliageMaterial, createTerrainMaterial, createWaterMaterial, WATER_LEVEL } from '@/engine/shaders';
-import { generateTerrainChunk, getFoliageAtlas, type TerrainChunk } from '@/engine/bootstrapAssets';
+import { createBillboardGeometry, createFoliageMaterial, createTerrainMaterial, createWaterMaterial, heightTexture, WATER_LEVEL } from '@/engine/shaders';
+import { generateHeights, generateTerrainChunk, getFoliageAtlas, type TerrainChunk } from '@/engine/bootstrapAssets';
 import type { Vec2, WorldMapDef } from '@/types/contracts';
 import { scatterFoliage, type Exclusion, type FoliageInstance } from './scatter';
-import { chunkLod, diffChunks, type ChunkCoord } from './streaming';
+import { chunkDistance, chunkTier, diffChunks, lodForTier, type ChunkCoord } from './streaming';
 
 const SKIRT_DEPTH = 4;
 
@@ -115,20 +118,32 @@ export function buildFoliageMesh(instances: readonly FoliageInstance[], material
 
 interface LoadedChunk {
   readonly coord: ChunkCoord;
+  readonly tier: 0 | 1 | 2;
   readonly group: THREE.Group;
   readonly disposables: readonly { dispose(): void }[];
 }
 
+export interface TerrainHooks {
+  /** A chunk was (re)built at `tier`. */
+  onBuilt?(coord: ChunkCoord, tier: 0 | 1 | 2): void;
+  /** A chunk was dropped. */
+  onUnload?(key: string): void;
+}
+
+/** Albedo edge (px): painted once per chunk; only far chunks get the cheap version. */
+export const albedoSize = (tier: 0 | 1 | 2): number => (tier <= 1 ? 256 : 128);
+
 export class TerrainLayer {
   readonly root = new THREE.Group();
   private readonly loaded = new Map<string, LoadedChunk>();
-  private queue: ChunkCoord[] = [];
+  private queue: { coord: ChunkCoord; tier: 0 | 1 | 2 }[] = [];
   private readonly foliageMaterial = createFoliageMaterial();
   private lastDiffAt = { x: Infinity, z: Infinity };
 
   constructor(
     private readonly world: WorldMapDef,
-    private readonly exclusions: () => readonly Exclusion[],
+    private readonly exclusions: (coord: ChunkCoord) => readonly Exclusion[],
+    private readonly hooks: TerrainHooks = {},
   ) {
     this.root.name = 'terrain';
   }
@@ -141,18 +156,29 @@ export class TerrainLayer {
     return this.queue.length;
   }
 
+  tierOf(key: string): 0 | 1 | 2 | undefined {
+    return this.loaded.get(key)?.tier;
+  }
+
   /** Re-diff when the player moved > 10 m; build at most `budget` chunks this frame. */
   update(player: Vec2, budget = 1): void {
     if (Math.hypot(player.x - this.lastDiffAt.x, player.z - this.lastDiffAt.z) > 10) {
       this.lastDiffAt = { x: player.x, z: player.z };
       const diff = diffChunks(this.loaded.keys(), player);
       for (const key of diff.unload) this.unload(key);
-      this.queue = diff.load.slice();
+      const queue: { coord: ChunkCoord; tier: 0 | 1 | 2; d: number }[] = [];
+      for (const coord of diff.load) queue.push({ coord, tier: chunkTier(coord.cx, coord.cz, player), d: chunkDistance(coord.cx, coord.cz, player) });
+      for (const c of this.loaded.values()) {
+        const tier = chunkTier(c.coord.cx, c.coord.cz, player, c.tier);
+        if (tier !== c.tier) queue.push({ coord: c.coord, tier, d: chunkDistance(c.coord.cx, c.coord.cz, player) });
+      }
+      queue.sort((a, b) => a.tier - b.tier || a.d - b.d);
+      this.queue = queue.map(({ coord, tier }) => ({ coord, tier }));
     }
     for (let i = 0; i < budget; i++) {
       const next = this.queue.shift();
       if (!next) break;
-      if (!this.loaded.has(next.key)) this.load(next);
+      if (this.loaded.get(next.coord.key)?.tier !== next.tier) this.build(next.coord, next.tier);
     }
   }
 
@@ -162,11 +188,16 @@ export class TerrainLayer {
     while (this.queue.length > 0) this.update(player, 8);
   }
 
-  private load(coord: ChunkCoord): void {
-    const lod = chunkLod(coord.cx, coord.cz);
-    const chunk = generateTerrainChunk(this.world, coord.cx, coord.cz, lod.resolution, lod.textureSize);
+  private build(coord: ChunkCoord, tier: 0 | 1 | 2): void {
+    const lod = lodForTier(tier);
+    const base = generateTerrainChunk(this.world, coord.cx, coord.cz, 33, albedoSize(tier));
+    let chunk: TerrainChunk = base;
+    if (lod.resolution !== base.resolution) {
+      const h = generateHeights(this.world, coord.cx, coord.cz, lod.resolution);
+      chunk = { ...base, resolution: lod.resolution, heights: h.heights, minHeight: h.min, maxHeight: h.max, hasWater: h.min < WATER_LEVEL };
+    }
     const group = new THREE.Group();
-    group.name = `chunk ${coord.key}`;
+    group.name = `chunk ${coord.key} t${tier}`;
     const disposables: { dispose(): void }[] = [];
 
     const tGeo = buildTerrainGeometry(chunk);
@@ -184,26 +215,35 @@ export class TerrainLayer {
       water.renderOrder = 1;
       group.add(water);
       disposables.push(wGeo, wMat);
+      if (chunk !== base) disposables.push(heightTexture(chunk));
     }
 
     if (lod.foliage !== 'none') {
-      const instances = scatterFoliage(this.world, coord.cx, coord.cz, { density: lod.foliage, exclusions: this.exclusions() });
+      const instances = scatterFoliage(this.world, coord.cx, coord.cz, { density: lod.foliage, exclusions: this.exclusions(coord) });
       const fol = buildFoliageMesh(instances, this.foliageMaterial);
       if (fol) {
         group.add(fol);
         disposables.push(fol.geometry);
       }
     }
+    this.drop(coord.key);
     this.root.add(group);
-    this.loaded.set(coord.key, { coord, group, disposables });
+    this.loaded.set(coord.key, { coord, tier, group, disposables });
+    this.hooks.onBuilt?.(coord, tier);
   }
 
-  private unload(key: string): void {
+  private drop(key: string): void {
     const c = this.loaded.get(key);
     if (!c) return;
     this.root.remove(c.group);
     for (const d of c.disposables) d.dispose();
     this.loaded.delete(key);
+  }
+
+  private unload(key: string): void {
+    if (!this.loaded.has(key)) return;
+    this.drop(key);
+    this.hooks.onUnload?.(key);
   }
 
   dispose(): void {

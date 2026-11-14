@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { armorPips, formatCombatEvent, targetModeFor } from './combatText';
+import { sortForms } from './combatText';
 
 const nameOf = (id: string): string => (id === 'hero:kael' ? 'Kael' : 'Bandit');
 const skillName = (id: string): string => (id === 'skill.cinderSlash' ? 'Cinder Slash' : id);
@@ -49,5 +50,13 @@ describe('armorPips', () => {
     expect(armorPips(1, 30)).toEqual([1, 6]);
     expect(armorPips(0, 30)).toEqual([0, 6]);
     expect(armorPips(3, 4)).toEqual([3, 4]);
+  });
+});
+
+describe('sortForms', () => {
+  it('keeps authored order and puts apex forms last', () => {
+    const forms = [{ formId: 'apex' }, { formId: 'a' }, { formId: 'b' }];
+    expect(sortForms(forms, (id) => id === 'apex').map((f) => f.formId)).toEqual(['a', 'b', 'apex']);
+    expect(sortForms([], () => true)).toEqual([]);
   });
 });

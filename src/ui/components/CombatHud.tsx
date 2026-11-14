@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getServices, useGame } from '@/app/store';
 import type { Combatant, CombatantId, CombatState, SkillId } from '@/types/contracts';
-import { armorPips, formatCombatEvent, targetModeFor, type TargetMode } from '../logic/combatText';
+import { armorPips, formatCombatEvent, sortForms, targetModeFor, type TargetMode } from '../logic/combatText';
 import { Bar, HeroPortrait, SpritePortrait, TapButton, cx } from './common';
 
 type Pending = { readonly kind: 'attack' } | { readonly kind: 'skill'; readonly skillId: SkillId; readonly mode: TargetMode };
@@ -15,7 +15,7 @@ function maxOf(combat: CombatState, c: Combatant): { maxHp: number; maxAp: numbe
   }
 }
 
-function PartyCard({ combat, c, targetable, onPick }: { combat: CombatState; c: Combatant; targetable: boolean; onPick: () => void }) {
+function PartyCard({ combat, c, targetable, onPick, compact }: { combat: CombatState; c: Combatant; targetable: boolean; onPick: () => void; compact: boolean }) {
   const { db } = getServices();
   const max = maxOf(combat, c);
   const hero = c.heroId ? db.heroes[c.heroId] : undefined;
@@ -37,9 +37,23 @@ function PartyCard({ combat, c, targetable, onPick }: { combat: CombatState; c: 
           {form && <span className="ew-badge ew-badge--dragon">🐉 {form.name} {c.dragon ? `${c.dragon.turnsInForm}/${form.maxTurns}` : ''}</span>}
           {c.guarding && <span className="ew-badge">🛡</span>}
         </span>
-        <Bar value={c.hp} max={max.maxHp} tone="hp" label="HP" />
-        <Bar value={c.ap} max={max.maxAp} tone="ap" label="AP" />
-        {drake && <Bar value={c.sync} max={100} tone="sync" label="Sync" />}
+        {compact ? (
+          <>
+            <span className="ew-pcard__nums">
+              <span className="ew-pcard__hp">{Math.round(c.hp)}</span>/{Math.round(max.maxHp)} · <span className="ew-pcard__ap">{Math.round(c.ap)} AP</span>
+              {drake && <span className="ew-pcard__sync"> · {Math.round(c.sync)}%</span>}
+            </span>
+            <Bar value={c.hp} max={max.maxHp} tone="hp" label="HP" thin />
+            <Bar value={c.ap} max={max.maxAp} tone="ap" label="AP" thin />
+            {drake && <Bar value={c.sync} max={100} tone="sync" label="Sync" thin />}
+          </>
+        ) : (
+          <>
+            <Bar value={c.hp} max={max.maxHp} tone="hp" label="HP" />
+            <Bar value={c.ap} max={max.maxAp} tone="ap" label="AP" />
+            {drake && <Bar value={c.sync} max={100} tone="sync" label="Sync" />}
+          </>
+        )}
         {c.fusion && (
           <span className={cx('ew-armor', c.fusion.broken && 'is-broken')} data-testid={`armor-${c.id}`}>
             {c.fusion.broken ? (
@@ -107,7 +121,7 @@ function CommandMenu({ combat, actor, pending, setPending }: { combat: CombatSta
   const { db, core } = getServices();
   const [tab, setTab] = useState<'skills' | 'dragon'>('skills');
   const skills = core.combat.availableSkills(combat, actor.id);
-  const forms = core.combat.availableForms(combat, actor.id);
+  const forms = sortForms(core.combat.availableForms(combat, actor.id), (id) => db.dragonForms[id]?.apex === true);
   const pick = (skillId: SkillId): void => {
     const def = db.skills[skillId];
     if (!def) return;
@@ -181,15 +195,20 @@ function CommandMenu({ combat, actor, pending, setPending }: { combat: CombatSta
             forms.length > 0 &&
             forms.map((f) => {
               const def = db.dragonForms[f.formId];
+              const lockedByStory = !f.usable && def?.requiresFlag !== undefined;
               return (
                 <TapButton
                   key={f.formId}
-                  className="ew-skill ew-skill--dragon"
+                  className={cx('ew-skill', 'ew-skill--dragon', def?.apex && 'is-apex', lockedByStory && 'is-sealed')}
                   data-testid={`combat-transform-${f.formId}`}
                   disabled={!f.usable || actor.dragon !== null}
                   onTap={() => act({ type: 'transform', formId: f.formId })}
                 >
-                  <span>{def?.name ?? f.formId}</span>
+                  <span>
+                    {lockedByStory ? '🔒 ' : ''}
+                    {def?.name ?? f.formId}
+                    {def?.apex && <span className="ew-badge ew-badge--dragon">Apex</span>}
+                  </span>
                   <small>{f.usable ? `${def?.apCostToEnter ?? 0} AP · −${def?.apDrainPerTurn ?? 0}/turn` : f.reason ?? `Sync ${def?.syncRequired ?? '?'}`}</small>
                 </TapButton>
               );
@@ -267,9 +286,9 @@ export function CombatHud() {
           c.alive ? <EnemyPlate key={c.id} combat={combat} c={c} targetable={enemyPick} onPick={() => target(c.id)} /> : null,
         )}
       </div>
-      <div className="ew-party">
+      <div className={cx('ew-party', party.length > 3 && 'ew-party--compact')}>
         {party.map((c) => (
-          <PartyCard key={c.id} combat={combat} c={c} targetable={allyPick} onPick={() => target(c.id)} />
+          <PartyCard key={c.id} combat={combat} c={c} targetable={allyPick} compact={party.length > 3} onPick={() => target(c.id)} />
         ))}
       </div>
       <CombatLog combat={combat} />

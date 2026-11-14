@@ -158,3 +158,22 @@ export function shotRay(origin: Vec2, angle: number, power: number, baseRange: n
   const range = baseRange * p;
   return { origin, angle, range, end: { x: origin.x + Math.cos(angle) * range, z: origin.z + Math.sin(angle) * range } };
 }
+
+/**
+ * Where followers land after a crossing: abreast of the leader on the far side,
+ * stepping sideways (perpendicular to the crossing), alternating left/right.
+ */
+export function followerLandings(from: Vec2, to: Vec2, count: number, gap: number): Vec2[] {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const px = -dz / len;
+  const pz = dx / len;
+  const out: Vec2[] = [];
+  for (let i = 0; i < count; i++) {
+    const side = i % 2 === 0 ? 1 : -1;
+    const k = Math.floor(i / 2) + 1;
+    out.push({ x: to.x + px * side * gap * k + (dx / len) * 0.4, z: to.z + pz * side * gap * k + (dz / len) * 0.4 });
+  }
+  return out;
+}

@@ -3,14 +3,18 @@
  * `combatActor` entities in a line around the player's position (no scene
  * swap) and animated from the combat event log.
  */
-import { sampleHeight, WATER_LEVEL } from '@/engine/bootstrapAssets';
-import type { CombatantId, CombatState, GameDatabase, Vec2, WorldMapDef } from '@/types/contracts';
-import { cuesFromEvents, lungeCurve, stageLayout, type ActorCue } from './combatStaging';
+import { getSpriteMeta, sampleHeight, WATER_LEVEL } from '@/engine/bootstrapAssets';
+import type { Combatant, CombatantId, CombatState, GameDatabase, Vec2, WorldMapDef } from '@/types/contracts';
+import { cuesFromEvents, lungeCurve, stageExtent, stageLayout, type ActorCue } from './combatStaging';
+import { spriteWorldSize } from './spriteMath';
 import { setAnim, type EngineEntity, type EngineWorld } from './ecs';
 
 interface Actor {
   readonly entity: EngineEntity;
+  /** Current (animated) stage position. */
   readonly home: { x: number; z: number };
+  /** Where the layout wants it (changes when a neighbour transforms). */
+  readonly target: { x: number; z: number };
   readonly side: 'party' | 'enemy';
   baseHeading: number;
   lungeT: number;
@@ -30,6 +34,8 @@ export class CombatDirector {
   private lastLog = 0;
   private active: CombatState | null = null;
   anchor: Vec2 | null = null;
+  /** Centre x/z and full width (m) of the staged line-up, for the battle camera. */
+  frame: { x: number; z: number; width: number } | null = null;
 
   constructor(
     private readonly ecs: EngineWorld,
@@ -74,15 +80,30 @@ export class CombatDirector {
       return false;
     });
 
+    let relayout = false;
+    for (const [id, a] of this.actors) {
+      const c = combat.combatants[id];
+      const e = a.entity;
+      if (!c || !e.sprite) continue;
+      const sheet = this.sheetOf(c);
+      if (sheet !== e.sprite.sheet) {
+        e.sprite.sheet = sheet;
+        a.flash = Math.max(a.flash, 1);
+        relayout = true;
+      }
+    }
+    if (relayout) this.layout(combat);
+    const slide = 1 - Math.exp(-6 * dt);
+
     for (const [id, a] of this.actors) {
       const c = combat.combatants[id];
       const e = a.entity;
       if (!c || !e.sprite || !e.position) continue;
-      // Dragon form sprite swap.
-      const sheet = c.dragon ? (this.db.dragonForms[c.dragon.formId]?.sprite ?? c.sprite) : c.sprite;
-      if (sheet !== e.sprite.sheet) {
-        e.sprite.sheet = sheet;
-        a.flash = Math.max(a.flash, 1);
+      a.home.x += (a.target.x - a.home.x) * slide;
+      a.home.z += (a.target.z - a.home.z) * slide;
+      if (e.combatActor) {
+        e.combatActor.home.x = a.home.x;
+        e.combatActor.home.z = a.home.z;
       }
       // Warden aura: dims and gutters while the fusion is broken.
       const spirits = c.fusion?.spirits ?? [];
@@ -147,27 +168,52 @@ export class CombatDirector {
     }
   }
 
+  /** Sprite sheet a combatant shows right now (dragon form while transformed). */
+  private sheetOf(c: Combatant): string {
+    return c.dragon ? (this.db.dragonForms[c.dragon.formId]?.sprite ?? c.sprite) : c.sprite;
+  }
+
+  private widthOf = (c: Combatant): number => spriteWorldSize(getSpriteMeta(this.sheetOf(c))).width;
+
+  /** Recompute stage targets (edge-to-edge by current sprite widths) and the camera frame. */
+  private layout(combat: CombatState): void {
+    if (!this.anchor) return;
+    const list = Object.values(combat.combatants);
+    const layout = stageLayout(list, this.anchor, this.widthOf);
+    const widths = new Map(list.map((c) => [c.id, this.widthOf(c)] as const));
+    for (const [id, p] of layout) {
+      const a = this.actors.get(id);
+      if (a) {
+        a.target.x = p.x;
+        a.target.z = p.z;
+      }
+    }
+    const ext = stageExtent(layout, widths);
+    this.frame = { x: (ext.minX + ext.maxX) / 2, z: this.anchor.z, width: ext.maxX - ext.minX };
+  }
+
   private start(combat: CombatState, player: Vec2): void {
     this.active = combat;
     this.anchor = { x: player.x, z: player.z };
     this.lastLog = 0;
     this.pending = [];
     const list = Object.values(combat.combatants);
-    const layout = stageLayout(list, this.anchor);
+    const layout = stageLayout(list, this.anchor, this.widthOf);
     for (const c of list) {
       const p = layout.get(c.id);
       if (!p) continue;
       const entity: EngineEntity = {
         id: `combat:${c.id}`,
         position: { x: p.x, y: this.ground(p.x, p.z), z: p.z },
-        sprite: { sheet: c.sprite, facing: 0, anim: 'idle', frameTime: Math.abs(p.z) % 1 },
+        sprite: { sheet: this.sheetOf(c), facing: 0, anim: 'idle', frameTime: Math.abs(p.z) % 1 },
         combatActor: { combatantId: c.id, home: { x: p.x, z: p.z } },
         heading: p.heading,
         opacity: c.alive ? 1 : 0,
       };
       this.ecs.add(entity);
-      this.actors.set(c.id, { entity, home: { x: p.x, z: p.z }, side: c.side, baseHeading: p.heading, lungeT: 9, lungeDir: { x: 0, z: 0 }, hurtT: 0, flash: 0, healT: 0 });
+      this.actors.set(c.id, { entity, home: { x: p.x, z: p.z }, target: { x: p.x, z: p.z }, side: c.side, baseHeading: p.heading, lungeT: 9, lungeDir: { x: 0, z: 0 }, hurtT: 0, flash: 0, healT: 0 });
     }
+    this.layout(combat);
     this.emit();
   }
 
@@ -177,6 +223,7 @@ export class CombatDirector {
     this.pending = [];
     this.active = null;
     this.anchor = null;
+    this.frame = null;
     this.emit();
   }
 

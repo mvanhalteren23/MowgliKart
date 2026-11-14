@@ -48,6 +48,12 @@ export const QUEST = {
   stillFlame: 'main.theStillFlame',
 } as const;
 
+/** Personal chain ids (`QuestDef.chain.id`). */
+export const CHAIN = {
+  kael: 'chain.kael', tobin: 'chain.tobin', vesna: 'chain.vesna', orla: 'chain.orla', hadrik: 'chain.hadrik',
+  pim: 'chain.pim', quill: 'chain.quill', moss: 'chain.moss', sable: 'chain.sable',
+} as const;
+
 export const SPOT = {
   tarnShore: 'spot.tarnShore',
   pier: 'spot.saltmarketPier',
@@ -78,5 +84,56 @@ export const FLAG = {
   carpentry: 'township.carpentry',
   smithy: 'township.smithy',
   act1Complete: 'act1.complete',
-  act2Open: 'act2.open',
+  prologueDone: 'act1.prologue',
+  shadeHeard: 'prologue.shadeHeard',
+  /** Set by the Act III caldera chapter: unlocks Kael's apex dragon form. */
+  sovereign: 'story.sovereignAwakened',
+  finale: 'story.stillFlameFallen',
+} as const;
+
+/** Main story chapters, one per story-graph node, in play order. */
+export const MAIN = {
+  prologue: 'main.ashfallHollow',
+  ledger: 'main.lanternwickLedger',
+  galecrest: 'main.chimesOfGalecrest',
+  marrowgate: 'main.siegeOfMarrowgate',
+  mirefast: 'main.drownedAbbey',
+  saffrane: 'main.ledgerHallOfSaffrane',
+  hollowroot: 'main.fellingOfHollowroot',
+  rimefold: 'main.reliquaryOfRime',
+  emberdeep: 'main.kilnworks',
+  greyspire: 'main.theStillFlame',
+} as const;
+
+/** Investigation quests (Act II, non-linear). */
+export const INV = {
+  saltLedgers: 'investigation.saltLedgers',
+  stilledChoir: 'investigation.stilledChoir',
+  ashenRoad: 'investigation.ashenRoad',
+  greyspireWorks: 'investigation.greyspireWorks',
+  hierophant: 'investigation.hierophantsName',
+} as const;
+
+/** Traversal gates the engine / UI may reference. */
+export const GATE = {
+  fallenPass: 'gate.fallenPass',
+  mireFord: 'gate.mireFord',
+  sunderedGorge: 'gate.sunderedGorge',
+  dustGorge: 'gate.dustGorge',
+  rimepineGrove: 'gate.rimepineGrove',
+  calderaSeal: 'gate.calderaSeal',
+  frostScarp: 'gate.frostScarp',
+  hierophantVeil: 'gate.hierophantVeil',
+  greyfordRockfall: 'gate.greyfordRockfall',
+  ashfallVault: 'gate.ashfallVault',
+  galecrestUpdraft: 'gate.galecrestUpdraft',
+  galecrestLedge: 'gate.galecrestLedge',
+  quarryRubble: 'gate.quarryRubble',
+  willowKnot: 'gate.willowKnot',
+  abbeyGap: 'gate.abbeyGap',
+  duneVault: 'gate.duneVault',
+  oasisChannel: 'gate.oasisChannel',
+  foamRapids: 'gate.foamRapids',
+  heartGrove: 'gate.heartGrove',
+  crevasse: 'gate.crevasse',
 } as const;

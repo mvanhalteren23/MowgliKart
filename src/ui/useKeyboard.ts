@@ -17,7 +17,7 @@ const MOVE: Readonly<Record<string, 'left' | 'right' | 'up' | 'down'>> = {
 /**
  * Desktop keyboard: WASD/arrows move, Space/Enter context action (advance
  * dialogue, hold-to-reel while fishing, continue after combat), Q/E cycle
- * leader, 1–3 swap (or pick a dialogue choice), F field action, C chronicle,
+ * leader, 1–9 swap (or pick a dialogue choice), F field action, C chronicle,
  * I inspector, T township, Esc closes drawers.
  */
 export function useKeyboard(): void {
@@ -93,7 +93,13 @@ export function useKeyboard(): void {
           return;
         case 'Digit1':
         case 'Digit2':
-        case 'Digit3': {
+        case 'Digit3':
+        case 'Digit4':
+        case 'Digit5':
+        case 'Digit6':
+        case 'Digit7':
+        case 'Digit8':
+        case 'Digit9': {
           const h = st.party[Number(e.code.slice(5)) - 1];
           if (h) st.setLeader(h);
           return;

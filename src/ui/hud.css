@@ -297,6 +297,11 @@
   flex-direction: column;
   gap: 8px;
 }
+.ew-cluster__fields.is-many {
+  flex-flow: column wrap-reverse;
+  max-height: 200px;
+  align-content: flex-end;
+}
 .ew-context {
   width: 96px;
   height: 96px;
@@ -352,32 +357,64 @@
   z-index: 1;
 }
 
-/* ── Party rail ──────────────────────────────────────────────────────── */
+/* ── Party rail (nine heroes, compact + scrollable) ──────────────────── */
 .ew-rail {
   pointer-events: auto;
   touch-action: none;
   position: absolute;
   top: var(--sa-t);
   left: var(--sa-l);
+  /* leave room for the quest chip (top-right) */
+  max-width: calc(100% - var(--sa-l) - var(--sa-r) - clamp(170px, 30vw, 260px) - 12px);
   display: flex;
-  align-items: flex-start;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
   padding: 4px;
   border-radius: 14px;
   background: rgba(20, 15, 11, 0.4);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.ew-rail::-webkit-scrollbar {
+  display: none;
 }
 .ew-chip {
-  width: 52px;
-  min-height: 60px;
-  padding: 4px;
+  position: relative;
+  flex: none;
+  width: 48px;
+  min-height: 56px;
+  padding: 3px;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   border-radius: 12px;
   border-color: rgba(241, 228, 198, 0.15);
+}
+.ew-chip .ew-portrait {
+  width: 30px;
+  height: 30px;
 }
 .ew-chip.is-leader {
   border: 2px solid var(--accent, var(--gold));
   box-shadow: 0 0 12px color-mix(in srgb, var(--accent, #e8c26a) 60%, transparent);
+}
+.ew-chip.is-recruited {
+  animation: ew-recruit 0.9s var(--ease) 3;
+  border-color: var(--gold);
+}
+.ew-chip__new {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  translate: -50% 0;
+  font-size: 8px;
+  font-variant: small-caps;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--ink);
+  white-space: nowrap;
 }
 .ew-chip__bars {
   display: flex;
@@ -385,21 +422,17 @@
   gap: 2px;
   width: 100%;
 }
-.ew-rail__locked {
-  display: flex;
-  gap: 3px;
-  align-self: center;
-}
 .ew-chip--locked {
-  position: relative;
   display: inline-flex;
-  width: 26px;
-  min-height: 26px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
   padding: 0;
-  border-radius: 7px;
+  border: 1px solid rgba(241, 228, 198, 0.1);
+  border-radius: 8px;
   background: rgba(0, 0, 0, 0.4);
   filter: grayscale(1) brightness(0.6);
-  pointer-events: none;
 }
 .ew-chip--locked .ew-portrait {
   width: 26px;
@@ -697,6 +730,12 @@
   display: flex;
   gap: 6px;
   margin-bottom: 8px;
+  overflow-x: auto;
+  touch-action: pan-x;
+  scrollbar-width: thin;
+}
+.ew-heroes > * {
+  flex: none;
 }
 .ew-hero-tab {
   border-radius: 12px;
@@ -1370,6 +1409,687 @@
   }
 }
 
+/* ── Traversal context ───────────────────────────────────────────────── */
+.ew-context.is-traverse {
+  border-color: #9fd7ff;
+  box-shadow: 0 0 18px rgba(127, 198, 255, 0.45);
+}
+.ew-context__who {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: var(--ink);
+  overflow: visible;
+}
+.ew-context__who .ew-portrait {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.ew-context__who.is-swap {
+  border-color: #9fd7ff;
+}
+.ew-context__swap {
+  position: absolute;
+  left: -8px;
+  bottom: -4px;
+  font-size: 11px;
+  color: #9fd7ff;
+  text-shadow: 0 0 3px #000;
+}
+.ew-context {
+  position: relative;
+}
+.ew-field.is-traversal {
+  border-color: rgba(127, 198, 255, 0.4);
+}
+.ew-field.is-ready {
+  border-color: #9fd7ff;
+  box-shadow: 0 0 12px rgba(127, 198, 255, 0.55);
+}
+
+/* ── Hunting aim ─────────────────────────────────────────────────────── */
+.ew-hunt-zone {
+  pointer-events: auto;
+  touch-action: none;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 50%;
+  height: 70%;
+}
+.ew-aim {
+  position: fixed;
+  width: 0;
+  height: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+.ew-aim__svg {
+  position: absolute;
+  left: -160px;
+  top: -160px;
+  overflow: visible;
+}
+.ew-aim__cancel {
+  fill: rgba(239, 111, 94, 0.12);
+  stroke: rgba(239, 111, 94, 0.5);
+  stroke-dasharray: 3 3;
+}
+.ew-aim.is-cancel .ew-aim__cancel {
+  fill: rgba(239, 111, 94, 0.4);
+}
+.ew-aim__ring-bg {
+  fill: none;
+  stroke: rgba(241, 228, 198, 0.18);
+  stroke-width: 6;
+}
+.ew-aim__ring {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+.ew-aim__string {
+  stroke: rgba(241, 228, 198, 0.55);
+  stroke-width: 2;
+  stroke-dasharray: 4 4;
+}
+.ew-aim__traj {
+  stroke: var(--ember);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.ew-aim__head {
+  fill: var(--ember);
+}
+.ew-aim.is-upwind .ew-aim__traj {
+  stroke: var(--bad);
+}
+.ew-aim.is-upwind .ew-aim__head {
+  fill: var(--bad);
+}
+.ew-aim__readout {
+  position: absolute;
+  left: 0;
+  top: 60px;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--glass-hi);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ew-aim__power {
+  font-weight: 700;
+  color: var(--gold);
+}
+.ew-aim__windarrow {
+  display: inline-block;
+  color: #9fd7ff;
+  margin-right: 4px;
+}
+.ew-aim__wind.is-tailwind {
+  color: var(--bad);
+}
+.ew-aim__wind.is-headwind {
+  color: var(--ok);
+}
+.ew-aim__scent {
+  color: var(--bad);
+  font-weight: 700;
+  font-variant: small-caps;
+  animation: ew-flash 0.8s ease-in-out infinite;
+}
+
+/* ── Fishing cast pad ────────────────────────────────────────────────── */
+.ew-cast-root {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+}
+.ew-cast {
+  pointer-events: auto;
+  position: absolute;
+  right: calc(var(--sa-r) + 110px);
+  bottom: var(--sa-b);
+  width: 200px;
+  padding: 6px 8px 8px;
+  border-radius: 16px;
+  background: var(--glass-hi);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  animation: ew-rise 0.2s var(--ease);
+}
+.ew-cast__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-variant: small-caps;
+}
+.ew-cast__pad {
+  touch-action: none;
+  position: relative;
+  height: min(190px, 46vh);
+  border-radius: 12px;
+  border: 1px dashed rgba(127, 198, 255, 0.5);
+  background: linear-gradient(0deg, rgba(127, 198, 255, 0.05), rgba(127, 198, 255, 0.22));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+  overflow: hidden;
+}
+.ew-cast__pad[data-pressed] {
+  border-style: solid;
+}
+.ew-cast__lane {
+  position: absolute;
+  top: 8px;
+  display: flex;
+  flex-direction: column;
+  color: rgba(159, 215, 255, 0.7);
+  font-size: 16px;
+  line-height: 0.9;
+  animation: ew-pulse 0.9s ease-in-out infinite alternate;
+}
+.ew-cast__bob {
+  font-size: 30px;
+  margin-bottom: 4px;
+}
+.ew-cast__hint {
+  font-size: 11px;
+  font-variant: small-caps;
+  color: var(--parch-dim);
+  text-align: center;
+}
+.ew-cast .ew-btn--pill {
+  align-self: center;
+}
+
+/* ── Fishing controls: hold button + crank ───────────────────────────── */
+.ew-fishing__controls {
+  position: absolute;
+  right: var(--sa-r);
+  bottom: var(--sa-b);
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.ew-fishing__controls .ew-reel {
+  position: static;
+  width: 80px;
+  height: 80px;
+}
+.ew-fishing__spot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ew-crank {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  padding: 0;
+  border: 2px solid var(--gold);
+  background: radial-gradient(circle, rgba(20, 15, 11, 0.4) 30%, rgba(127, 198, 255, 0.18) 31%, var(--glass) 70%);
+}
+.ew-crank.is-bite {
+  border-color: var(--ember);
+  box-shadow: 0 0 24px rgba(255, 154, 74, 0.7);
+}
+.ew-crank__speed {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  --spd: 0deg;
+  background: conic-gradient(rgba(143, 207, 122, 0.45) var(--spd), transparent 0);
+  -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
+  mask: radial-gradient(circle, transparent 62%, #000 63%);
+  pointer-events: none;
+}
+.ew-crank__speed.is-holding {
+  background: conic-gradient(rgba(255, 179, 71, 0.8) var(--spd), transparent 0);
+}
+.ew-crank__arm {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.ew-crank__arm::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--parch-dim);
+}
+.ew-crank__knob {
+  position: absolute;
+  right: -12px;
+  top: -12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe0a8, #d98b3a 70%);
+}
+.ew-crank__label {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  translate: -50% 0;
+  font-size: 10px;
+  font-variant: small-caps;
+  color: var(--parch-dim);
+  pointer-events: none;
+}
+.ew-meter.is-snapping .ew-bar {
+  animation: ew-flash 0.25s steps(2) infinite;
+}
+
+/* ── Township upgrades ───────────────────────────────────────────────── */
+.ew-cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.ew-cost__part.is-ok {
+  color: var(--ok);
+}
+.ew-cost__part.is-short {
+  color: var(--bad);
+}
+.ew-upcard {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.2);
+}
+.ew-upcard__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ew-upcard__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ew-upcard__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ew-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+.ew-timeline__step {
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(241, 228, 198, 0.12);
+  font-size: 11px;
+}
+.ew-timeline__step small {
+  display: block;
+  color: var(--parch-dim);
+}
+.ew-timeline__step.is-done {
+  opacity: 0.6;
+}
+.ew-timeline__step.is-current {
+  border-color: var(--gold);
+}
+.ew-timeline__step.is-next {
+  border-color: var(--ember);
+  border-style: dashed;
+}
+.ew-timeline__step.is-future {
+  opacity: 0.7;
+}
+.ew-timeline__dot {
+  color: var(--gold);
+}
+.ew-timeline__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ew-iso {
+  flex: none;
+  position: relative;
+  width: 84px;
+  height: 92px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ew-iso__stack {
+  --u: calc(22px * var(--s, 1));
+  position: relative;
+  width: calc(var(--u) * 2);
+  height: calc(var(--u) * 2.2);
+  margin-bottom: 14px;
+  transition: width 0.3s var(--ease), height 0.3s var(--ease);
+}
+.ew-iso__left,
+.ew-iso__right {
+  position: absolute;
+  bottom: 0;
+  width: 50%;
+  height: 62%;
+}
+.ew-iso__left {
+  left: 0;
+  background: linear-gradient(180deg, #b98a5a, #7a5536);
+  transform: skewY(26deg);
+  transform-origin: bottom right;
+}
+.ew-iso__right {
+  right: 0;
+  background: linear-gradient(180deg, #8f6743, #5a3d26);
+  transform: skewY(-26deg);
+  transform-origin: bottom left;
+}
+.ew-iso__roof {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 72%;
+  aspect-ratio: 1;
+  translate: -50% 0;
+  transform: scaleY(0.58) rotate(45deg);
+  background: linear-gradient(135deg, #e0604f, #8e2f25);
+  box-shadow: 0 0 10px rgba(255, 154, 74, 0.35);
+  z-index: 1;
+}
+.ew-iso[data-level='3'] .ew-iso__roof {
+  background: linear-gradient(135deg, #f0c779, #b07a2c);
+}
+.ew-iso__lv {
+  position: absolute;
+  bottom: 0;
+  font-size: 10px;
+  font-variant: small-caps;
+  color: var(--gold);
+}
+
+/* ── Chronicle: story map, ending, chains, clues ─────────────────────── */
+.ew-story {
+  overflow-x: auto;
+  touch-action: pan-x pan-y;
+  margin-bottom: 8px;
+}
+.ew-story__canvas {
+  position: relative;
+  margin: 0 auto;
+}
+.ew-story__act {
+  position: absolute;
+  top: 0;
+  text-align: center;
+  font-size: 11px;
+  font-variant: small-caps;
+  color: var(--gold);
+}
+.ew-story__edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ew-story__edge {
+  fill: none;
+  stroke: rgba(241, 228, 198, 0.2);
+  stroke-width: 2;
+}
+.ew-story__edge.is-lit {
+  stroke: var(--gold);
+}
+.ew-snode {
+  position: absolute;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  padding: 3px 6px;
+  font-size: 11px;
+  border-radius: 10px;
+}
+.ew-snode:disabled {
+  opacity: 1;
+}
+.ew-snode__title {
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ew-snode small {
+  font-size: 9px;
+  color: var(--parch-dim);
+}
+.ew-snode.is-hidden {
+  opacity: 0.45;
+  border-style: dashed;
+}
+.ew-snode.is-active {
+  border-color: var(--ember);
+  box-shadow: 0 0 10px rgba(255, 154, 74, 0.45);
+}
+.ew-snode.is-completed {
+  border-color: var(--gold);
+}
+.ew-snode.is-tracked {
+  outline: 2px solid var(--gold);
+}
+.ew-ending {
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.2);
+}
+.ew-ending__now {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ew-ending__metrics {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+.ew-metric {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+}
+.ew-metric.is-met {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.ew-chains {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.ew-chain {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+.ew-chain.is-complete {
+  border-color: var(--gold);
+}
+.ew-chain__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.ew-chain__main small {
+  color: var(--parch-dim);
+  font-size: 10px;
+}
+.ew-chain__pips {
+  display: flex;
+  gap: 3px;
+  margin-top: 2px;
+}
+.ew-chain__pip {
+  width: 14px;
+  height: 5px;
+  border-radius: 2px;
+  background: rgba(241, 228, 198, 0.15);
+}
+.ew-chain__pip.is-discovered {
+  background: rgba(232, 194, 106, 0.4);
+}
+.ew-chain__pip.is-active {
+  background: var(--ember);
+}
+.ew-chain__pip.is-completed {
+  background: var(--gold);
+}
+.ew-chain__bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--gold);
+}
+.ew-clues {
+  margin-bottom: 8px;
+}
+.ew-clues__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.ew-clues__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+}
+.ew-clue {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  min-height: 64px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.ew-clue p {
+  margin: 2px 0 0;
+  font-size: 10px;
+  color: var(--parch-dim);
+}
+.ew-clue.is-found {
+  background: linear-gradient(180deg, rgba(241, 228, 198, 0.16), rgba(241, 228, 198, 0.06));
+  border: 1px solid var(--gold);
+  rotate: -0.6deg;
+}
+.ew-clue.is-unfound {
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed rgba(241, 228, 198, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--parch-dim);
+}
+.ew-clue__mark {
+  font-size: 22px;
+  opacity: 0.4;
+}
+
+/* ── Combat: compact party (4 cards), apex forms ─────────────────────── */
+.ew-party--compact {
+  gap: 3px;
+}
+.ew-party--compact .ew-pcard {
+  min-height: 48px;
+  padding: 2px 6px;
+}
+.ew-party--compact .ew-pcard__face {
+  width: 24px;
+  height: 24px;
+}
+.ew-party--compact .ew-pcard .ew-bar {
+  height: 4px;
+}
+.ew-party--compact .ew-pcard__name {
+  font-size: 11px;
+}
+.ew-pcard__nums {
+  font-size: 9px;
+  color: var(--parch-dim);
+}
+.ew-pcard__hp {
+  color: #ffb3a8;
+  font-weight: 700;
+}
+.ew-pcard__ap {
+  color: #a8d4ff;
+}
+.ew-pcard__sync {
+  color: var(--sync);
+}
+.ew-party--compact .ew-armor {
+  min-height: 6px;
+}
+.ew-skill--dragon.is-apex {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, rgba(255, 154, 74, 0.2), var(--glass));
+}
+.ew-skill--dragon.is-sealed {
+  border-style: dashed;
+}
+
 /* Small landscape phones: tighten. */
 @media (max-height: 400px) {
   .ew-context {
@@ -1388,6 +2108,21 @@
   }
 }
 
+@keyframes ew-recruit {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: scale(1.12);
+    box-shadow: 0 0 22px rgba(232, 194, 106, 0.9);
+  }
+}
+@keyframes ew-flash {
+  50% {
+    opacity: 0.35;
+  }
+}
 @keyframes ew-fade {
   from {
     opacity: 0;
@@ -1440,4 +2175,19 @@
   .ew-clog__line {
     animation: none;
   }
+}
+
+/* Chronicle has five tabs: keep them on one scrollable row in the drawer. */
+.ew-sheet--drawer .ew-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+.ew-sheet--drawer .ew-tab {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+}
+.ew-timeline__step small.ew-cost {
+  display: flex;
 }

@@ -24,3 +24,10 @@ export const questAtLeast = (questId: QuestId, status: QuestStatus): Condition =
 export const all = (...of: Condition[]): Condition => ({ kind: 'all', of });
 export const any = (...of: Condition[]): Condition => ({ kind: 'any', of });
 export const not = (of: Condition): Condition => ({ kind: 'not', of });
+
+/** At least `atLeast` of the sub-conditions hold. */
+export const countOf = (atLeast: number, ...of: Condition[]): Condition => ({ kind: 'count', of, atLeast });
+/** Leader crossed a traversal gate (the store dispatches `fieldAction` with the gate id). */
+export const crossed = (action: string, gateId: string): Condition => fieldDone(action, gateId);
+export const choseIn = (dialogueId: string, choiceId: string): Condition => flagAtLeast(`evt:choice:${dialogueId}:${choiceId}`);
+export const clueFound = (clueId: string): Condition => flagIs(`clue:${clueId}`);

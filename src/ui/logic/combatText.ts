@@ -72,3 +72,8 @@ export function armorPips(armor: number, armorMax: number, maxPips = 6): readonl
 
 /** Combatant ids are `hero:<HeroId>` or `enemy:<index>:<EnemyId>`. */
 export const isHeroId = (id: CombatantId): boolean => id.startsWith('hero:');
+
+/** Dragon forms in authored order with the apex form(s) last. */
+export function sortForms<T extends { readonly formId: string }>(forms: readonly T[], isApex: (id: string) => boolean): readonly T[] {
+  return [...forms.filter((f) => !isApex(f.formId)), ...forms.filter((f) => isApex(f.formId))];
+}

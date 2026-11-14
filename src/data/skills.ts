@@ -156,6 +156,229 @@ export const skills = {
     apCost: 6, target: 'enemy', element: 'shadow', kind: 'magical', power: 1.5,
   },
 
+  /* ── Campaign hero kits ───────────────────────────────────────────── */
+  'skill.wyrmfireArc': {
+    id: 'skill.wyrmfireArc', name: 'Wyrmfire Arc', description: 'Kael sweeps a crescent of drake-fire across every foe.',
+    apCost: 9, target: 'allEnemies', element: 'fire', kind: 'magical', power: 1.25, syncGain: 12,
+    inflicts: { status: 'burn', chance: 0.35, turns: 2, potency: 8 },
+  },
+  'skill.lamentCall': {
+    id: 'skill.lamentCall', name: 'Lament Call', description: 'A breath of the clan horn: the whole party steels itself.',
+    apCost: 10, target: 'allAllies', element: 'fire', kind: 'support', power: 0, syncGain: 20,
+    inflicts: { status: 'atkUp', chance: 1, turns: 3, potency: 0.2 },
+  },
+  'skill.huntersMark': {
+    id: 'skill.huntersMark', name: 'Hunter\'s Mark', description: 'Tobin reads the herd and names the weak one. Lowers defence.',
+    apCost: 6, target: 'enemy', element: 'wind', kind: 'physical', power: 1.4,
+    inflicts: { status: 'defDown', chance: 0.9, turns: 3, potency: 0.3 },
+  },
+  'skill.galeLongshot': {
+    id: 'skill.galeLongshot', name: 'Gale Longshot', description: 'One arrow, aimed for an hour, loosed in a heartbeat.',
+    apCost: 9, target: 'enemy', element: 'wind', kind: 'physical', power: 2.3,
+  },
+  'skill.crowdPleaser': {
+    id: 'skill.crowdPleaser', name: 'Crowd-Pleaser', description: 'Vesna plays to the stands. Attack up, guard up.',
+    apCost: 5, target: 'self', element: 'physical', kind: 'support', power: 0,
+    inflicts: { status: 'atkUp', chance: 1, turns: 3, potency: 0.3 },
+  },
+  'skill.ashenWhirl': {
+    id: 'skill.ashenWhirl', name: 'Ashen Whirl', description: 'The glaive spins until the air catches fire.',
+    apCost: 9, target: 'allEnemies', element: 'fire', kind: 'physical', power: 1.3,
+    inflicts: { status: 'burn', chance: 0.3, turns: 2, potency: 8 },
+  },
+  'skill.galeHymn': {
+    id: 'skill.galeHymn', name: 'Gale Hymn', description: 'Orla sings and the wind answers, cutting every foe.',
+    apCost: 5, target: 'allEnemies', element: 'wind', kind: 'magical', power: 0.85,
+  },
+  'skill.skysongCanticle': {
+    id: 'skill.skysongCanticle', name: 'Skysong Canticle', description: 'A spire hymn that lifts every heart. Regen for the party.',
+    apCost: 9, target: 'allAllies', element: 'wind', kind: 'support', power: 0,
+    inflicts: { status: 'regen', chance: 1, turns: 3, potency: 10 },
+  },
+  'skill.cycloneAria': {
+    id: 'skill.cycloneAria', name: 'Cyclone Aria', description: 'The final verse of the Galecrest chimes, sung free.',
+    apCost: 12, target: 'allEnemies', element: 'wind', kind: 'magical', power: 1.6,
+  },
+  'skill.shieldSlam': {
+    id: 'skill.shieldSlam', name: 'Shield Slam', description: 'A quarry-slab of a shield to the face. May stun.',
+    apCost: 4, target: 'enemy', element: 'earth', kind: 'physical', power: 1.15,
+    inflicts: { status: 'stun', chance: 0.3, turns: 1, potency: 1 },
+  },
+  'skill.bastionCall': {
+    id: 'skill.bastionCall', name: 'Bastion Call', description: '"Behind me." Guard up for the whole party.',
+    apCost: 8, target: 'allAllies', element: 'earth', kind: 'support', power: 0,
+    inflicts: { status: 'guardUp', chance: 1, turns: 2, potency: 0.35 },
+  },
+  'skill.landslide': {
+    id: 'skill.landslide', name: 'Landslide', description: 'Hadrik brings the hillside down on them.',
+    apCost: 11, target: 'allEnemies', element: 'earth', kind: 'physical', power: 1.55,
+  },
+  'skill.springVolley': {
+    id: 'skill.springVolley', name: 'Spring Volley', description: 'Pim overwinds the magazine and lets it all go.',
+    apCost: 7, target: 'allEnemies', element: 'wind', kind: 'physical', power: 0.9,
+  },
+  'skill.overwind': {
+    id: 'skill.overwind', name: 'Overwind', description: 'Crank everything to eleven. Attack up.',
+    apCost: 4, target: 'self', element: 'physical', kind: 'support', power: 0,
+    inflicts: { status: 'atkUp', chance: 1, turns: 3, potency: 0.35 },
+  },
+  'skill.clockworkTempest': {
+    id: 'skill.clockworkTempest', name: 'Clockwork Tempest', description: 'A swarm of spring-darts that never seems to run down.',
+    apCost: 11, target: 'allEnemies', element: 'wind', kind: 'physical', power: 1.45,
+    inflicts: { status: 'defDown', chance: 0.4, turns: 2, potency: 0.2 },
+  },
+  'skill.redaction': {
+    id: 'skill.redaction', name: 'Redaction', description: 'Quill strikes a line through the foe\'s defences.',
+    apCost: 4, target: 'enemy', element: 'holy', kind: 'magical', power: 1.0,
+    inflicts: { status: 'defDown', chance: 0.7, turns: 3, potency: 0.25 },
+  },
+  'skill.illuminatedVerse': {
+    id: 'skill.illuminatedVerse', name: 'Illuminated Verse', description: 'A margin note that burns gold across every foe.',
+    apCost: 9, target: 'allEnemies', element: 'holy', kind: 'magical', power: 1.2,
+  },
+  'skill.errata': {
+    id: 'skill.errata', name: 'Errata', description: '"Correction: you are not wounded." Heals one ally a great deal.',
+    apCost: 8, target: 'ally', element: 'holy', kind: 'heal', power: 2.8,
+  },
+  'skill.brambleWall': {
+    id: 'skill.brambleWall', name: 'Bramble Wall', description: 'Thorns rise around the party. Guard up for all.',
+    apCost: 8, target: 'allAllies', element: 'earth', kind: 'support', power: 0,
+    inflicts: { status: 'guardUp', chance: 1, turns: 2, potency: 0.3 },
+  },
+  'skill.verdantSurge': {
+    id: 'skill.verdantSurge', name: 'Verdant Surge', description: 'Spring comes all at once. Heals every ally.',
+    apCost: 10, target: 'allAllies', element: 'earth', kind: 'heal', power: 1.4,
+    inflicts: { status: 'regen', chance: 1, turns: 2, potency: 8 },
+  },
+  'skill.rootquake': {
+    id: 'skill.rootquake', name: 'Rootquake', description: 'The roots of Hollowroot heave up through the enemy line.',
+    apCost: 11, target: 'allEnemies', element: 'earth', kind: 'magical', power: 1.5,
+    inflicts: { status: 'stun', chance: 0.2, turns: 1, potency: 1 },
+  },
+  'skill.lanternSnuff': {
+    id: 'skill.lanternSnuff', name: 'Lantern Snuff', description: 'Pinch out the light behind their eyes. May stun.',
+    apCost: 6, target: 'enemy', element: 'shadow', kind: 'magical', power: 1.3,
+    inflicts: { status: 'stun', chance: 0.35, turns: 1, potency: 1 },
+  },
+  'skill.hundredCuts': {
+    id: 'skill.hundredCuts', name: 'Hundred Cuts', description: 'Sable is everywhere at once, briefly.',
+    apCost: 9, target: 'allEnemies', element: 'shadow', kind: 'physical', power: 1.2,
+  },
+  'skill.eclipseStrike': {
+    id: 'skill.eclipseStrike', name: 'Eclipse Strike', description: 'One cut from the unlit side of the world.',
+    apCost: 10, target: 'enemy', element: 'shadow', kind: 'physical', power: 2.4,
+  },
+
+  /* ── Campaign dragon forms ────────────────────────────────────────── */
+  'skill.rimeBreath': {
+    id: 'skill.rimeBreath', name: 'Rime Breath', description: 'A glacier exhaled. Soaks every foe.',
+    apCost: 6, target: 'allEnemies', element: 'water', kind: 'magical', power: 1.35,
+    inflicts: { status: 'soak', chance: 0.5, turns: 2, potency: 0.25 },
+  },
+  'skill.glacierFang': {
+    id: 'skill.glacierFang', name: 'Glacier Fang', description: 'Teeth of old ice.',
+    apCost: 5, target: 'enemy', element: 'water', kind: 'physical', power: 1.9,
+  },
+  'skill.thunderclap': {
+    id: 'skill.thunderclap', name: 'Thunderclap', description: 'Wings meet overhead. May stun everyone it reaches.',
+    apCost: 8, target: 'allEnemies', element: 'wind', kind: 'magical', power: 1.5,
+    inflicts: { status: 'stun', chance: 0.25, turns: 1, potency: 1 },
+  },
+  'skill.stormTalon': {
+    id: 'skill.stormTalon', name: 'Storm Talon', description: 'A dive from the cloud-roof.',
+    apCost: 6, target: 'enemy', element: 'wind', kind: 'physical', power: 2.3,
+  },
+  'skill.sovereignFlame': {
+    id: 'skill.sovereignFlame', name: 'Sovereign Flame', description: 'The fire that chooses to flicker. Nothing stilled survives it.',
+    apCost: 12, target: 'allEnemies', element: 'fire', kind: 'magical', power: 2.2,
+    inflicts: { status: 'burn', chance: 0.6, turns: 3, potency: 14 },
+  },
+  'skill.crownOfEmbers': {
+    id: 'skill.crownOfEmbers', name: 'Crown of Embers', description: 'Every Warden-bound heart burns brighter.',
+    apCost: 8, target: 'allAllies', element: 'fire', kind: 'support', power: 0,
+    inflicts: { status: 'atkUp', chance: 1, turns: 3, potency: 0.35 },
+  },
+
+  /* ── Campaign enemies ─────────────────────────────────────────────── */
+  'skill.enemy.gnash': {
+    id: 'skill.enemy.gnash', name: 'Gnash', description: 'A beast\'s full-weight bite.',
+    apCost: 3, target: 'enemy', element: 'physical', kind: 'physical', power: 1.35,
+  },
+  'skill.enemy.emberSpit': {
+    id: 'skill.enemy.emberSpit', name: 'Ember Spit', description: 'Molten glass, flicked. May burn.',
+    apCost: 4, target: 'enemy', element: 'fire', kind: 'magical', power: 1.2,
+    inflicts: { status: 'burn', chance: 0.4, turns: 2, potency: 5 },
+  },
+  'skill.enemy.galeRake': {
+    id: 'skill.enemy.galeRake', name: 'Gale Rake', description: 'Talons on a crosswind.',
+    apCost: 4, target: 'enemy', element: 'wind', kind: 'physical', power: 1.3,
+  },
+  'skill.enemy.chimeToll': {
+    id: 'skill.enemy.chimeToll', name: 'Chime Toll', description: 'A stilling bell rings through every bone.',
+    apCost: 6, target: 'allEnemies', element: 'holy', kind: 'magical', power: 0.85,
+    inflicts: { status: 'stun', chance: 0.12, turns: 1, potency: 1 },
+  },
+  'skill.enemy.shieldWall': {
+    id: 'skill.enemy.shieldWall', name: 'Shield Wall', description: 'Locked shields.',
+    apCost: 3, target: 'self', element: 'physical', kind: 'support', power: 0,
+    inflicts: { status: 'guardUp', chance: 1, turns: 2, potency: 0.4 },
+  },
+  'skill.enemy.bogDrag': {
+    id: 'skill.enemy.bogDrag', name: 'Bog Drag', description: 'Something pulls from below. May soak.',
+    apCost: 4, target: 'enemy', element: 'water', kind: 'physical', power: 1.3,
+    inflicts: { status: 'soak', chance: 0.5, turns: 2, potency: 0.2 },
+  },
+  'skill.enemy.sandLash': {
+    id: 'skill.enemy.sandLash', name: 'Sand Lash', description: 'A whip of hot grit across the line.',
+    apCost: 5, target: 'allEnemies', element: 'earth', kind: 'physical', power: 0.8,
+  },
+  'skill.enemy.auditorsGaze': {
+    id: 'skill.enemy.auditorsGaze', name: 'Auditor\'s Gaze', description: 'You are found wanting. Defence down.',
+    apCost: 5, target: 'enemy', element: 'holy', kind: 'magical', power: 1.1,
+    inflicts: { status: 'defDown', chance: 0.6, turns: 3, potency: 0.25 },
+  },
+  'skill.enemy.fellingAxe': {
+    id: 'skill.enemy.fellingAxe', name: 'Felling Axe', description: 'A woodsman\'s overhead chop.',
+    apCost: 4, target: 'enemy', element: 'physical', kind: 'physical', power: 1.5,
+  },
+  'skill.enemy.sapBind': {
+    id: 'skill.enemy.sapBind', name: 'Sap Bind', description: 'Amber sap hardens around the limbs. May stun.',
+    apCost: 5, target: 'enemy', element: 'earth', kind: 'magical', power: 1.0,
+    inflicts: { status: 'stun', chance: 0.3, turns: 1, potency: 1 },
+  },
+  'skill.enemy.frostBite': {
+    id: 'skill.enemy.frostBite', name: 'Frost Bite', description: 'The cold gets its teeth in. May soak.',
+    apCost: 4, target: 'enemy', element: 'water', kind: 'physical', power: 1.35,
+    inflicts: { status: 'soak', chance: 0.35, turns: 2, potency: 0.2 },
+  },
+  'skill.enemy.reliquaryLight': {
+    id: 'skill.enemy.reliquaryLight', name: 'Reliquary Light', description: 'A caged spirit\'s light, turned into a weapon.',
+    apCost: 6, target: 'allEnemies', element: 'holy', kind: 'magical', power: 1.0,
+  },
+  'skill.enemy.slagHurl': {
+    id: 'skill.enemy.slagHurl', name: 'Slag Hurl', description: 'A ladle of glowing slag. May burn.',
+    apCost: 5, target: 'enemy', element: 'fire', kind: 'physical', power: 1.5,
+    inflicts: { status: 'burn', chance: 0.5, turns: 3, potency: 10 },
+  },
+  'skill.enemy.kilnBlast': {
+    id: 'skill.enemy.kilnBlast', name: 'Kiln Blast', description: 'The furnace doors swing open.',
+    apCost: 8, target: 'allEnemies', element: 'fire', kind: 'magical', power: 1.15,
+  },
+  'skill.enemy.stillingVerdict': {
+    id: 'skill.enemy.stillingVerdict', name: 'Stilling Verdict', description: 'The Hierophant\'s word. A spirit goes quiet.',
+    apCost: 9, target: 'allEnemies', element: 'holy', kind: 'magical', power: 1.3,
+    inflicts: { status: 'stun', chance: 0.15, turns: 1, potency: 1 },
+  },
+  'skill.enemy.ossuaryHowl': {
+    id: 'skill.enemy.ossuaryHowl', name: 'Ossuary Howl', description: 'A hound that should be dead calls the pack.',
+    apCost: 4, target: 'self', element: 'shadow', kind: 'support', power: 0,
+    inflicts: { status: 'atkUp', chance: 1, turns: 2, potency: 0.25 },
+  },
+  'skill.enemy.stillMend': {
+    id: 'skill.enemy.stillMend', name: 'Still Mend', description: 'Stolen spirit-warmth knits a wound.',
+    apCost: 6, target: 'ally', element: 'holy', kind: 'heal', power: 2.0,
+  },
+
   /* ── Enemy skills ─────────────────────────────────────────────────── */
   'skill.enemy.rend': {
     id: 'skill.enemy.rend', name: 'Rend', description: 'Teeth and thorn-hackles.',
