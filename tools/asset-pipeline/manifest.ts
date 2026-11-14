@@ -6,7 +6,7 @@
  * unit-tested without touching the filesystem. Only type imports from `src/` so this
  * module also runs under `node --experimental-strip-types` (no path aliases needed).
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
 import type { AssetManifest, AssetManifestEntry, AssetStatus } from '../../src/types/contracts.ts';
 
@@ -234,6 +234,40 @@ export class ManifestEmitter {
     renameSync(tmp, dest);
     this.log(`delivered ${relative(this.repoRoot, filePath)} → ${entry.target_path}`);
     return entry;
+  }
+
+  /**
+   * Ingest every file already sitting in `output/` (e.g. pushed to git while no dev server was
+   * running): copy each to its target unless the target is already identical and at least as new.
+   * Returns the ids copied. Call after `emit()` so entries are loaded, then `emit()` again to flip statuses.
+   */
+  ingestOutput(): string[] {
+    let files: string[];
+    try {
+      files = readdirSync(this.outputDir);
+    } catch {
+      return [];
+    }
+    const copied: string[] = [];
+    for (const name of files.sort()) {
+      if (!OUTPUT_EXTENSIONS.includes(extname(name).toLowerCase())) continue;
+      const src = join(this.outputDir, name);
+      const entry = entryForOutputFile(src, this.entries);
+      if (!entry || entry.status === 'rejected' || !isSafeTargetPath(entry.target_path)) {
+        if (!entry) this.log(`ignored output/${name} (not "<asset_id>.png|webp" of a requested asset)`);
+        continue;
+      }
+      const dest = this.absTarget(entry.target_path);
+      try {
+        const s = statSync(src);
+        const d = existsSync(dest) ? statSync(dest) : null;
+        if (d && d.size === s.size && d.mtimeMs >= s.mtimeMs) continue;
+      } catch {
+        continue;
+      }
+      if (this.deliverFromOutput(src)) copied.push(entry.asset_id);
+    }
+    return copied;
   }
 
   /** Registry of delivered (present) targets. */

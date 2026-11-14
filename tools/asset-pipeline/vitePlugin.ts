@@ -83,6 +83,9 @@ export function AssetWatcher(opts: AssetWatcherOptions = {}): Plugin {
           log('no asset requests found (src/assets/manifests not ready yet) — manifest left untouched');
           return;
         }
+        em.emit(requests);
+        // Files pushed to output/ while no dev server was running.
+        for (const id of em.ingestOutput()) log(`ingested ${id} from output/`);
         const r = em.emit(requests);
         log(`manifest: ${r.manifest.assets.length} assets (${r.added.length} new, ${r.newlyDelivered.length} newly delivered) → ${relative(root, em.manifestPath)}`);
       };

@@ -27,6 +27,9 @@ try {
     log('no asset requests found — nothing written');
   } else {
     const em = new ManifestEmitter({ repoRoot: root, log });
+    em.emit(requests);
+    const ingested = em.ingestOutput();
+    if (ingested.length) log(`ingested ${ingested.length} file(s) from ${relative(root, em.outputDir)}/`);
     const r = em.emit(requests);
     log(`${r.manifest.assets.length} assets (${r.added.length} new, ${r.removed.length} removed, ${r.newlyDelivered.length} newly delivered) → ${relative(root, em.manifestPath)}`);
   }

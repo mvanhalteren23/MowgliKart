@@ -139,4 +139,18 @@ describe('ManifestEmitter (temp dir)', () => {
     expect(again.manifest.assets.find((e) => e.asset_id === 'b')?.status).toBe('delivered');
     expect(again.newlyDelivered).toEqual([]);
   });
+
+  it('ingests files already in output/ without a dev server, and skips unchanged ones', () => {
+    dir = mkdtempSync(join(tmpdir(), 'emberwake-assets-'));
+    const em = new ManifestEmitter({ repoRoot: dir, pipelineDir: join(dir, 'pipe'), log: () => {} });
+    em.emit([entry('a'), entry('b')]);
+    mkdirSync(em.outputDir, { recursive: true });
+    writeFileSync(join(em.outputDir, 'a.png'), Buffer.from([1, 2, 3]));
+    writeFileSync(join(em.outputDir, 'stray.png'), Buffer.from([1]));
+    writeFileSync(join(em.outputDir, 'notes.txt'), 'x');
+    expect(em.ingestOutput()).toEqual(['a']);
+    expect(em.ingestOutput()).toEqual([]); // already identical and up to date
+    const r = em.emit([entry('a'), entry('b')]);
+    expect(r.manifest.assets.map((e) => [e.asset_id, e.status])).toEqual([['a', 'delivered'], ['b', 'pending']]);
+  });
 });

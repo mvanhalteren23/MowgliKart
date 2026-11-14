@@ -75,7 +75,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Hazard icon: a teal droplet split by a violet-white lightning bolt. Square 64x64 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hazard"
     },
     {
@@ -109,7 +109,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Hazard icon: three glowing embers on a scorched black patch. Square 64x64 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hazard"
     },
     {
@@ -143,7 +143,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Hazard icon: a pale blue hexagonal ice crystal over a cracked ice sheet. Square 64x64 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hazard"
     },
     {
@@ -177,7 +177,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Hazard icon: a heavy grey smoke cloud with two faint ember sparks. Square 64x64 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hazard"
     },
     {
@@ -211,7 +211,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Hazard icon: three curling steam wisps rising from a cracked stone. Square 64x64 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hazard"
     },
     {
@@ -245,7 +245,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Hazard icon: a single teal water droplet over three ripple rings. Square 64x64 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hazard"
     },
     {
@@ -292,7 +292,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Stamina gauge frame: a horizontal brass-and-soot capsule with a small wing emblem on the left cap and an empty dark interior channel for the fill. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hud"
     },
     {
@@ -520,7 +520,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Mount button icon: a soot-black drake head in profile with glowing ember seams and a spread wing behind it. Square 128x128 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hud"
     },
     {
@@ -915,7 +915,7 @@
       },
       "alpha_channel": true,
       "prompt_spec": "Mount button icon: a thornback strider head in profile with bramble spines and a brass lantern charm on the bridle. Square 128x128 icon on a transparent background, centred with a 4px safe margin, legible at 48px. Original Emberwake HUD style: hand-crafted pixel-art interface piece with brass-and-soot lantern framing, warm ember highlights, teal enamel accents and a soft outer glow, readable at small sizes on a phone in landscape; no text, no logos.",
-      "status": "pending",
+      "status": "delivered",
       "category": "hud"
     },
     {
