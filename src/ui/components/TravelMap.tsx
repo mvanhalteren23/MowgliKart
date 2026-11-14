@@ -52,24 +52,34 @@ export function TravelMap() {
   const flying = flight !== null && mountedOn === flight.id;
 
   return (
-    <Sheet kind="sheet" title="Fast Travel" sub={flight ? `${flying ? 'Riding' : 'By'} ${flight.name}` : 'Waypoints'} onClose={() => setMapOpen(false)} closeTestId="travel-map-close">
+    <Sheet kind="sheet" title="Fast Travel" sub={flight ? `${flying ? 'Riding' : 'By'} ${flight.name}` : 'Waypoints'} onClose={() => setMapOpen(false)} closeTestId="map-close">
       <div className="ew-travel" data-testid="travel-map">
         {disabledReason && (
           <p className="ew-travel__reason ew-warn" data-testid="travel-disabled">
             🔒 {disabledReason}
           </p>
         )}
-        <div className="ew-travel__map" style={{ aspectRatio: `${bounds.cols} / ${bounds.rows}`, width: `min(100%, calc((100dvh - 170px) * ${(bounds.cols / bounds.rows).toFixed(3)}))`, gridTemplateColumns: `repeat(${bounds.cols}, 1fr)`, gridTemplateRows: `repeat(${bounds.rows}, 1fr)` }}>
+        <div className="ew-travel__map" style={{ aspectRatio: `${bounds.cols} / ${bounds.rows}`, width: `min(100%, calc((100dvh - 130px) * ${(bounds.cols / bounds.rows).toFixed(3)}))`, gridTemplateColumns: `repeat(${bounds.cols}, 1fr)`, gridTemplateRows: `repeat(${bounds.rows}, 1fr)` }}>
           {tiles.map((t) => (
             <div key={t.key} className="ew-travel__tile" style={{ gridColumn: t.col, gridRow: t.row, background: BIOME_FILL[t.biome] }} data-testid={`chunk-${t.cx}-${t.cz}`}>
               <span className="ew-travel__tilename">{t.name}</span>
             </div>
           ))}
           {pins.map((p) => (
+            <span key={p.regionId} className="ew-travel__marker" style={{ left: `${p.point.left}%`, top: `${p.point.top}%` }} aria-hidden="true">
+              <span className="ew-travel__dot" />
+              <span className="ew-travel__mlabel">{p.name}</span>
+            </span>
+          ))}
+          <span ref={youRef} className="ew-travel__you" data-testid="map-you" aria-label="You are here" />
+        </div>
+        <div className="ew-travel__list" role="list" aria-label="Waypoints">
+          {pins.length === 0 && <p className="ew-empty">No waypoints discovered yet — explore to find them.</p>}
+          {pins.map((p) => (
             <TapButton
               key={p.regionId}
+              role="listitem"
               className={cx('ew-travel__pin', disabledReason && 'is-disabled')}
-              style={{ left: `${p.point.left}%`, top: `${p.point.top}%` }}
               data-testid={`travel-${p.regionId}`}
               disabled={disabledReason !== null}
               aria-label={`Fly to ${p.name}`}
@@ -82,9 +92,7 @@ export function TravelMap() {
               <span className="ew-travel__label">{p.name}</span>
             </TapButton>
           ))}
-          <span ref={youRef} className="ew-travel__you" data-testid="travel-you" aria-label="You are here" />
         </div>
-        {pins.length === 0 && <p className="ew-empty">No waypoints discovered yet — explore to find them.</p>}
       </div>
     </Sheet>
   );

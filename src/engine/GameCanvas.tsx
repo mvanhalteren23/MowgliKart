@@ -14,6 +14,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { runtime } from '@/app/runtime';
 import { Hd2dPipeline } from '@/engine/shaders';
+import { assetRegistry } from './assets/registry';
 import { BillboardSprite } from './BillboardSprite';
 import { CAMERA_FAR, CAMERA_FOV, CAMERA_NEAR } from './cameraRig';
 import { EngineCore } from './engineCore';
@@ -39,6 +40,8 @@ function World() {
     const e = new EngineCore();
     scene.add(e.root);
     setEngine(e);
+    // Dev/test handle (smoke tests inspect the asset bridge and mount state).
+    if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__emberwakeEngine = { engine: e, assetRegistry };
     return () => {
       scene.remove(e.root);
       e.dispose();

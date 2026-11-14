@@ -180,8 +180,9 @@ export function stepAutopilot(s: AutopilotState, dt: number, ctx: AutopilotConte
       const glidePath = t.altitude * Math.min(1, p.d / land);
       const alt = approach(s.alt, glidePath, t.climbRate * 2, dt);
       if (p.d <= ARRIVE_EPSILON) {
+        // Hover-settle onto the exact target point.
         const touch = approach(s.alt, 0, t.climbRate * 2, dt);
-        return touch <= 0.02 ? next('done', p.x, p.z, 0, 'arrived') : next('landing', p.x, p.z, touch);
+        return touch <= 0.02 ? next('done', s.target.x, s.target.z, 0, 'arrived') : next('landing', s.target.x, s.target.z, touch);
       }
       return next('landing', p.x, p.z, alt);
     }

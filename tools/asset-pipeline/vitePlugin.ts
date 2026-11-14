@@ -47,7 +47,10 @@ export interface AssetWatcherOptions {
 export function AssetWatcher(opts: AssetWatcherOptions = {}): Plugin {
   let config: ResolvedConfig | null = null;
   let emitter: ManifestEmitter | null = null;
-  const log = (m: string): void => config?.logger.info(`[emberwake:assets] ${m}`, { timestamp: true }) ?? console.log(m);
+  const log = (m: string): void => {
+    if (config) config.logger.info(`[emberwake:assets] ${m}`, { timestamp: true });
+    else console.log(`[emberwake:assets] ${m}`);
+  };
 
   const makeEmitter = (root: string): ManifestEmitter => new ManifestEmitter({ repoRoot: root, log, ...(opts.pipelineDir ? { pipelineDir: opts.pipelineDir } : {}) });
 
@@ -58,6 +61,8 @@ export function AssetWatcher(opts: AssetWatcherOptions = {}): Plugin {
     },
 
     configureServer(server: ViteDevServer) {
+      // Vitest boots a Vite server too: never touch the pipeline from tests.
+      if (process.env.VITEST) return;
       const root = server.config.root;
       const em = makeEmitter(root);
       emitter = em;

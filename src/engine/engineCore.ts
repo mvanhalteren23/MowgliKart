@@ -14,8 +14,14 @@ import { getServices, useGame } from '@/app/store';
 import { biomeAt, isWalkable, sampleHeight, WATER_LEVEL } from '@/engine/bootstrapAssets';
 import { emitRipple, updateSharedUniforms } from '@/engine/shaders';
 import type { AnimalState, BiomeChunkDef, ContextAction, FieldActionId, GameStore, HeroId, NpcId, TraversalGateDef, Vec2 } from '@/types/contracts';
+import { AssetRegistryLoader } from './assets/AssetRegistryLoader';
+import { assetRegistry } from './assets/registry';
+import { SeamlessFastTravelController, type TravelFrame } from './fastTravel';
+import { HazardLayer } from './hazardLayer';
+import { shakeOffset } from './hitStop';
+import { locomotion } from './travel';
 import { atmosphereAt, BIOME_ATMOSPHERE, dampAtmosphere, scatterDressing, type Atmosphere } from './biomes';
-import { blendPose, CAMERA_YAW, cameraPose, COMBAT_FRAMING, dampFactor, easeInOut, OVERWORLD_FRAMING, stepBlend } from './cameraRig';
+import { blendPose, CAMERA_YAW, cameraPose, COMBAT_FRAMING, dampFactor, easeInOut, stepBlend } from './cameraRig';
 import { CombatDirector } from './combatDirector';
 import { fitDistance } from './combatStaging';
 import { createEngineWorld, setAnim, type EngineEntity, type EngineWorld } from './ecs';
@@ -29,7 +35,7 @@ import { PROP_CLEARANCE, propFromDef, walkAreaDeck, type PropInstance, type Walk
 import type { Exclusion } from './scatter';
 import { AuraLayer, FxLayer, shadowSize, ShadowBatch, SpriteBatcher } from './spriteLayer';
 import { facingFromHeading, headingFromVector } from './spriteMath';
-import { clampToContinent, continentAllows, continentBounds, type Bounds, type ChunkCoord } from './streaming';
+import { clampToContinent, continentAllows, continentBounds, distanceToChunks, insideBounds, SOFT_WALL, type Bounds, type ChunkCoord } from './streaming';
 import { TerrainLayer } from './terrainLayer';
 
 const FACE_CAMERA = Math.PI / 2;
@@ -44,6 +50,9 @@ const SPRITE_CULL = 95;
 /** Approach speed (m/s) from where the leader stands to the gate's near side. */
 const APPROACH_SPEED = 7;
 const FOLLOWER_DELAY = 0.3;
+/** Foliage within this distance of the combat stage line is hidden during battle. */
+export const COMBAT_FOLIAGE_CLEAR = 12;
+const NO_TRAVEL: TravelFrame = { handled: false, heading: null, drainPerSec: 0, lift: 0, flying: false, hideLeader: false, hideFollowers: false, landed: false, moving: false };
 
 function contextKey(c: ContextAction | null): string {
   if (!c) return '';
@@ -94,6 +103,11 @@ export class EngineCore {
   readonly fx = new FxLayer();
   readonly combat: CombatDirector;
   readonly grid = new ColliderGrid();
+  /** Delivered pipeline art → textures (hot-swapped). */
+  readonly assets: AssetRegistryLoader;
+  readonly hazards: HazardLayer;
+  readonly travel: SeamlessFastTravelController;
+  private travelFrame: TravelFrame = NO_TRAVEL;
   /** View-space distance to the subject (tilt-shift focus). */
   focusDistance = 40;
   combatBlend = 0;
@@ -159,6 +173,10 @@ export class EngineCore {
       onUnload: (key) => this.undress(key),
     });
     this.combat = new CombatDirector(this.ecs, db, world);
+    assetRegistry.seed(db.assetRequests ?? []);
+    this.assets = new AssetRegistryLoader(assetRegistry);
+    this.hazards = new HazardLayer(db, this.assets);
+    this.travel = new SeamlessFastTravelController(this.assets);
     this.root.add(
       this.terrain.root,
       this.staticProps.root,
@@ -172,6 +190,8 @@ export class EngineCore {
       this.fx.root,
       this.motes.points,
       this.arrow.mesh,
+      this.hazards.root,
+      this.travel.proxy.root,
     );
 
     const st = useGame.getState();
@@ -232,6 +252,13 @@ export class EngineCore {
 
   private readonly canStand = (x: number, z: number): boolean => {
     if (!continentAllows(this.chunks, this.bounds, this.moveFrom.x, this.moveFrom.z, x, z)) return false;
+    if (walkAreaDeck(this.walkAreas, x, z) !== null) return true;
+    return isWalkable(this.svc.db.world, x, z) && !this.grid.blocked(x, z);
+  };
+
+  /** Safe touchdown: on the continent (inside the soft wall), walkable and clear of props. */
+  private readonly canLand = (x: number, z: number): boolean => {
+    if (!insideBounds(x, z, this.bounds) || distanceToChunks(this.chunks, x, z) > SOFT_WALL) return false;
     if (walkAreaDeck(this.walkAreas, x, z) !== null) return true;
     return isWalkable(this.svc.db.world, x, z) && !this.grid.blocked(x, z);
   };
@@ -442,7 +469,7 @@ export class EngineCore {
     const req = runtime.requests.fieldAction;
     if (req) {
       runtime.requests.fieldAction = null;
-      if (overworld || req === 'drakeSight') this.handleFieldAction(req, time);
+      if ((overworld && !this.travelFrame.flying) || req === 'drakeSight') this.handleFieldAction(req, time);
     }
     runtime.requests.huntAim = null;
     runtime.requests.traverseGate = null;
@@ -451,6 +478,11 @@ export class EngineCore {
     // 2. Movement.
     let mag = 0;
     let moved = 0;
+    let drain = 0;
+    const staminaSvc = this.svc.core.stamina;
+    const tuning = db.stamina;
+    const canDrain = staminaSvc ? staminaSvc.canDrain(runtime.stamina) : true;
+    let tf: TravelFrame = NO_TRAVEL;
     if (pos) {
       const fromX = pos.x;
       const fromZ = pos.z;
@@ -463,9 +495,35 @@ export class EngineCore {
       } else if (overworld) {
         const v = stickToWorld(runtime.input.moveX, runtime.input.moveY, yaw);
         mag = v.mag;
-        if (mag > 0) {
+        if (tuning) {
+          tf = this.travel.update({
+            dt,
+            time,
+            st,
+            mounts: db.mounts ?? {},
+            pos,
+            stick: v,
+            yaw,
+            bounds: this.bounds,
+            stamina: runtime.stamina,
+            tuning,
+            canDrain,
+            baseSpeed: WALK_SPEED,
+            canStand: this.canStand,
+            canLand: this.canLand,
+            groundY: (x, z) => this.groundY(x, z),
+          });
+        }
+        if (tf.handled) {
+          drain = tf.drainPerSec;
+          if (tf.heading !== null) this.heading = tf.heading;
+        } else if (mag > 0) {
           const shallow = sampleHeight(db.world, pos.x, pos.z) < WATER_LEVEL + 0.05 && walkAreaDeck(this.walkAreas, pos.x, pos.z) === null;
-          const speed = WALK_SPEED * mag * (shallow ? SHALLOW_SPEED_FACTOR : 1);
+          const loco = tuning
+            ? locomotion({ baseSpeed: WALK_SPEED, stickMag: mag, sprint: runtime.input.sprint, boost: false, canDrain, tuning, mount: null, terrainFactor: shallow ? SHALLOW_SPEED_FACTOR : 1 })
+            : { speed: WALK_SPEED * mag * (shallow ? SHALLOW_SPEED_FACTOR : 1), drainPerSec: 0 };
+          const speed = loco.speed;
+          drain = loco.drainPerSec;
           const r = resolveMove(pos.x, pos.z, v.x * speed * dt, v.z * speed * dt, this.canStand);
           pos.x = r.x;
           pos.z = r.z;
@@ -492,14 +550,18 @@ export class EngineCore {
           npc.heading = headingFromVector(pos.x - npc.position.x, pos.z - npc.position.z);
         }
       }
-      pos.y = this.groundY(pos.x, pos.z) + lift;
+      if (!tf.handled) pos.y = this.groundY(pos.x, pos.z) + lift;
+      p.shadowDrop = tf.handled ? tf.lift : lift;
       moved = Math.hypot(pos.x - fromX, pos.z - fromZ);
       p.heading = this.heading;
       this.actionTimer = Math.max(0, this.actionTimer - dt);
-      if (!this.traversal) setAnim(p, this.actionTimer > 0 || this.dash || mode === 'fishing' ? 'action' : moved > 1e-4 ? 'walk' : 'idle');
+      if (tf.handled) setAnim(p, 'idle');
+      else if (!this.traversal) setAnim(p, this.actionTimer > 0 || this.dash || mode === 'fishing' ? 'action' : moved > 1e-4 ? 'walk' : 'idle');
       this.writePlayer(pos.x, pos.z, this.heading, moved > 1e-4, dt > 0 ? moved / dt : 0);
 
-      // 3. Followers on the breadcrumb trail (scripted while crossing a gate).
+      // 3. Followers on the breadcrumb trail (scripted while crossing a gate; they ride along in flight).
+      if (tf.landed) this.regroup(pos.x, pos.z);
+      const followSpeed = Math.max(WALK_SPEED, (dt > 0 ? moved / dt : 0) * 1.15);
       if (!this.traversal) {
         this.trail.push(pos.x, pos.z);
         this.followers.forEach((f, slot) => {
@@ -508,7 +570,7 @@ export class EngineCore {
           const target = this.trail.sampleBehind(FOLLOW_GAP * (slot + 1), pos.x, pos.z, this.followTmp);
           const bx = fp.x;
           const bz = fp.z;
-          stepFollower(fp, target, dt, WALK_SPEED);
+          stepFollower(fp, target, dt, followSpeed);
           fp.y = this.groundY(fp.x, fp.z);
           const fm = Math.hypot(fp.x - bx, fp.z - bz);
           if (fm > 1e-3) f.heading = headingFromVector(fp.x - bx, fp.z - bz);
@@ -517,14 +579,19 @@ export class EngineCore {
       }
     }
 
+    this.travelFrame = tf;
+    // Stamina: one tick per frame (0 drain = resting / regenerating).
+    if (staminaSvc && tuning) runtime.stamina = staminaSvc.tick(runtime.stamina, drain, dt, tuning);
+
     // 4. Wildlife.
-    if (mode !== 'combat' && pos) this.updateWildlife(dt, st, { x: pos.x, z: pos.z }, mag);
+    if (mode !== 'combat' && pos) this.updateWildlife(dt, st, { x: pos.x, z: pos.z }, tf.flying ? 0 : mag);
 
     // 5. Drake-Sight reveals.
     this.updateDrakeSight(st, time);
 
     // 6. Proximity → context action.
-    if (overworld && pos && !this.traversal) this.updateContext(useGame.getState(), pos.x, pos.z);
+    if (overworld && pos && !this.traversal && !tf.flying) this.updateContext(useGame.getState(), pos.x, pos.z);
+    else if (tf.flying && useGame.getState().contextAction) useGame.getState().setContextAction(null);
 
     // 7. Region enter events.
     if (overworld && pos) {
@@ -548,10 +615,14 @@ export class EngineCore {
     const latest = useGame.getState();
     this.combat.update(dt, time, latest.combat, latest.mode === 'combat', { x: runtime.player.x, z: runtime.player.z });
     this.applyCombatVisibility();
+    const staged = this.combat.isStaged;
+    this.hazards.update(this.combat.hitStop.effectiveDt(time, dt), staged ? latest.combat : null, (side) => this.combat.sideSpan(side), (x, z) => this.groundY(x, z));
+    const frame = staged ? this.combat.frame : null;
+    this.terrain.setFoliageExclusion(frame ? { ax: frame.x - frame.width / 2, az: frame.z, bx: frame.x + frame.width / 2, bz: frame.z, radius: COMBAT_FOLIAGE_CLEAR } : null);
 
-    // 10. Streaming, camera, atmosphere, shared uniforms, FX, batches.
-    this.terrain.update({ x: runtime.player.x, z: runtime.player.z });
-    this.updateCamera(dt, camera, latest.mode === 'combat' && latest.combat !== null);
+    // 10. Streaming (continuous while crossing chunks in flight), camera, atmosphere, shared uniforms, FX, batches.
+    this.terrain.update({ x: runtime.player.x, z: runtime.player.z }, tf.flying ? 2 : 1);
+    this.updateCamera(dt, time, camera, latest.mode === 'combat' && latest.combat !== null);
     const target = atmosphereAt((x, z) => biomeAt(db.world, x, z), this.camTarget.x, this.camTarget.z);
     this.atmosphere = dampAtmosphere(this.atmosphere, target, dt);
     updateSharedUniforms(time, latest.wind, pos ?? { x: 0, y: 0, z: 0 });
@@ -567,6 +638,17 @@ export class EngineCore {
     this.arrow.update(dt);
     this.motes.update(dt);
     this.renderBatches(dt, time, yaw);
+  }
+
+  /** Followers regroup behind the leader (after a flight touchdown). */
+  private regroup(x: number, z: number): void {
+    this.trail.reset(x, z);
+    this.followers.forEach((f, i) => {
+      if (!f.position) return;
+      f.position.x = x - 0.6 * (i + 1);
+      f.position.z = z + 0.9 * (i + 1);
+      f.position.y = this.groundY(f.position.x, f.position.z);
+    });
   }
 
   /** Jump the party (dev/perf teleports): clamps to the continent and snaps camera + followers. */
@@ -891,27 +973,27 @@ export class EngineCore {
   private applyCombatVisibility(): void {
     const anchor = this.combat.anchor;
     const staged = this.combat.isStaged;
-    this.player.hidden = staged;
-    for (const f of this.followers) f.hidden = staged;
+    this.player.hidden = staged || this.travelFrame.hideLeader;
+    for (const f of this.followers) f.hidden = staged || this.travelFrame.hideFollowers;
     const near = (e: EngineEntity): boolean => !!anchor && !!e.position && Math.hypot(e.position.x - anchor.x, e.position.z - anchor.z) < COMBAT_CLEAR_RADIUS;
     for (const e of this.zones.values()) e.hidden = staged && near(e);
     for (const e of this.animalEntities.values()) e.hidden = staged && near(e);
     for (const e of this.npcs.values()) if (!e.hiddenUntilDrakeSight) e.hidden = staged && near(e);
   }
 
-  private updateCamera(dt: number, camera: THREE.PerspectiveCamera, inCombat: boolean): void {
+  private updateCamera(dt: number, time: number, camera: THREE.PerspectiveCamera, inCombat: boolean): void {
     const pos = this.player.position;
     if (pos) {
       const k = dampFactor(7, dt);
-      // During a crossing, track the ground under the leader, not the arc.
-      const y = this.traversal ? pos.y - this.traversal.lastLift : pos.y;
+      // Track the ground under the leader, not a crossing arc or a mount's altitude (the framing adds lookHeight).
+      const y = pos.y - (this.player.shadowDrop ?? 0);
       this.camTarget.x += (pos.x - this.camTarget.x) * k;
       this.camTarget.y += (y - this.camTarget.y) * dampFactor(3, dt);
       this.camTarget.z += (pos.z - this.camTarget.z) * k;
     }
     this.combatBlend = stepBlend(this.combatBlend, inCombat ? 1 : 0, dt);
     const eased = easeInOut(this.combatBlend);
-    const over = cameraPose(this.camTarget, OVERWORLD_FRAMING);
+    const over = cameraPose(this.camTarget, this.travel.framing());
     let pose = over;
     if (eased > 0) {
       const frame = this.combat.frame;
@@ -920,6 +1002,8 @@ export class EngineCore {
       const distance = frame ? fitDistance(frame.width, hfov, COMBAT_FRAMING.distance) : COMBAT_FRAMING.distance;
       const battle = cameraPose({ x: a.x, y: this.groundY(a.x, a.z), z: a.z }, { ...COMBAT_FRAMING, distance });
       pose = blendPose(over, battle, eased);
+      const shake = shakeOffset(time, this.combat.hitStop.shake(time) * eased);
+      pose = { pos: { x: pose.pos.x + shake.x, y: pose.pos.y + shake.y, z: pose.pos.z }, look: { x: pose.look.x + shake.x, y: pose.look.y + shake.y, z: pose.look.z } };
     }
     camera.position.set(pose.pos.x, pose.pos.y, pose.pos.z);
     camera.lookAt(this.lookTmp.set(pose.look.x, pose.look.y, pose.look.z));
@@ -935,13 +1019,12 @@ export class EngineCore {
     const cx = this.camTarget.x;
     const cz = this.camTarget.z;
     for (const e of this.spriteQuery) {
-      e.sprite.frameTime += dt;
+      if (!e.frozen) e.sprite.frameTime += dt;
       if (e.hidden || (e.opacity ?? 1) <= 0.01) continue;
       if (!e.combatActor && Math.abs(e.position.x - cx) + Math.abs(e.position.z - cz) > SPRITE_CULL * 1.4) continue;
       e.sprite.facing = facingFromHeading(e.heading ?? FACE_CAMERA, yaw);
       const s = shadowSize(e);
-      const lift = e === this.player && this.traversal ? this.traversal.lastLift : 0;
-      this.shadows.add(e.position.x, e.position.y - lift, e.position.z, s.w, s.d);
+      this.shadows.add(e.position.x, e.position.y - (e.shadowDrop ?? 0), e.position.z, s.w, s.d);
       if (e.aura) this.auras.add(e);
       if (!e.combatActor) this.sprites.add(e);
     }
@@ -974,6 +1057,9 @@ export class EngineCore {
     this.shadows.dispose();
     this.auras.dispose();
     this.fx.dispose();
+    this.hazards.dispose();
+    this.travel.dispose();
+    this.assets.dispose();
     for (const e of [...this.ecs.entities]) this.ecs.remove(e);
   }
 }
