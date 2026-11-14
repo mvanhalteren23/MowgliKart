@@ -112,6 +112,9 @@
 }
 .ew-qte__glyph {
   position: relative;
+}
+/* Only the debug fallback gets a backing plate; delivered art keeps its own transparency. */
+.ew-qte__glyph.ew-asset--fallback {
   background: rgba(0, 0, 0, 0.55);
 }
 .ew-qte__glyph.ew-asset--fallback {
@@ -585,5 +588,27 @@
   .ew-hud .ew-tick,
   .ew-hud .ew-qte-banner {
     animation: none !important;
+  }
+}
+
+/* Narrow landscape phones: hazard chips collapse to icon + rounds so they never cover the battle line.
+   The name stays available through the chip's tap/long-press description. */
+@media (max-width: 900px) {
+  .ew-hazards--enemy .ew-hazard__name {
+    display: none;
+  }
+  .ew-hazards--enemy .ew-hazard {
+    min-width: 48px;
+    padding: 4px 6px;
+    background: rgba(18, 12, 10, 0.72);
+  }
+  /* Beside the enemy name plates (top band), never down on the battle line. */
+  .ew-hazards--enemy {
+    position: absolute;
+    top: 0;
+    left: calc(100% + 6px);
+    flex-basis: auto;
+    flex-direction: column;
+    flex-wrap: nowrap;
   }
 }

@@ -541,7 +541,7 @@
       "loop": true,
       "alpha_channel": true,
       "prompt_spec": "Kael's ember-scaled young drake seen from a three-quarter top-down camera: soot-black scales cracked with glowing orange seams, ash-grey wing membranes lit from beneath, a smouldering crest and a long ember-tipped tail. Ridden by Kael — a lean young swordsman with a soot-dark coat, ember-orange scarf streaming behind him and a blade across his back — seated at the base of the neck. Same animation set as the riderless drake. Sprite sheet with 8 rows, one per facing in this order: south, south-west, west, north-west, north, north-east, east, south-east. Columns left to right: idle (4 frames), move (6 frames), takeoff (4 frames), land (4 frames). Each 192x192 frame centred on the ground contact point, transparent background, consistent scale and lighting across all frames. Original Emberwake art direction: HD-2D pixel-art hybrid — crisp hand-placed pixel sprites with clean 1px dark outlines, lit by warm lantern-glow and soft volumetric light; warm lantern-lit palette of ember orange, honey gold and dusk teal with deep indigo shadows; gentle bloom on light sources; no text, no logos, no watermark.",
-      "status": "pending",
+      "status": "delivered",
       "category": "mount",
       "animation_states": [
         {
@@ -756,7 +756,7 @@
       "loop": true,
       "alpha_channel": true,
       "prompt_spec": "A thornback strider: a long-legged, saddled frontier beast with a ridge of bramble-like dorsal spines, mossy-brown hide, a short beaked muzzle and woven Hearthstead tack with small brass lantern charms. Riderless, with an idle head-bob, a striding walk and a bounding gallop. Sprite sheet with 8 rows, one per facing in this order: south, south-west, west, north-west, north, north-east, east, south-east. Columns left to right: idle (4 frames), move (6 frames), run (6 frames). Each 128x128 frame centred on the ground contact point, transparent background, consistent scale and lighting across all frames. Original Emberwake art direction: HD-2D pixel-art hybrid — crisp hand-placed pixel sprites with clean 1px dark outlines, lit by warm lantern-glow and soft volumetric light; warm lantern-lit palette of ember orange, honey gold and dusk teal with deep indigo shadows; gentle bloom on light sources; no text, no logos, no watermark.",
-      "status": "pending",
+      "status": "delivered",
       "category": "mount",
       "animation_states": [
         {
@@ -936,7 +936,7 @@
       "loop": true,
       "alpha_channel": true,
       "prompt_spec": "A thornback strider: a long-legged, saddled frontier beast with a ridge of bramble-like dorsal spines, mossy-brown hide, a short beaked muzzle and woven Hearthstead tack with small brass lantern charms. Ridden by Kael, a lean young swordsman in a soot-dark coat with an ember-orange scarf, rider seated in the saddle and swaying with the gait. Same animation set as the riderless strider. Sprite sheet with 8 rows, one per facing in this order: south, south-west, west, north-west, north, north-east, east, south-east. Columns left to right: idle (4 frames), move (6 frames), run (6 frames). Each 128x128 frame centred on the ground contact point, transparent background, consistent scale and lighting across all frames. Original Emberwake art direction: HD-2D pixel-art hybrid — crisp hand-placed pixel sprites with clean 1px dark outlines, lit by warm lantern-glow and soft volumetric light; warm lantern-lit palette of ember orange, honey gold and dusk teal with deep indigo shadows; gentle bloom on light sources; no text, no logos, no watermark.",
-      "status": "pending",
+      "status": "delivered",
       "category": "mount",
       "animation_states": [
         {
@@ -1103,7 +1103,7 @@
       "loop": true,
       "alpha_channel": true,
       "prompt_spec": "A thornback strider: a long-legged, saddled frontier beast with a ridge of bramble-like dorsal spines, mossy-brown hide, a short beaked muzzle and woven Hearthstead tack with small brass lantern charms. Ridden by Tobin, a weathered frontier warden in a green hooded cloak with a longbow across his back, rider seated in the saddle and swaying with the gait. Same animation set as the riderless strider. Sprite sheet with 8 rows, one per facing in this order: south, south-west, west, north-west, north, north-east, east, south-east. Columns left to right: idle (4 frames), move (6 frames), run (6 frames). Each 128x128 frame centred on the ground contact point, transparent background, consistent scale and lighting across all frames. Original Emberwake art direction: HD-2D pixel-art hybrid — crisp hand-placed pixel sprites with clean 1px dark outlines, lit by warm lantern-glow and soft volumetric light; warm lantern-lit palette of ember orange, honey gold and dusk teal with deep indigo shadows; gentle bloom on light sources; no text, no logos, no watermark.",
-      "status": "pending",
+      "status": "delivered",
       "category": "mount",
       "animation_states": [
         {
@@ -1270,7 +1270,7 @@
       "loop": true,
       "alpha_channel": true,
       "prompt_spec": "A thornback strider: a long-legged, saddled frontier beast with a ridge of bramble-like dorsal spines, mossy-brown hide, a short beaked muzzle and woven Hearthstead tack with small brass lantern charms. Ridden by Vesna, an arena duelist in crimson wraps with a long glaive held upright, rider seated in the saddle and swaying with the gait. Same animation set as the riderless strider. Sprite sheet with 8 rows, one per facing in this order: south, south-west, west, north-west, north, north-east, east, south-east. Columns left to right: idle (4 frames), move (6 frames), run (6 frames). Each 128x128 frame centred on the ground contact point, transparent background, consistent scale and lighting across all frames. Original Emberwake art direction: HD-2D pixel-art hybrid — crisp hand-placed pixel sprites with clean 1px dark outlines, lit by warm lantern-glow and soft volumetric light; warm lantern-lit palette of ember orange, honey gold and dusk teal with deep indigo shadows; gentle bloom on light sources; no text, no logos, no watermark.",
-      "status": "pending",
+      "status": "delivered",
       "category": "mount",
       "animation_states": [
         {
