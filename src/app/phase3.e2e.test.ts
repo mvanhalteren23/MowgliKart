@@ -126,9 +126,14 @@ describe('elemental chaining', () => {
           continue;
         }
         const id = c.activeId ?? '';
-        const skills = core.combat.availableSkills(c, id).filter((s) => db.skills[s]?.target === 'enemy' && db.skills[s]?.element !== 'physical');
+        // Prefer water, which always leaves a puddle (even on a killing blow), then other elements.
+        const rank = (el: string | undefined) => (el === 'water' ? 0 : el === 'physical' ? 9 : 1);
+        const skills = core.combat
+          .availableSkills(c, id)
+          .filter((s) => db.skills[s]?.target === 'enemy' && db.skills[s]?.element !== 'physical' && !db.skills[s]?.qte)
+          .sort((a, b) => rank(db.skills[a]?.element) - rank(db.skills[b]?.element));
         const target = Object.values(c.combatants).find((x) => x.side === 'enemy' && x.alive);
-        const skill = skills[i % Math.max(1, skills.length)];
+        const skill = skills[0];
         game().combatAct(skill && target ? { type: 'skill', skillId: skill, targetId: target.id } : { type: 'attack', targetId: target?.id ?? '' });
       }
       const log = game().combat!.log;

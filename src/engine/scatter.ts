@@ -111,3 +111,31 @@ export function scatterFoliage(world: WorldMapDef, cx: number, cz: number, opts:
   }
   return out;
 }
+
+/** A segment (the combat stage line) foliage must clear by `radius` metres. */
+export interface StageExclusion {
+  readonly ax: number;
+  readonly az: number;
+  readonly bx: number;
+  readonly bz: number;
+  readonly radius: number;
+}
+
+/** Distance from (x, z) to the segment a→b. */
+export function distanceToSegment(x: number, z: number, ax: number, az: number, bx: number, bz: number): number {
+  const vx = bx - ax;
+  const vz = bz - az;
+  const len2 = vx * vx + vz * vz;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / len2)) : 0;
+  return Math.hypot(x - (ax + vx * t), z - (az + vz * t));
+}
+
+/** Indices of instances (parallel x / z arrays) within the exclusion — hidden during combat. */
+export function instancesNearStage(xs: ArrayLike<number>, zs: ArrayLike<number>, ex: StageExclusion): number[] {
+  const out: number[] = [];
+  const n = Math.min(xs.length, zs.length);
+  for (let i = 0; i < n; i++) {
+    if (distanceToSegment(xs[i] ?? 0, zs[i] ?? 0, ex.ax, ex.az, ex.bx, ex.bz) <= ex.radius) out.push(i);
+  }
+  return out;
+}

@@ -28,7 +28,7 @@ export const dragonForms = {
     skills: ['skill.drakeInferno', 'skill.wyrmRend', 'skill.ashClaw'],
   },
   'form.rimeWyrm': {
-    id: 'form.rimeWyrm', name: 'Rimehorn Wyrm', element: 'water', sprite: 'dragon.rimeWyrm',
+    id: 'form.rimeWyrm', name: 'Rimehorn Wyrm', element: 'ice', sprite: 'dragon.rimeWyrm',
     syncRequired: 65, apCostToEnter: 16, apDrainPerTurn: 7, maxTurns: 4,
     statMultipliers: { maxHp: 1.3, def: 1.6, res: 1.5, mag: 1.35, atk: 1.2 },
     affinities: { ice: 0, water: 0.5, fire: 1.25, wind: 0.8 },

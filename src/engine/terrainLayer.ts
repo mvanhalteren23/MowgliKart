@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { createBillboardGeometry, createFoliageMaterial, createTerrainMaterial, createWaterMaterial, heightTexture, WATER_LEVEL } from '@/engine/shaders';
 import { generateHeights, generateTerrainChunk, getFoliageAtlas, type TerrainChunk } from '@/engine/bootstrapAssets';
 import type { Vec2, WorldMapDef } from '@/types/contracts';
-import { scatterFoliage, type Exclusion, type FoliageInstance } from './scatter';
+import { instancesNearStage, scatterFoliage, type Exclusion, type FoliageInstance, type StageExclusion } from './scatter';
 import { chunkDistance, chunkTier, diffChunks, lodForTier, type ChunkCoord } from './streaming';
 
 const SKIRT_DEPTH = 4;
@@ -116,11 +116,21 @@ export function buildFoliageMesh(instances: readonly FoliageInstance[], material
   return mesh;
 }
 
+interface FoliageRecord {
+  readonly mesh: THREE.InstancedMesh;
+  readonly xs: Float32Array;
+  readonly zs: Float32Array;
+  /** Pristine instance matrices (restored when an exclusion lifts). */
+  readonly base: Float32Array;
+  hidden: number[];
+}
+
 interface LoadedChunk {
   readonly coord: ChunkCoord;
   readonly tier: 0 | 1 | 2;
   readonly group: THREE.Group;
   readonly disposables: readonly { dispose(): void }[];
+  readonly foliage: FoliageRecord | null;
 }
 
 export interface TerrainHooks {
@@ -139,6 +149,7 @@ export class TerrainLayer {
   private queue: { coord: ChunkCoord; tier: 0 | 1 | 2 }[] = [];
   private readonly foliageMaterial = createFoliageMaterial();
   private lastDiffAt = { x: Infinity, z: Infinity };
+  private exclusion: StageExclusion | null = null;
 
   constructor(
     private readonly world: WorldMapDef,
@@ -218,18 +229,53 @@ export class TerrainLayer {
       if (chunk !== base) disposables.push(heightTexture(chunk));
     }
 
+    let foliage: FoliageRecord | null = null;
     if (lod.foliage !== 'none') {
       const instances = scatterFoliage(this.world, coord.cx, coord.cz, { density: lod.foliage, exclusions: this.exclusions(coord) });
       const fol = buildFoliageMesh(instances, this.foliageMaterial);
       if (fol) {
         group.add(fol);
         disposables.push(fol.geometry);
+        foliage = {
+          mesh: fol,
+          xs: Float32Array.from(instances, (f) => f.x),
+          zs: Float32Array.from(instances, (f) => f.z),
+          base: Float32Array.from(fol.instanceMatrix.array),
+          hidden: [],
+        };
+        this.applyExclusion(foliage);
       }
     }
     this.drop(coord.key);
     this.root.add(group);
-    this.loaded.set(coord.key, { coord, tier, group, disposables });
+    this.loaded.set(coord.key, { coord, tier, group, disposables, foliage });
     this.hooks.onBuilt?.(coord, tier);
+  }
+
+  /**
+   * Hide foliage instances near the combat stage (null restores them). Instances are
+   * collapsed to a zero matrix, so draw calls are unchanged.
+   */
+  setFoliageExclusion(ex: StageExclusion | null): void {
+    const a = this.exclusion;
+    if (a === ex || (a && ex && a.ax === ex.ax && a.az === ex.az && a.bx === ex.bx && a.bz === ex.bz && a.radius === ex.radius)) return;
+    this.exclusion = ex;
+    for (const c of this.loaded.values()) if (c.foliage) this.applyExclusion(c.foliage);
+  }
+
+  /** Number of foliage instances currently hidden (tests / perf overlay). */
+  get hiddenFoliage(): number {
+    let n = 0;
+    for (const c of this.loaded.values()) n += c.foliage?.hidden.length ?? 0;
+    return n;
+  }
+
+  private applyExclusion(f: FoliageRecord): void {
+    const arr = f.mesh.instanceMatrix.array as Float32Array;
+    for (const i of f.hidden) arr.set(f.base.subarray(i * 16, i * 16 + 16), i * 16);
+    f.hidden = this.exclusion ? instancesNearStage(f.xs, f.zs, this.exclusion) : [];
+    for (const i of f.hidden) arr.fill(0, i * 16, i * 16 + 16);
+    f.mesh.instanceMatrix.needsUpdate = true;
   }
 
   private drop(key: string): void {

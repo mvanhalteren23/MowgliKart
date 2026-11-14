@@ -8,6 +8,7 @@ import type { Combatant, CombatantId, CombatState, GameDatabase, Vec2, WorldMapD
 import { cuesFromEvents, lungeCurve, stageExtent, stageLayout, type ActorCue } from './combatStaging';
 import { spriteWorldSize } from './spriteMath';
 import { setAnim, type EngineEntity, type EngineWorld } from './ecs';
+import { HitStopClock } from './hitStop';
 
 interface Actor {
   readonly entity: EngineEntity;
@@ -36,6 +37,8 @@ export class CombatDirector {
   anchor: Vec2 | null = null;
   /** Centre x/z and full width (m) of the staged line-up, for the battle camera. */
   frame: { x: number; z: number; width: number } | null = null;
+  /** Freeze-frame clock driven by `hitStop` events. */
+  readonly hitStop = new HitStopClock();
 
   constructor(
     private readonly ecs: EngineWorld,
@@ -74,11 +77,16 @@ export class CombatDirector {
       this.lastLog = combat.log.length;
       for (const cue of cues) this.pending.push({ cue, at: time + cue.delay });
     }
+    // Hit-stop: frozen time does not count — cues wait and actor clocks hold.
+    const adt = this.hitStop.effectiveDt(time, dt);
+    const held = dt - adt;
+    if (held > 0) for (const p of this.pending) p.at += held;
     this.pending = this.pending.filter((p) => {
       if (p.at > time) return true;
-      this.apply(p.cue);
+      this.apply(p.cue, time);
       return false;
     });
+    const frozen = this.hitStop.frozen(time);
 
     let relayout = false;
     for (const [id, a] of this.actors) {
@@ -93,7 +101,7 @@ export class CombatDirector {
       }
     }
     if (relayout) this.layout(combat);
-    const slide = 1 - Math.exp(-6 * dt);
+    const slide = 1 - Math.exp(-6 * adt);
 
     for (const [id, a] of this.actors) {
       const c = combat.combatants[id];
@@ -112,10 +120,11 @@ export class CombatDirector {
         e.aura = { colors, intensity: c.fusion.broken ? 0.55 : c.dragon ? 1.25 : 1, broken: c.fusion.broken };
       } else delete e.aura;
 
-      a.lungeT += dt;
-      a.hurtT = Math.max(0, a.hurtT - dt);
-      a.healT = Math.max(0, a.healT - dt);
-      a.flash = Math.max(0, a.flash - dt * 3.5);
+      e.frozen = frozen;
+      a.lungeT += adt;
+      a.hurtT = Math.max(0, a.hurtT - adt);
+      a.healT = Math.max(0, a.healT - adt);
+      a.flash = Math.max(0, a.flash - adt * 3.5);
       const off = lungeCurve(a.lungeT) * LUNGE_DISTANCE;
       const x = a.home.x + a.lungeDir.x * off;
       const z = a.home.z + a.lungeDir.z * off;
@@ -133,7 +142,11 @@ export class CombatDirector {
     }
   }
 
-  private apply(cue: ActorCue): void {
+  private apply(cue: ActorCue, time: number): void {
+    if (cue.kind === 'hitStop') {
+      this.hitStop.trigger(time, cue.amount ?? 0);
+      return;
+    }
     const a = this.actors.get(cue.actorId);
     if (!a) return;
     switch (cue.kind) {
@@ -166,6 +179,23 @@ export class CombatDirector {
       default:
         break;
     }
+  }
+
+  /** Centre and width (m) of one side of the line-up (hazard FX sit under it). */
+  sideSpan(side: 'party' | 'enemy'): { x: number; z: number; width: number } | null {
+    let min = Infinity;
+    let max = -Infinity;
+    let z = 0;
+    let n = 0;
+    for (const a of this.actors.values()) {
+      if (a.side !== side) continue;
+      min = Math.min(min, a.home.x);
+      max = Math.max(max, a.home.x);
+      z += a.home.z;
+      n++;
+    }
+    if (n === 0) return null;
+    return { x: (min + max) / 2, z: z / n, width: max - min + 2.4 };
   }
 
   /** Sprite sheet a combatant shows right now (dragon form while transformed). */
@@ -224,6 +254,7 @@ export class CombatDirector {
     this.active = null;
     this.anchor = null;
     this.frame = null;
+    this.hitStop.reset();
     this.emit();
   }
 

@@ -463,8 +463,6 @@
 .ew-travel__map {
   position: relative;
   display: grid;
-  width: min(100%, calc((100dvh - 170px) * 1.6));
-  max-height: calc(100dvh - 150px);
   border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;

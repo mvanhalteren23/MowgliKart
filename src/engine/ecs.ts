@@ -12,6 +12,10 @@ export type EngineEntity = WorldEntity & {
   opacity?: number;
   /** Uniform scale on the sheet's world height. */
   scale?: number;
+  /** Hit-stop: hold the animation clock this frame. */
+  frozen?: boolean;
+  /** Height (m) of the feet above the ground (mounted / flying): the contact shadow stays on the ground. */
+  shadowDrop?: number;
 };
 
 export type EngineWorld = World<EngineEntity>;

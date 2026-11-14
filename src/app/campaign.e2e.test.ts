@@ -128,7 +128,7 @@ describe("Kael's dragon forms", () => {
   it('has a hatchling, fire/ice/lightning forms and a story-gated apex', () => {
     expect(forms.filter((f) => /pup|hatch|whelp|kit/.test(f.sprite))).not.toHaveLength(0);
     for (const kind of [/cinder|ember/, /rime|frost/, /storm|thunder/]) expect(forms.some((f) => kind.test(f.sprite)), String(kind)).toBe(true);
-    expect(forms.find((f) => /rime|frost/.test(f.sprite))?.element).toBe('water');
+    expect(forms.find((f) => /rime|frost/.test(f.sprite))?.element).toBe('ice');
     expect(forms.find((f) => /cinder|ember/.test(f.sprite))?.element).toBe('fire');
     const apex = forms.filter((f) => f.apex);
     expect(apex).toHaveLength(1);

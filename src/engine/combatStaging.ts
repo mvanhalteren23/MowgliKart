@@ -62,7 +62,7 @@ export function fitDistance(width: number, hfovRad: number, min: number, margin 
   return Math.max(min, ((width * margin) / 2) / Math.tan(Math.max(0.1, hfovRad) / 2));
 }
 
-export type CueKind = 'lunge' | 'hit' | 'heal' | 'ko' | 'transform' | 'revert' | 'guard' | 'armorBreak' | 'armorRestore' | 'status' | 'turn';
+export type CueKind = 'lunge' | 'hit' | 'heal' | 'ko' | 'transform' | 'revert' | 'guard' | 'armorBreak' | 'armorRestore' | 'status' | 'turn' | 'hitStop';
 
 export interface ActorCue {
   readonly kind: CueKind;
@@ -113,6 +113,10 @@ export function cuesFromEvents(events: readonly CombatEvent[]): ActorCue[] {
         break;
       case 'status':
         if (e.applied) cues.push({ kind: 'status', actorId: e.targetId, delay: t });
+        break;
+      case 'hitStop':
+        // Lands with the hit it follows (same batch time); `amount` = freeze length in ms.
+        cues.push({ kind: 'hitStop', actorId: e.targetId, delay: t, amount: e.ms });
         break;
       default:
         break;
