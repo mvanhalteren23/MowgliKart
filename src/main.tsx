@@ -21,7 +21,7 @@ bootstrapAssets([...spriteIds]);
 bindServices({ db: gameData, core: createCoreServices(gameData), systems: createWorldSystems(gameData) });
 
 // Debug/test handle (used by the Playwright smoke test).
-(window as unknown as Record<string, unknown>).__emberwake = { useGame, runtime };
+(window as unknown as Record<string, unknown>).__emberwake = { useGame, runtime, db: gameData };
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root missing');

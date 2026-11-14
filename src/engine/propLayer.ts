@@ -10,7 +10,7 @@ import { getPattern, makeCanvas } from '@/engine/bootstrapAssets';
 import { canvasTexture, sharedUniforms } from '@/engine/shaders';
 import type { WorldMapDef } from '@/types/contracts';
 import type { Collider } from './movement';
-import { buildKindTemplate, buildProps, propBaseHeight, propColliders, PropGeometryBuilder, PATTERN_SLOTS, SAILS_HUB, type PropInstance, type PropKind, type WalkArea } from './props';
+import { buildKindTemplate, buildProps, popScale, propBaseHeight, propColliders, PropGeometryBuilder, PATTERN_SLOTS, SAILS_HUB, type PropInstance, type PropKind, type WalkArea } from './props';
 import { chunkOf } from './streaming';
 
 const SLOT_PX = 64;
@@ -368,12 +368,6 @@ interface DynamicEntry {
   readonly walkAreas: readonly WalkArea[];
   readonly prop: PropInstance;
   pop: number;
-}
-
-/** Scale overshoot of a construction "pop" at normalized time t (0..1). */
-export function popScale(t: number): number {
-  if (t <= 0 || t >= 1) return 1;
-  return 1 + Math.sin(t * Math.PI) * 0.12 * (1 - t) - (t < 0.15 ? (0.15 - t) * 1.2 : 0);
 }
 
 export class DynamicPropLayer {

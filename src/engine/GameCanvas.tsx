@@ -5,7 +5,8 @@
  * Reads: `useGame` (mode, combat, party/leader, flags/questLog, township,
  * clearedZones, merchantSurfaced, wind, drakeSightUntil, worldTime, fishing,
  * dialogue), `runtime.input`, `runtime.requests.fieldAction`.
- * Writes: `runtime.player`, `runtime.camera`, `runtime.perf`; store actions
+ * Writes: `runtime.player`, `runtime.camera`, `runtime.perf`, the post pass's
+ * fog/sky colours (biome atmosphere); store actions
  * `setContextAction`, `dispatchWorldEvent`, `reportHunt`, `tickWorld`.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
@@ -63,6 +64,14 @@ function World() {
       return;
     }
     pipeline.setSize(state.size.width, state.size.height, gl.getPixelRatio());
+    if (engine) {
+      const u = pipeline.uniforms;
+      const a = engine.atmosphere;
+      u.uFogColor.value.set(a.fog[0], a.fog[1], a.fog[2]);
+      u.uSkyTop.value.set(a.skyTop[0], a.skyTop[1], a.skyTop[2]);
+      u.uSkyHorizon.value.set(a.skyHorizon[0], a.skyHorizon[1], a.skyHorizon[2]);
+      engine.motes.setViewport(state.size.height * gl.getPixelRatio(), camera.fov);
+    }
     pipeline.render(scene, camera, { focusDistance: engine?.focusDistance ?? 40, combatBlend: runtime.camera.combatBlend });
     const perf = runtime.perf;
     perf.drawCalls = pipeline.drawCalls;

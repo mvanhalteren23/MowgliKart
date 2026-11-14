@@ -822,3 +822,9 @@ export function walkAreaDeck(areas: readonly WalkArea[], x: number, z: number): 
   }
   return null;
 }
+
+/** Scale overshoot of a construction "pop" at normalized time t (0..1). */
+export function popScale(t: number): number {
+  if (t <= 0 || t >= 1) return 1;
+  return 1 + Math.sin(t * Math.PI) * 0.12 * (1 - t) - (t < 0.15 ? (0.15 - t) * 1.2 : 0);
+}

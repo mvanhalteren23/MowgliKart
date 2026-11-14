@@ -10,3 +10,6 @@ export * from './movement';
 export * from './cameraRig';
 export * from './combatStaging';
 export { scatterFoliage, type FoliageInstance, type Exclusion, type ScatterOptions } from './scatter';
+export * from './biomes';
+export * from './gates';
+export { buildGateGeometry } from './gateKit';

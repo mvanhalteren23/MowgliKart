@@ -20,6 +20,8 @@ const WORLD: WorldMapDef = {
   fishingSpots: [],
   paths: [{ points: [{ x: 0, z: 125 }, { x: 250, z: 125 }], width: 4 }],
   water: [{ center: { x: 220, z: 40 }, radius: 25, kind: 'lake' }],
+  chunks: [{ cx: 0, cz: 0, name: 'Slice', biome: 'frontier', act: 1, scatterProps: [], foliageDensity: 1 }],
+  traversalGates: [],
 };
 
 describe('chunk streaming', () => {

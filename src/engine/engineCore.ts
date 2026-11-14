@@ -3,27 +3,33 @@
  * per-frame systems. `Scene` calls `update()` once per frame from its
  * render-priority `useFrame`, then renders through the HD-2D pipeline.
  *
- * System order: input → movement → followers → wildlife → drake-sight →
- * proximity/context → regions → tickWorld (~4 Hz) → combat staging → camera →
- * render batches.
+ * System order: requests (field actions, traversal, aim) → presence → input →
+ * movement / traversal → followers → wildlife → drake-sight → proximity/context
+ * → regions → tickWorld (~4 Hz) → combat staging → streaming → camera →
+ * atmosphere → render batches.
  */
 import * as THREE from 'three';
 import { runtime } from '@/app/runtime';
 import { getServices, useGame } from '@/app/store';
-import { isWalkable, sampleHeight, WATER_LEVEL } from '@/engine/bootstrapAssets';
+import { biomeAt, isWalkable, sampleHeight, WATER_LEVEL } from '@/engine/bootstrapAssets';
 import { emitRipple, updateSharedUniforms } from '@/engine/shaders';
-import type { AnimalState, ContextAction, GameStore, HeroId, NpcId, Vec2 } from '@/types/contracts';
+import type { AnimalState, BiomeChunkDef, ContextAction, FieldActionId, GameStore, HeroId, NpcId, TraversalGateDef, Vec2 } from '@/types/contracts';
+import { atmosphereAt, BIOME_ATMOSPHERE, dampAtmosphere, scatterDressing, type Atmosphere } from './biomes';
 import { blendPose, CAMERA_YAW, cameraPose, COMBAT_FRAMING, dampFactor, easeInOut, OVERWORLD_FRAMING, stepBlend } from './cameraRig';
 import { CombatDirector } from './combatDirector';
+import { fitDistance } from './combatStaging';
 import { createEngineWorld, setAnim, type EngineEntity, type EngineWorld } from './ecs';
+import { ArrowFx, MoteLayer } from './fx';
+import { GateLayer } from './gateLayer';
 import { Breadcrumbs, FOLLOW_GAP, stepFollower } from './followers';
-import { blockedByColliders, resolveMove, SHALLOW_SPEED_FACTOR, stickToWorld, WALK_SPEED } from './movement';
-import { PropLayer } from './propLayer';
-import { PROP_CLEARANCE, propFromDef, walkAreaDeck, type PropInstance } from './props';
+import { followerLandings, gateAction, gateCleared, gateCollider, gateDistance, GATE_REQUEST_SLACK, shotRay, traversalEnds, traversalSample, TRAVERSAL_DURATION, whoCanClear } from './gates';
+import { ColliderGrid, resolveMove, SHALLOW_SPEED_FACTOR, stickToWorld, WALK_SPEED } from './movement';
+import { DressingLayer, DynamicPropLayer, PropMaterials, SailsLayer, StaticPropLayer, type DynamicProp } from './propLayer';
+import { PROP_CLEARANCE, propFromDef, walkAreaDeck, type PropInstance, type WalkArea } from './props';
 import type { Exclusion } from './scatter';
 import { AuraLayer, FxLayer, shadowSize, ShadowBatch, SpriteBatcher } from './spriteLayer';
 import { facingFromHeading, headingFromVector } from './spriteMath';
-import { clampToPlayable, PLAYABLE_MAX, PLAYABLE_MIN } from './streaming';
+import { clampToContinent, continentAllows, continentBounds, type Bounds, type ChunkCoord } from './streaming';
 import { TerrainLayer } from './terrainLayer';
 
 const FACE_CAMERA = Math.PI / 2;
@@ -33,6 +39,11 @@ const PLOT_REACH = 4;
 const COMBAT_CLEAR_RADIUS = 16;
 const DASH_DISTANCE = 8;
 const DASH_TIME = 0.28;
+/** Sprites farther than this from the camera target are not drawn (keeps per-sheet draws local). */
+const SPRITE_CULL = 95;
+/** Approach speed (m/s) from where the leader stands to the gate's near side. */
+const APPROACH_SPEED = 7;
+const FOLLOWER_DELAY = 0.3;
 
 function contextKey(c: ContextAction | null): string {
   if (!c) return '';
@@ -45,24 +56,53 @@ function contextKey(c: ContextAction | null): string {
       return `enc:${c.zoneId}:${c.label}`;
     case 'build':
       return `build:${c.plotId}:${c.label}`;
+    case 'traverse':
+      return `trav:${c.gateId}:${c.action}:${c.label}`;
   }
+  return '';
+}
+
+interface Traversal {
+  readonly gate: TraversalGateDef;
+  readonly start: Vec2;
+  readonly from: Vec2;
+  readonly to: Vec2;
+  readonly approach: number;
+  readonly duration: number;
+  readonly permanent: boolean;
+  /** Followers: own start positions and landing points. */
+  readonly followers: readonly { start: Vec2; land: Vec2 }[];
+  t: number;
+  lastLift: number;
 }
 
 export class EngineCore {
   readonly root = new THREE.Group();
   readonly ecs: EngineWorld = createEngineWorld();
   readonly terrain: TerrainLayer;
-  readonly props: PropLayer;
+  readonly mats = new PropMaterials();
+  readonly staticProps: StaticPropLayer;
+  readonly dressing: DressingLayer;
+  readonly sails: SailsLayer;
+  readonly dynamic: DynamicPropLayer;
+  readonly gates: GateLayer;
+  readonly motes = new MoteLayer();
+  readonly arrow = new ArrowFx();
   readonly sprites = new SpriteBatcher();
   readonly shadows = new ShadowBatch();
   readonly auras = new AuraLayer();
   readonly fx = new FxLayer();
   readonly combat: CombatDirector;
+  readonly grid = new ColliderGrid();
   /** View-space distance to the subject (tilt-shift focus). */
   focusDistance = 40;
   combatBlend = 0;
+  /** Current blended fog / sky palette (GameCanvas copies it into the post pass). */
+  atmosphere: Atmosphere = BIOME_ATMOSPHERE.frontier;
 
   private readonly svc = getServices();
+  private readonly chunks: readonly BiomeChunkDef[];
+  private readonly bounds: Bounds;
   private readonly player: EngineEntity;
   private followers: EngineEntity[] = [];
   private readonly npcs = new Map<NpcId, EngineEntity>();
@@ -74,45 +114,75 @@ export class EngineCore {
   private readonly trail = new Breadcrumbs();
   private readonly regionsInside = new Set<string>();
   private readonly revealedOnce = new Set<string>();
+  private readonly dressCache = new Map<string, PropInstance[]>();
+  private presentGates: readonly TraversalGateDef[] = [];
+  private walkAreas: readonly WalkArea[] = [];
+  private traversal: Traversal | null = null;
   private tickAcc = 0;
   private presenceDirty = true;
+  private sailsDirty = true;
+  private sailsAt = { x: Infinity, z: Infinity };
   private readonly unsubscribe: () => void;
   private dash: { t: number; dirX: number; dirZ: number } | null = null;
   private actionTimer = 0;
   private lastRipple = -10;
   private heading = FACE_CAMERA;
+  private readonly lastWritten = { x: 0, z: 0 };
   private readonly camTarget = new THREE.Vector3();
   private readonly lookTmp = new THREE.Vector3();
+  private readonly ropeA = new THREE.Vector3();
+  private readonly ropeB = new THREE.Vector3();
   private readonly spriteQuery;
   private readonly followTmp = { x: 0, z: 0 };
+  private moveFrom = { x: 0, z: 0 };
 
   constructor() {
     const { db, systems } = this.svc;
     const world = db.world;
     this.root.name = 'emberwake';
+    this.chunks = world.chunks ?? [];
+    this.bounds = continentBounds(this.chunks);
 
-    const start = clampToPlayable(runtime.player.x, runtime.player.z);
-    runtime.player.x = start.x;
-    runtime.player.z = start.z;
-    runtime.player.facing = FACE_CAMERA;
+    const start = clampToContinent(this.chunks, runtime.player.x, runtime.player.z);
+    this.writePlayer(start.x, start.z, FACE_CAMERA, false, 0);
     runtime.camera.yaw = CAMERA_YAW;
     runtime.camera.combatBlend = 0;
 
-    this.props = new PropLayer(world, world.props.map(propFromDef));
-    this.terrain = new TerrainLayer(world, () => this.foliageExclusions());
+    this.staticProps = new StaticPropLayer(world, world.props.map(propFromDef), this.mats);
+    for (const [key, cols] of this.staticProps.collidersByChunk) this.grid.setGroup(`props:${key}`, cols);
+    this.dressing = new DressingLayer(world, this.mats);
+    this.sails = new SailsLayer(world, this.mats);
+    this.dynamic = new DynamicPropLayer(world, this.mats);
+    this.gates = new GateLayer(world, this.mats);
+    this.terrain = new TerrainLayer(world, (c) => this.foliageExclusions(c), {
+      onBuilt: (coord, tier) => (tier === 0 ? this.dress(coord) : this.undress(coord.key)),
+      onUnload: (key) => this.undress(key),
+    });
     this.combat = new CombatDirector(this.ecs, db, world);
-    this.root.add(this.terrain.root, this.props.root, this.sprites.root, this.shadows.mesh, this.auras.root, this.fx.root);
+    this.root.add(
+      this.terrain.root,
+      this.staticProps.root,
+      this.dressing.root,
+      this.sails.mesh,
+      this.dynamic.root,
+      this.gates.root,
+      this.sprites.root,
+      this.shadows.mesh,
+      this.auras.root,
+      this.fx.root,
+      this.motes.points,
+      this.arrow.mesh,
+    );
 
     const st = useGame.getState();
     this.player = this.ecs.add({
       id: 'player',
-      position: { x: start.x, y: this.groundY(start.x, start.z), z: start.z },
+      position: { x: start.x, y: 0, z: start.z },
       sprite: { sheet: db.heroes[st.leader].sprite, facing: 0, anim: 'idle', frameTime: 0 },
       player: { heroId: st.leader },
       heading: FACE_CAMERA,
     });
     this.trail.reset(start.x, start.z);
-    this.camTarget.set(start.x, this.player.position?.y ?? 0, start.z);
 
     for (const spot of world.fishingSpots) {
       const e = this.ecs.add({
@@ -135,25 +205,38 @@ export class EngineCore {
       if (s.flags !== p.flags || s.questLog !== p.questLog || s.township !== p.township || s.clearedZones !== p.clearedZones || s.merchantSurfaced !== p.merchantSurfaced || s.party !== p.party || s.leader !== p.leader || s.roster !== p.roster) this.presenceDirty = true;
     });
     this.syncPresence(st);
-    // Build the home chunk right away so the first frame has ground under the party.
+    if (this.player.position) this.player.position.y = this.groundY(start.x, start.z);
+    this.camTarget.set(start.x, this.player.position?.y ?? 0, start.z);
+    // Build the player's chunk right away so the first frame has ground under the party.
     this.terrain.update(start, 1);
+    this.atmosphere = atmosphereAt((x, z) => biomeAt(world, x, z), start.x, start.z);
   }
 
   /* ── Helpers ─────────────────────────────────────────────────────────── */
 
+  private writePlayer(x: number, z: number, facing: number, moving: boolean, speed: number): void {
+    runtime.player.x = x;
+    runtime.player.z = z;
+    runtime.player.facing = facing;
+    runtime.player.moving = moving;
+    runtime.player.speed = speed;
+    this.lastWritten.x = x;
+    this.lastWritten.z = z;
+  }
+
   groundY(x: number, z: number): number {
-    const deck = walkAreaDeck(this.props.walkAreas, x, z);
+    const deck = walkAreaDeck(this.walkAreas, x, z);
     if (deck !== null) return deck;
     return Math.max(sampleHeight(this.svc.db.world, x, z), WATER_LEVEL - 0.3);
   }
 
   private readonly canStand = (x: number, z: number): boolean => {
-    if (x < PLAYABLE_MIN || x > PLAYABLE_MAX || z < PLAYABLE_MIN || z > PLAYABLE_MAX) return false;
-    if (walkAreaDeck(this.props.walkAreas, x, z) !== null) return true;
-    return isWalkable(this.svc.db.world, x, z) && !blockedByColliders(this.props.colliders, x, z);
+    if (!continentAllows(this.chunks, this.bounds, this.moveFrom.x, this.moveFrom.z, x, z)) return false;
+    if (walkAreaDeck(this.walkAreas, x, z) !== null) return true;
+    return isWalkable(this.svc.db.world, x, z) && !this.grid.blocked(x, z);
   };
 
-  private foliageExclusions(): Exclusion[] {
+  private baseExclusions(): Exclusion[] {
     const { db } = this.svc;
     const out: Exclusion[] = [];
     for (const p of db.world.props) out.push({ x: p.position.x, z: p.position.z, r: PROP_CLEARANCE[p.kind] * (p.scale ?? 1) });
@@ -161,8 +244,42 @@ export class EngineCore {
     for (const n of db.world.npcs) out.push({ x: n.position.x, z: n.position.z, r: 1.5 });
     for (const s of db.world.fishingSpots) out.push({ x: s.position.x, z: s.position.z, r: 2.5 });
     for (const z of db.world.encounterZones) out.push({ x: z.position.x, z: z.position.z, r: 2 });
+    for (const g of db.world.traversalGates ?? []) {
+      out.push({ x: g.position.x, z: g.position.z, r: Math.hypot(g.width, g.depth) / 2 + 2 });
+      for (const s of g.sides) out.push({ x: s.x, z: s.z, r: 2 });
+    }
     out.push({ x: db.world.playerStart.x, z: db.world.playerStart.z, r: 4 });
     return out;
+  }
+
+  private dressingFor(coord: ChunkCoord): PropInstance[] {
+    const hit = this.dressCache.get(coord.key);
+    if (hit) return hit;
+    const def = this.chunks.find((c) => c.cx === coord.cx && c.cz === coord.cz);
+    const list = def && def.scatterProps.length > 0 ? scatterDressing(this.svc.db.world, def, { exclusions: this.baseExclusions() }) : [];
+    this.dressCache.set(coord.key, list);
+    return list;
+  }
+
+  private foliageExclusions(coord: ChunkCoord): Exclusion[] {
+    const out = this.baseExclusions();
+    for (const p of this.dressingFor(coord)) out.push({ x: p.x, z: p.z, r: PROP_CLEARANCE[p.kind] * p.scale });
+    return out;
+  }
+
+  private dress(coord: ChunkCoord): void {
+    if (this.dressing.has(coord.key)) return;
+    const list = this.dressingFor(coord);
+    if (list.length === 0) return;
+    this.grid.setGroup(`dress:${coord.key}`, this.dressing.set(coord.key, list));
+    this.sailsDirty = true;
+  }
+
+  private undress(key: string): void {
+    if (!this.dressing.has(key)) return;
+    this.dressing.remove(key);
+    this.grid.setGroup(`dress:${key}`, []);
+    this.sailsDirty = true;
   }
 
   private heroSprite(heroId: HeroId): string {
@@ -175,7 +292,7 @@ export class EngineCore {
     return { colors: fusion.map((s) => this.svc.db.spirits[s]?.auraColor ?? '#ffffff'), intensity: 0.7, broken: false };
   }
 
-  /* ── Presence (party, NPCs, zones, township, barge) ──────────────────── */
+  /* ── Presence (party, NPCs, zones, township, barge, gates) ───────────── */
 
   private syncPresence(st: GameStore): void {
     this.presenceDirty = false;
@@ -230,7 +347,7 @@ export class EngineCore {
         e = this.ecs.add({
           id: `npc:${npc.id}`,
           position: { x: pos.x, y: this.groundY(pos.x, pos.z), z: pos.z },
-          sprite: { sheet: npc.sprite, facing: 0, anim: 'idle', frameTime: (npc.position.x * 0.13) % 1 },
+          sprite: { sheet: npc.sprite, facing: 0, anim: 'idle', frameTime: Math.abs(npc.position.x * 0.13) % 1 },
           npc: { npcId: npc.id },
           heading: FACE_CAMERA,
           ...(npc.hiddenUntilDrakeSight ? { hiddenUntilDrakeSight: true as const } : {}),
@@ -264,18 +381,31 @@ export class EngineCore {
       }
     }
 
-    // Township buildings on their plots, stakes on empty plots, the merchant barge.
-    const dynamic: PropInstance[] = [];
+    // Township buildings scale with their architectural level; stakes on empty plots; the merchant barge.
+    const dynamic: DynamicProp[] = [];
     for (const plot of db.township.plots) {
       const buildingId = st.township.built[plot.id];
       const def = buildingId ? db.township.buildings.find((b) => b.id === buildingId) : undefined;
-      dynamic.push({ kind: def ? def.prop : 'plot', x: plot.position.x, z: plot.position.z, rotation: 0, scale: def ? 0.9 : 1 });
+      const level = st.township.levels?.[plot.id] ?? 1;
+      const grow = def && level > 1 ? (def.upgrades.find((u) => u.level === level)?.propScale ?? 1) : 1;
+      dynamic.push({ id: `plot:${plot.id}`, prop: { kind: def ? def.prop : 'plot', x: plot.position.x, z: plot.position.z, rotation: 0, scale: def ? 0.9 * grow : 1 } });
     }
     if (st.merchantSurfaced) {
       const b = this.bargePlacement();
-      if (b) dynamic.push(b);
+      if (b) dynamic.push({ id: 'barge', prop: b });
     }
-    this.props.setDynamic(dynamic);
+    for (const id of this.dynamic.set(dynamic)) {
+      const prop = this.dynamic.position(id);
+      if (prop) this.motes.emit(prop.x, sampleHeight(db.world, prop.x, prop.z) + 0.6, prop.z, { color: [0.86, 0.8, 0.7], count: 60, speed: 3.2, up: 2.2, gravity: 1.5, life: 1.4, size: 0.55, jitter: 3 });
+    }
+    this.grid.setGroup('dynamic', this.dynamic.colliders);
+    this.walkAreas = [...this.staticProps.walkAreas, ...this.dynamic.walkAreas];
+
+    // Traversal gates: present until cleared for good.
+    this.presentGates = (db.world.traversalGates ?? []).filter((g) => holds(g.presentWhen) && !gateCleared(g, st.flags));
+    const active = this.traversal?.gate.id;
+    this.gates.sync(this.presentGates);
+    this.grid.setGroup('gates', this.presentGates.filter((g) => g.id !== active).map(gateCollider));
   }
 
   private bargePlacement(): PropInstance | null {
@@ -298,34 +428,43 @@ export class EngineCore {
   update(rawDt: number, time: number, camera: THREE.PerspectiveCamera): void {
     const dt = Math.min(0.1, Math.max(0, rawDt));
     const st = useGame.getState();
-    if (this.presenceDirty) this.syncPresence(st);
     const { db } = this.svc;
     const mode = st.mode;
     const overworld = mode === 'overworld';
     const yaw = CAMERA_YAW;
+    const p = this.player;
+    const pos = p.position;
 
-    // 1. One-shot field action requests (store → engine).
+    // 0. External teleport (dev tools / perf probes write runtime.player directly).
+    if (pos && (Math.abs(runtime.player.x - this.lastWritten.x) > 0.01 || Math.abs(runtime.player.z - this.lastWritten.z) > 0.01)) this.teleport(runtime.player.x, runtime.player.z);
+
+    // 1. One-shot requests (store → engine). Traversal first so the gate is still on screen.
     const req = runtime.requests.fieldAction;
     if (req) {
       runtime.requests.fieldAction = null;
       if (overworld || req === 'drakeSight') this.handleFieldAction(req, time);
     }
+    runtime.requests.huntAim = null;
+    runtime.requests.traverseGate = null;
+    if (this.presenceDirty) this.syncPresence(useGame.getState());
 
     // 2. Movement.
-    const p = this.player;
-    const pos = p.position;
     let mag = 0;
     let moved = 0;
     if (pos) {
       const fromX = pos.x;
       const fromZ = pos.z;
-      if (this.dash) {
+      this.moveFrom = { x: fromX, z: fromZ };
+      let lift = 0;
+      if (this.traversal) {
+        lift = this.stepTraversal(dt, time);
+      } else if (this.dash) {
         this.stepDash(dt);
       } else if (overworld) {
         const v = stickToWorld(runtime.input.moveX, runtime.input.moveY, yaw);
         mag = v.mag;
         if (mag > 0) {
-          const shallow = sampleHeight(db.world, pos.x, pos.z) < WATER_LEVEL + 0.05 && walkAreaDeck(this.props.walkAreas, pos.x, pos.z) === null;
+          const shallow = sampleHeight(db.world, pos.x, pos.z) < WATER_LEVEL + 0.05 && walkAreaDeck(this.walkAreas, pos.x, pos.z) === null;
           const speed = WALK_SPEED * mag * (shallow ? SHALLOW_SPEED_FACTOR : 1);
           const r = resolveMove(pos.x, pos.z, v.x * speed * dt, v.z * speed * dt, this.canStand);
           pos.x = r.x;
@@ -353,30 +492,29 @@ export class EngineCore {
           npc.heading = headingFromVector(pos.x - npc.position.x, pos.z - npc.position.z);
         }
       }
-      pos.y = this.groundY(pos.x, pos.z);
+      pos.y = this.groundY(pos.x, pos.z) + lift;
       moved = Math.hypot(pos.x - fromX, pos.z - fromZ);
       p.heading = this.heading;
       this.actionTimer = Math.max(0, this.actionTimer - dt);
-      setAnim(p, this.actionTimer > 0 || this.dash || mode === 'fishing' ? 'action' : moved > 1e-4 ? 'walk' : 'idle');
-      runtime.player.x = pos.x;
-      runtime.player.z = pos.z;
-      runtime.player.facing = this.heading;
-      runtime.player.moving = moved > 1e-4;
-      runtime.player.speed = dt > 0 ? moved / dt : 0;
+      if (!this.traversal) setAnim(p, this.actionTimer > 0 || this.dash || mode === 'fishing' ? 'action' : moved > 1e-4 ? 'walk' : 'idle');
+      this.writePlayer(pos.x, pos.z, this.heading, moved > 1e-4, dt > 0 ? moved / dt : 0);
 
-      // 3. Followers on the breadcrumb trail.
-      this.trail.push(pos.x, pos.z);
-      this.followers.forEach((f, slot) => {
-        const fp = f.position;
-        if (!fp) return;
-        const target = this.trail.sampleBehind(FOLLOW_GAP * (slot + 1), pos.x, pos.z, this.followTmp);
-        const before = { x: fp.x, z: fp.z };
-        stepFollower(fp, target, dt, WALK_SPEED);
-        fp.y = this.groundY(fp.x, fp.z);
-        const fm = Math.hypot(fp.x - before.x, fp.z - before.z);
-        if (fm > 1e-3) f.heading = headingFromVector(fp.x - before.x, fp.z - before.z);
-        setAnim(f, fm > dt * 0.4 ? 'walk' : 'idle');
-      });
+      // 3. Followers on the breadcrumb trail (scripted while crossing a gate).
+      if (!this.traversal) {
+        this.trail.push(pos.x, pos.z);
+        this.followers.forEach((f, slot) => {
+          const fp = f.position;
+          if (!fp) return;
+          const target = this.trail.sampleBehind(FOLLOW_GAP * (slot + 1), pos.x, pos.z, this.followTmp);
+          const bx = fp.x;
+          const bz = fp.z;
+          stepFollower(fp, target, dt, WALK_SPEED);
+          fp.y = this.groundY(fp.x, fp.z);
+          const fm = Math.hypot(fp.x - bx, fp.z - bz);
+          if (fm > 1e-3) f.heading = headingFromVector(fp.x - bx, fp.z - bz);
+          setAnim(f, fm > dt * 0.4 ? 'walk' : 'idle');
+        });
+      }
     }
 
     // 4. Wildlife.
@@ -386,7 +524,7 @@ export class EngineCore {
     this.updateDrakeSight(st, time);
 
     // 6. Proximity → context action.
-    if (overworld && pos) this.updateContext(st, pos.x, pos.z);
+    if (overworld && pos && !this.traversal) this.updateContext(useGame.getState(), pos.x, pos.z);
 
     // 7. Region enter events.
     if (overworld && pos) {
@@ -394,7 +532,7 @@ export class EngineCore {
         const d = Math.hypot(pos.x - r.center.x, pos.z - r.center.z);
         if (d < r.radius && !this.regionsInside.has(r.id)) {
           this.regionsInside.add(r.id);
-          st.dispatchWorldEvent({ type: 'enterRegion', regionId: r.id });
+          useGame.getState().dispatchWorldEvent({ type: 'enterRegion', regionId: r.id });
         } else if (d > r.radius + 3) this.regionsInside.delete(r.id);
       }
     }
@@ -411,24 +549,67 @@ export class EngineCore {
     this.combat.update(dt, time, latest.combat, latest.mode === 'combat', { x: runtime.player.x, z: runtime.player.z });
     this.applyCombatVisibility();
 
-    // 10. Streaming, camera, shared uniforms, batches.
+    // 10. Streaming, camera, atmosphere, shared uniforms, FX, batches.
     this.terrain.update({ x: runtime.player.x, z: runtime.player.z });
     this.updateCamera(dt, camera, latest.mode === 'combat' && latest.combat !== null);
+    const target = atmosphereAt((x, z) => biomeAt(db.world, x, z), this.camTarget.x, this.camTarget.z);
+    this.atmosphere = dampAtmosphere(this.atmosphere, target, dt);
     updateSharedUniforms(time, latest.wind, pos ?? { x: 0, y: 0, z: 0 });
+    const windV = { x: Math.cos(latest.wind.direction) * latest.wind.speed * 0.3, z: Math.sin(latest.wind.direction) * latest.wind.speed * 0.3 };
+    this.gates.update(dt, { x: this.camTarget.x, z: this.camTarget.z }, this.motes, windV);
+    if (this.sailsDirty || Math.hypot(this.camTarget.x - this.sailsAt.x, this.camTarget.z - this.sailsAt.z) > 40) {
+      this.sails.setWindmills([...this.staticProps.windmills, ...this.dressing.windmills()], this.camTarget);
+      this.sailsDirty = false;
+      this.sailsAt = { x: this.camTarget.x, z: this.camTarget.z };
+    }
+    this.sails.update(time, latest.wind.speed);
+    this.dynamic.update(dt);
+    this.arrow.update(dt);
+    this.motes.update(dt);
     this.renderBatches(dt, time, yaw);
   }
 
-  private handleFieldAction(action: NonNullable<typeof runtime.requests.fieldAction>, time: number): void {
+  /** Jump the party (dev/perf teleports): clamps to the continent and snaps camera + followers. */
+  private teleport(x: number, z: number): void {
+    const pos = this.player.position;
+    if (!pos) return;
+    const c = clampToContinent(this.chunks, x, z);
+    pos.x = c.x;
+    pos.z = c.z;
+    pos.y = this.groundY(c.x, c.z);
+    this.traversal = null;
+    this.dash = null;
+    this.trail.reset(c.x, c.z);
+    for (const f of this.followers) {
+      if (!f.position) continue;
+      f.position.x = c.x;
+      f.position.z = c.z + 0.5;
+      f.position.y = pos.y;
+    }
+    this.camTarget.set(c.x, pos.y, c.z);
+    this.writePlayer(c.x, c.z, this.heading, false, 0);
+    this.terrain.update({ x: c.x, z: c.z }, 1);
+  }
+
+  private handleFieldAction(action: FieldActionId, time: number): void {
     const { db, systems } = this.svc;
     const pos = this.player.position;
     if (!pos) return;
     switch (action) {
       case 'huntShot': {
         const def = db.fieldActions.huntShot;
-        const result = systems.hunting.shoot(this.animals, { x: pos.x, z: pos.z }, this.heading, def?.range ?? 30, this.huntRng);
+        const base = def?.range ?? 30;
+        const aim = runtime.requests.huntAim;
+        const angle = aim ? aim.angle : this.heading;
+        const ray = shotRay({ x: pos.x, z: pos.z }, angle, aim ? aim.power : 1, base);
+        this.heading = angle;
+        const result = systems.hunting.shoot(this.animals, { x: pos.x, z: pos.z }, angle, ray.range, this.huntRng);
         this.animals = result.animals;
         this.huntRng = result.rng;
         this.actionTimer = 0.5;
+        const hit = result.hit ? result.animals.find((a) => a.id === result.animalId) : undefined;
+        const end = hit ? hit.position : ray.end;
+        this.arrow.fire(pos.x, pos.y + 1.1, pos.z, end.x, this.groundY(end.x, end.z) + (hit ? 0.7 : 0.1), end.z);
         useGame.getState().reportHunt(result);
         break;
       }
@@ -439,7 +620,140 @@ export class EngineCore {
         this.fx.startPulse(time, db.fieldActions.drakeSight?.range || 30);
         this.actionTimer = 0.6;
         break;
+      case 'roll':
+      case 'glide':
+      case 'grapple':
+      case 'leap':
+      case 'commune':
+      case 'unseal':
+        this.startTraversal(action);
+        break;
       default:
+        break;
+    }
+  }
+
+  /* ── Traversal ───────────────────────────────────────────────────────── */
+
+  private startTraversal(action: FieldActionId): void {
+    const { db } = this.svc;
+    const pos = this.player.position;
+    const gateId = runtime.requests.traverseGate;
+    if (!pos || !gateId || this.traversal) return;
+    const gate = (db.world.traversalGates ?? []).find((g) => g.id === gateId);
+    if (!gate || gateAction(gate.kind) !== action || !this.gates.has(gate.id)) return;
+    const range = db.fieldActions[action]?.range ?? 3;
+    if (gateDistance(gate, pos) > range + GATE_REQUEST_SLACK) return;
+    const { from, to } = traversalEnds(gate, pos);
+    const approach = Math.min(0.6, Math.hypot(from.x - pos.x, from.z - pos.z) / APPROACH_SPEED);
+    const landings = followerLandings(from, to, this.followers.length, 1.3);
+    this.traversal = {
+      gate,
+      start: { x: pos.x, z: pos.z },
+      from,
+      to,
+      approach,
+      duration: TRAVERSAL_DURATION[gate.kind],
+      permanent: gate.clearsPermanently,
+      followers: this.followers.map((f, i) => ({ start: { x: f.position?.x ?? pos.x, z: f.position?.z ?? pos.z }, land: landings[i] ?? to })),
+      t: 0,
+      lastLift: 0,
+    };
+    if (gate.clearsPermanently) this.gates.beginClear(gate.id);
+    this.grid.setGroup('gates', this.presentGates.filter((g) => g.id !== gate.id).map(gateCollider));
+    this.heading = headingFromVector(to.x - from.x, to.z - from.z);
+  }
+
+  /** Position along a crossing for an actor whose clock is `t` seconds in. */
+  private crossingAt(tr: Traversal, t: number, start: Vec2, to: Vec2): { x: number; z: number; lift: number; airborne: boolean; gateFx: number; u: number } {
+    if (t < tr.approach) {
+      const k = tr.approach > 0 ? t / tr.approach : 1;
+      return { x: start.x + (tr.from.x - start.x) * k, z: start.z + (tr.from.z - start.z) * k, lift: 0, airborne: false, gateFx: 0, u: 0 };
+    }
+    const u = Math.min(1, (t - tr.approach) / tr.duration);
+    const s = traversalSample(tr.gate.kind, tr.from, to, u);
+    return { x: s.x, z: s.z, lift: s.lift, airborne: s.airborne, gateFx: s.gateFx, u };
+  }
+
+  /** Advance the active traversal; returns the leader's lift above the ground. */
+  private stepTraversal(dt: number, time: number): number {
+    const tr = this.traversal;
+    const pos = this.player.position;
+    if (!tr || !pos) return 0;
+    tr.t += dt;
+    const lead = this.crossingAt(tr, tr.t, tr.start, tr.to);
+    pos.x = lead.x;
+    pos.z = lead.z;
+    setAnim(this.player, lead.airborne ? 'action' : 'walk');
+    if (tr.permanent) this.gates.setClearProgress(tr.gate.id, lead.gateFx, this.motes);
+    const groundHere = this.groundY(pos.x, pos.z);
+    this.emitTraversalFx(tr, lead, groundHere, time);
+
+    this.followers.forEach((f, i) => {
+      const fp = f.position;
+      const plan = tr.followers[i];
+      if (!fp || !plan) return;
+      const ft = Math.max(0, tr.t - FOLLOWER_DELAY * (i + 1));
+      const s = this.crossingAt(tr, ft, plan.start, plan.land);
+      const bx = fp.x;
+      const bz = fp.z;
+      fp.x = s.x;
+      fp.z = s.z;
+      fp.y = this.groundY(s.x, s.z) + s.lift;
+      if (Math.hypot(fp.x - bx, fp.z - bz) > 1e-3) f.heading = headingFromVector(fp.x - bx, fp.z - bz);
+      setAnim(f, s.airborne ? 'action' : ft > 0 && s.u < 1 ? 'walk' : 'idle');
+    });
+
+    const total = tr.approach + tr.duration + FOLLOWER_DELAY * this.followers.length;
+    if (tr.t >= total) {
+      this.traversal = null;
+      this.gates.setRope(null);
+      // Re-seed the trail so followers keep their landing spots until the leader walks on.
+      const last = tr.followers[tr.followers.length - 1];
+      this.trail.reset(last ? last.land.x : tr.to.x, last ? last.land.z : tr.to.z);
+      for (let i = tr.followers.length - 2; i >= 0; i--) {
+        const l = tr.followers[i];
+        if (l) this.trail.push(l.land.x, l.land.z);
+      }
+      this.trail.push(tr.to.x, tr.to.z);
+      this.presenceDirty = true;
+      return 0;
+    }
+    tr.lastLift = lead.lift;
+    return lead.lift;
+  }
+
+  private emitTraversalFx(tr: Traversal, s: { x: number; z: number; lift: number; airborne: boolean; u: number }, ground: number, time: number): void {
+    const m = this.motes;
+    const t = tr.t - tr.approach;
+    if (t < 0) return;
+    const pos = this.player.position;
+    switch (tr.gate.kind) {
+      case 'boulder':
+        if (s.u < 0.8) m.emit(s.x, ground + 0.2, s.z, { color: [0.78, 0.7, 0.6], count: 1, speed: 1.2, up: 1, gravity: 3, life: 0.6, size: 0.35 });
+        if (!tr.permanent && s.u > 0.25 && s.u < 0.3) m.emit(tr.gate.position.x, ground + 1, tr.gate.position.z, { color: [0.7, 0.65, 0.6], count: 12, speed: 4, up: 4, gravity: 9, life: 0.9, size: 0.4, jitter: 1 });
+        break;
+      case 'chasm':
+        if (s.airborne) m.emit(s.x, ground + s.lift + 0.4, s.z, { color: [0.9, 0.96, 1], count: 1, speed: 0.6, up: 0.6, life: 0.8, size: 0.16, glow: true });
+        break;
+      case 'cliff':
+        if (pos && s.u < 0.75) {
+          this.ropeA.set(pos.x, pos.y + 1.2, pos.z);
+          this.ropeB.set(tr.to.x, this.groundY(tr.to.x, tr.to.z) + 0.3, tr.to.z);
+          this.gates.setRope(this.ropeA, this.ropeB);
+        } else this.gates.setRope(null);
+        break;
+      case 'river':
+        if (s.lift < 0.08 && s.u > 0.02 && s.u < 1 && tr.lastLift >= 0.08) {
+          m.emit(s.x, Math.max(ground, WATER_LEVEL) + 0.1, s.z, { color: [0.88, 0.96, 1], count: 10, speed: 2, up: 2.2, gravity: 7, life: 0.6, size: 0.18 });
+          emitRipple(s.x, s.z);
+        }
+        break;
+      case 'grove':
+        if (s.u < 0.5 && Math.floor(time * 20) % 2 === 0) m.emit(s.x, ground + 0.4, s.z, { color: [0.55, 0.85, 0.42], count: 1, speed: 1.6, up: 1.8, life: 1.2, size: 0.18, glow: true, jitter: 1.4 });
+        break;
+      case 'ward':
+        if (s.u < 0.45) m.emit(tr.gate.position.x, ground + 2, tr.gate.position.z, { color: [0.7, 0.92, 1], count: 1, speed: 2, up: 0.5, life: 0.6, size: 0.16, glow: true, jitter: tr.gate.width * 0.4 });
         break;
     }
   }
@@ -461,6 +775,7 @@ export class EngineCore {
       this.animals = result.animals;
       this.huntRng = result.rng;
       this.actionTimer = 0.4;
+      this.motes.emit(pos.x, pos.y + 0.3, pos.z, { color: [0.85, 0.78, 0.66], count: 14, speed: 2.5, up: 1.5, gravity: 4, life: 0.6, size: 0.35 });
       useGame.getState().reportHunt(result);
     }
   }
@@ -478,7 +793,7 @@ export class EngineCore {
         e = this.ecs.add({
           id: `animal:${a.id}`,
           position: { x: a.position.x, y: this.groundY(a.position.x, a.position.z), z: a.position.z },
-          sprite: { sheet: db.species[a.speciesId]?.sprite ?? 'animal.deer', facing: 0, anim: 'idle', frameTime: (a.home.x * 0.07) % 1 },
+          sprite: { sheet: db.species[a.speciesId]?.sprite ?? 'animal.deer', facing: 0, anim: 'idle', frameTime: Math.abs(a.home.x * 0.07) % 1 },
           animal: { state: a },
           heading: a.heading,
         });
@@ -489,7 +804,8 @@ export class EngineCore {
       const movedA = Math.hypot(a.position.x - ep.x, a.position.z - ep.z);
       ep.x = a.position.x;
       ep.z = a.position.z;
-      ep.y = this.groundY(ep.x, ep.z);
+      // Height sampling is the costly part: only refresh animals near the camera.
+      if (movedA > 0 && Math.hypot(ep.x - this.camTarget.x, ep.z - this.camTarget.z) < SPRITE_CULL) ep.y = this.groundY(ep.x, ep.z);
       e.heading = a.heading;
       if (e.animal) e.animal.state = a;
       if (e.sprite) e.sprite.tint = a.mood === 'downed' ? '#8f8a96' : a.mood === 'alert' ? '#fff1d0' : undefined;
@@ -539,8 +855,10 @@ export class EngineCore {
     };
     for (const [npcId, e] of this.npcs) {
       if (e.hidden || !e.position) continue;
+      const d = Math.hypot(e.position.x - x, e.position.z - z);
+      if (d > TALK_REACH) continue;
       const npc = db.world.npcs.find((n) => n.id === npcId);
-      consider(Math.hypot(e.position.x - x, e.position.z - z), TALK_REACH, { kind: 'talk', npcId, label: `Talk to ${npc?.name ?? 'stranger'}` });
+      consider(d, TALK_REACH, { kind: 'talk', npcId, label: `Talk to ${npc?.name ?? 'stranger'}` });
     }
     for (const spot of db.world.fishingSpots) {
       const e = this.spots.get(spot.id);
@@ -548,14 +866,23 @@ export class EngineCore {
       consider(Math.hypot(spot.position.x - x, spot.position.z - z), FISH_REACH, { kind: 'fish', spotId: spot.id, label: `Fish · ${spot.name}` });
     }
     for (const [zoneId, e] of this.zones) {
+      if (!e.position) continue;
       const zone = db.world.encounterZones.find((zz) => zz.id === zoneId);
-      if (!zone || !e.position) continue;
+      if (!zone) continue;
       const enc = db.encounters[zone.encounterId];
       consider(Math.hypot(e.position.x - x, e.position.z - z), zone.radius, { kind: 'encounter', zoneId, encounterId: zone.encounterId, label: `Fight · ${enc?.name ?? 'Foes'}` });
     }
     for (const plot of db.township.plots) {
       if (st.township.built[plot.id]) continue;
       consider(Math.hypot(plot.position.x - x, plot.position.z - z), PLOT_REACH, { kind: 'build', plotId: plot.id, label: `Build · ${plot.name}` });
+    }
+    for (const gate of this.presentGates) {
+      const action = gateAction(gate.kind);
+      const def = db.fieldActions[action];
+      const reach = def?.range ?? 3;
+      const d = gateDistance(gate, { x, z });
+      if (d > reach || !whoCanClear(gate, st.leader, st.party, db.heroes)) continue;
+      consider(d, reach, { kind: 'traverse', gateId: gate.id, action, label: `${def?.label ?? 'Cross'} · ${gate.label}` });
     }
     const chosen: ContextAction | null = best;
     if (contextKey(chosen) !== contextKey(st.contextAction)) st.setContextAction(chosen);
@@ -576,8 +903,10 @@ export class EngineCore {
     const pos = this.player.position;
     if (pos) {
       const k = dampFactor(7, dt);
+      // During a crossing, track the ground under the leader, not the arc.
+      const y = this.traversal ? pos.y - this.traversal.lastLift : pos.y;
       this.camTarget.x += (pos.x - this.camTarget.x) * k;
-      this.camTarget.y += (pos.y - this.camTarget.y) * dampFactor(3, dt);
+      this.camTarget.y += (y - this.camTarget.y) * dampFactor(3, dt);
       this.camTarget.z += (pos.z - this.camTarget.z) * k;
     }
     this.combatBlend = stepBlend(this.combatBlend, inCombat ? 1 : 0, dt);
@@ -585,8 +914,11 @@ export class EngineCore {
     const over = cameraPose(this.camTarget, OVERWORLD_FRAMING);
     let pose = over;
     if (eased > 0) {
-      const a = this.combat.anchor ?? { x: this.camTarget.x, z: this.camTarget.z };
-      const battle = cameraPose({ x: a.x, y: this.groundY(a.x, a.z), z: a.z }, COMBAT_FRAMING);
+      const frame = this.combat.frame;
+      const a = frame ?? this.combat.anchor ?? { x: this.camTarget.x, z: this.camTarget.z };
+      const hfov = 2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * Math.max(0.5, camera.aspect));
+      const distance = frame ? fitDistance(frame.width, hfov, COMBAT_FRAMING.distance) : COMBAT_FRAMING.distance;
+      const battle = cameraPose({ x: a.x, y: this.groundY(a.x, a.z), z: a.z }, { ...COMBAT_FRAMING, distance });
       pose = blendPose(over, battle, eased);
     }
     camera.position.set(pose.pos.x, pose.pos.y, pose.pos.z);
@@ -600,12 +932,16 @@ export class EngineCore {
     this.sprites.begin();
     this.shadows.begin();
     this.auras.begin();
+    const cx = this.camTarget.x;
+    const cz = this.camTarget.z;
     for (const e of this.spriteQuery) {
       e.sprite.frameTime += dt;
-      e.sprite.facing = facingFromHeading(e.heading ?? FACE_CAMERA, yaw);
       if (e.hidden || (e.opacity ?? 1) <= 0.01) continue;
+      if (!e.combatActor && Math.abs(e.position.x - cx) + Math.abs(e.position.z - cz) > SPRITE_CULL * 1.4) continue;
+      e.sprite.facing = facingFromHeading(e.heading ?? FACE_CAMERA, yaw);
       const s = shadowSize(e);
-      this.shadows.add(e.position.x, e.position.y, e.position.z, s.w, s.d);
+      const lift = e === this.player && this.traversal ? this.traversal.lastLift : 0;
+      this.shadows.add(e.position.x, e.position.y - lift, e.position.z, s.w, s.d);
       if (e.aura) this.auras.add(e);
       if (!e.combatActor) this.sprites.add(e);
     }
@@ -614,7 +950,11 @@ export class EngineCore {
     this.auras.end();
 
     this.fx.beginSpots();
-    for (const e of this.spots.values()) if (!e.hidden && e.position) this.fx.addSpot(e.position.x, e.position.z, time, !!e.hiddenUntilDrakeSight);
+    for (const e of this.spots.values()) {
+      if (e.hidden || !e.position) continue;
+      if (Math.abs(e.position.x - cx) + Math.abs(e.position.z - cz) > SPRITE_CULL * 1.4) continue;
+      this.fx.addSpot(e.position.x, e.position.z, time, !!e.hiddenUntilDrakeSight);
+    }
     this.fx.endSpots();
   }
 
@@ -622,7 +962,14 @@ export class EngineCore {
     this.unsubscribe();
     this.combat.dispose();
     this.terrain.dispose();
-    this.props.dispose();
+    this.staticProps.dispose();
+    this.dressing.dispose();
+    this.sails.dispose();
+    this.dynamic.dispose();
+    this.gates.dispose();
+    this.mats.dispose();
+    this.motes.dispose();
+    this.arrow.dispose();
     this.sprites.dispose();
     this.shadows.dispose();
     this.auras.dispose();
