@@ -151,3 +151,18 @@ describe('hazard FX envelope', () => {
     expect(hazardEnvelope(1, 9, 1).opacity).toBe(0);
   });
 });
+
+import { baseMountId, mountSheetCandidates } from './travel';
+describe('mount sheet fallback', () => {
+  it('falls back from a rider composite to the bare mount sheet', () => {
+    expect(baseMountId('mount_drake_flight_rider_kael_01')).toBe('mount_drake_flight_01');
+    expect(baseMountId('mount_drake_flight_01')).toBe('mount_drake_flight_01');
+    expect(mountSheetCandidates('mount_drake_flight_rider_kael_01', 'tobin')).toEqual([
+      'mount_drake_flight_rider_tobin_01',
+      'mount_drake_flight_rider_kael_01',
+      'mount_drake_flight_01',
+    ]);
+    expect(mountSheetCandidates('mount_thornback_strider_01', 'vesna')).toEqual(['mount_thornback_strider_rider_vesna_01', 'mount_thornback_strider_01']);
+  });
+});
+

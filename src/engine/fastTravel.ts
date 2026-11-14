@@ -18,7 +18,7 @@ import { easeInOut, OVERWORLD_FRAMING, stepBlend, type Framing } from './cameraR
 import { resolveMove } from './movement';
 import { facingFromHeading, headingFromVector } from './spriteMath';
 import { clampToBounds, type Bounds } from './streaming';
-import { approach, findLanding, flightTuning, isRiderSheet, lerpFraming, locomotion, mountFraming, riderVariantId, startAutopilot, stepAutopilot, type AutopilotState } from './travel';
+import { approach, findLanding, flightTuning, isRiderSheet, lerpFraming, locomotion, mountFraming, mountSheetCandidates, startAutopilot, stepAutopilot, type AutopilotState } from './travel';
 
 export const MOUNT_DEBUG_COLOR = 0x39ff88;
 /** Seconds for the camera to settle onto / off the mount framing. */
@@ -64,7 +64,7 @@ export class MountProxy {
 
   /** The best delivered sheet: the leader's rider composite, then the mount's own sheet. */
   pickSheet(m: MountDef, leader: string): { id: string; texture: THREE.Texture } | null {
-    const candidates = [riderVariantId(m.assetId, leader), m.assetId];
+    const candidates = mountSheetCandidates(m.assetId, leader);
     for (const id of candidates) {
       if (id !== m.assetId && !assetRegistry.get(id).entry) continue;
       const t = this.watch(id);

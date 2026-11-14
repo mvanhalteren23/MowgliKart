@@ -221,3 +221,11 @@ export function riderVariantId(assetId: string, heroId: string): string {
 }
 
 export const isRiderSheet = (assetId: string): boolean => /_rider_/i.test(assetId);
+
+/** The bare mount sheet for a rider composite id (`mount_x_rider_kael_01` → `mount_x_01`); unchanged otherwise. */
+export const baseMountId = (assetId: string): string => assetId.replace(/_rider_[a-z0-9]+(_\d+)$/i, '$1');
+
+/** Sheets to try, best first: the leader's rider composite, the mount's own asset, then the bare mount sheet. */
+export function mountSheetCandidates(assetId: string, leader: string): string[] {
+  return [...new Set([riderVariantId(assetId, leader), assetId, baseMountId(assetId)])];
+}
