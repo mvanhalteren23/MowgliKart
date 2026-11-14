@@ -1,0 +1,614 @@
+/* Emberwake HUD — Phase 3: QTE, hazards, stamina, mounts, fast travel.
+ * No art here: every new visual is a pipeline asset (or its dashed debug outline). */
+
+/* ── Pipeline asset + debug fallback ─────────────────────────────────── */
+.ew-asset {
+  display: inline-block;
+  flex: none;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.ew-asset--fallback {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px dashed rgba(241, 228, 198, 0.75);
+  border-radius: 2px;
+  overflow: hidden;
+  color: rgba(241, 228, 198, 0.85);
+  text-align: center;
+}
+.ew-asset__id {
+  font: 8px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
+  padding: 0 2px;
+  opacity: 0.9;
+}
+.ew-asset__text {
+  font: 700 12px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #fff;
+}
+
+/* ── QTE overlay ─────────────────────────────────────────────────────── */
+.ew-qte {
+  pointer-events: auto;
+  touch-action: none;
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 6, 4, 0.42);
+}
+.ew-qte__head {
+  position: absolute;
+  top: calc(var(--sa-t) + 52px);
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.ew-qte__skill {
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--gold);
+  text-shadow: 0 1px 2px #000;
+}
+.ew-qte__steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ew-qte__step {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+}
+.ew-qte__step.is-current {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.35);
+}
+.ew-qte__step.is-perfect,
+.ew-qte__step.is-good {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.ew-qte__step.is-wrong,
+.ew-qte__step.is-late {
+  background: var(--bad);
+  border-color: var(--bad);
+}
+.ew-qte__count {
+  font: 700 11px/1 ui-monospace, monospace;
+  color: #fff;
+}
+.ew-qte__prompt {
+  position: relative;
+  width: 176px;
+  height: 176px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.ew-qte__ring {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  animation: ew-qte-ring linear forwards;
+  animation-duration: var(--qte-ms, 1000ms);
+  animation-play-state: paused;
+}
+.ew-qte__prompt.is-live .ew-qte__ring {
+  animation-play-state: running;
+}
+.ew-qte__glyph {
+  position: relative;
+}
+/* Only the debug fallback gets a backing plate; delivered art keeps its own transparency. */
+.ew-qte__glyph.ew-asset--fallback {
+  background: rgba(0, 0, 0, 0.55);
+}
+.ew-qte__glyph.ew-asset--fallback {
+  border-color: #fff;
+}
+.ew-qte__word {
+  font: 800 16px/1.1 ui-monospace, monospace;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+@keyframes ew-qte-ring-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.2;
+  }
+}
+@keyframes ew-qte-ring {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.62);
+    opacity: 0.35;
+  }
+}
+
+.ew-qte-banner {
+  position: absolute;
+  top: 24%;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  animation: ew-qte-pop 1.3s var(--ease) forwards;
+}
+.ew-qte-banner .ew-asset__text {
+  font-size: 22px;
+}
+.ew-qte-banner.is-perfect .ew-asset__text {
+  color: var(--gold);
+}
+.ew-qte-banner.is-miss .ew-asset__text {
+  color: var(--bad);
+}
+.ew-qte-banner__mult {
+  font: 700 13px/1 ui-monospace, monospace;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+@keyframes ew-qte-pop {
+  0% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+  12%,
+  78% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.ew-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  animation: ew-hitflash ease-out forwards;
+}
+.ew-flash .ew-asset[data-ready='1'] {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+@keyframes ew-hitflash {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── Hazards ─────────────────────────────────────────────────────────── */
+.ew-pcard,
+.ew-eplate {
+  position: relative;
+}
+.ew-hazards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ew-hazards--enemy {
+  flex-basis: 100%;
+  justify-content: center;
+}
+.ew-hazard-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.ew-hazard {
+  min-height: 48px;
+  padding: 4px 8px;
+  gap: 6px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.ew-hazards--enemy .ew-hazard {
+  border-color: rgba(239, 111, 94, 0.55);
+}
+.ew-hazards--party .ew-hazard {
+  border-color: rgba(232, 163, 58, 0.6);
+}
+.ew-hazard__name {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ew-hazard__rounds {
+  font: 10px/1 ui-monospace, monospace;
+  color: var(--parch-dim);
+}
+.ew-hazard__desc {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--glass-hi);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  pointer-events: none;
+  animation: ew-fade 0.15s;
+}
+.ew-hazards--party .ew-hazard__desc {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.ew-ticks {
+  position: absolute;
+  right: 6px;
+  top: -4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.ew-tick {
+  font: 800 13px/1 ui-monospace, monospace;
+  color: var(--warn);
+  text-shadow: 0 1px 2px #000, 0 0 4px #000;
+  animation: ew-tick-rise 1.5s var(--ease) forwards;
+}
+@keyframes ew-tick-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  15%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+.ew-clog__line.is-loud {
+  color: var(--ember);
+  font-size: 15px;
+}
+
+/* ── Stamina ─────────────────────────────────────────────────────────── */
+.ew-stamina {
+  position: absolute;
+  left: calc(var(--sa-l) + 8px);
+  bottom: calc(var(--sa-b) + 150px);
+  width: 128px;
+  height: 24px;
+  pointer-events: none;
+  transition: opacity 0.35s var(--ease);
+}
+.ew-stamina[data-mode='hidden'] {
+  opacity: 0;
+}
+.ew-stamina[data-mode='idle'] {
+  opacity: 0.8;
+}
+.ew-stamina[data-mode='exhausted'] {
+  animation: ew-stamina-pulse 0.6s ease-in-out infinite alternate;
+}
+.ew-stamina[data-mode='exhausted'] .ew-asset--fallback {
+  border-color: var(--bad);
+}
+.ew-stamina__exhausted {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.ew-stamina[data-mode='exhausted'] .ew-stamina__exhausted {
+  display: inline-flex;
+}
+.ew-stamina__frame {
+  position: absolute;
+  inset: 0;
+}
+.ew-stamina__fill {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  display: flex;
+}
+.ew-stamina__pct {
+  position: absolute;
+  right: -34px;
+  top: 4px;
+  font: 700 10px/16px ui-monospace, monospace;
+  color: var(--parch);
+  text-shadow: 0 1px 2px #000;
+}
+@keyframes ew-stamina-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+
+/* ── Sprint / mount / boost ──────────────────────────────────────────── */
+.ew-movectl {
+  position: absolute;
+  left: calc(46% + 6px);
+  bottom: var(--sa-b);
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+}
+.ew-hold,
+.ew-mountbtn {
+  width: 60px;
+  min-height: 52px;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px;
+  border-radius: 14px;
+}
+.ew-hold__glyph {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+}
+.ew-hold__label {
+  font-size: 9px;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+}
+.ew-hold[data-pressed] {
+  border-color: var(--gold);
+  background: var(--glass-hi);
+}
+.ew-hold--boost {
+  border-color: rgba(255, 154, 74, 0.6);
+}
+.ew-mountbtn.is-on {
+  border-color: var(--gold);
+}
+.ew-mountbtn.is-locked {
+  opacity: 0.7;
+}
+.ew-stick-zone.is-sprinting .ew-stick {
+  border-color: var(--gold);
+}
+.ew-mountpick {
+  pointer-events: auto;
+  position: absolute;
+  bottom: 0;
+  left: calc(100% + 8px);
+  width: min(280px, 42vw);
+  max-height: calc(100vh - var(--sa-t) - var(--sa-b) - 16px);
+  overflow-y: auto;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--glass-hi);
+  border: 1px solid var(--line);
+  z-index: 25;
+}
+.ew-mountpick__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ew-mountpick__head h3 {
+  margin: 0;
+}
+.ew-mountpick__item {
+  justify-content: flex-start;
+  width: 100%;
+}
+.ew-mountpick__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ew-mountpick__item.is-locked:disabled {
+  opacity: 0.75;
+}
+
+/* ── Flight banner ───────────────────────────────────────────────────── */
+.ew-flight {
+  pointer-events: auto;
+  position: absolute;
+  top: var(--sa-t);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 14px;
+  background: var(--glass-hi);
+  border: 1px solid var(--gold);
+}
+.ew-flight__text {
+  white-space: nowrap;
+  font-variant: small-caps;
+}
+
+/* ── Fast-travel map ─────────────────────────────────────────────────── */
+.ew-chronicle__map {
+  margin: 0 0 8px;
+}
+.ew-travel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 34%);
+  grid-template-areas:
+    'reason reason'
+    'map list';
+  align-items: start;
+  gap: 8px 12px;
+}
+.ew-travel__reason {
+  grid-area: reason;
+  margin: 0;
+  font-size: 12px;
+}
+.ew-travel__map {
+  grid-area: map;
+  justify-self: center;
+  position: relative;
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.ew-travel__list {
+  grid-area: list;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100dvh - 130px);
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+.ew-travel__tile {
+  position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  min-height: 28px;
+}
+.ew-travel__tilename {
+  position: absolute;
+  left: 4px;
+  bottom: 2px;
+  font-size: 9px;
+  font-variant: small-caps;
+  color: rgba(241, 228, 198, 0.75);
+  text-shadow: 0 1px 1px #000;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: calc(100% - 6px);
+}
+.ew-travel__marker {
+  position: absolute;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+.ew-travel__mlabel {
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px #000, 0 0 3px #000;
+}
+.ew-travel__pin {
+  width: 100%;
+  min-height: 48px;
+  justify-content: flex-start;
+  border-color: var(--gold);
+  font-weight: 700;
+}
+.ew-travel__pin.is-disabled {
+  border-color: var(--line);
+}
+.ew-travel__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 1px solid #000;
+  flex: none;
+}
+.ew-travel__you {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--ember);
+  z-index: 3;
+  pointer-events: none;
+}
+
+@media (max-height: 400px) {
+  .ew-stamina {
+    bottom: calc(var(--sa-b) + 128px);
+  }
+  .ew-hold,
+  .ew-mountbtn {
+    width: 56px;
+    min-height: 50px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ew-flash {
+    display: none;
+  }
+  /* The ring is a timer, not decoration: keep it, but fade instead of scaling. */
+  .ew-hud .ew-qte__ring {
+    animation-name: ew-qte-ring-fade !important;
+    animation-duration: var(--qte-ms, 1000ms) !important;
+  }
+  .ew-hud .ew-stamina[data-mode='exhausted'] {
+    animation: none !important;
+    opacity: 1;
+  }
+  .ew-hud .ew-tick,
+  .ew-hud .ew-qte-banner {
+    animation: none !important;
+  }
+}
+
+/* Narrow landscape phones: hazard chips collapse to icon + rounds so they never cover the battle line.
+   The name stays available through the chip's tap/long-press description. */
+@media (max-width: 900px) {
+  .ew-hazards--enemy .ew-hazard__name {
+    display: none;
+  }
+  .ew-hazards--enemy .ew-hazard {
+    min-width: 48px;
+    padding: 4px 6px;
+    background: rgba(18, 12, 10, 0.72);
+  }
+  /* Beside the enemy name plates (top band), never down on the battle line. */
+  .ew-hazards--enemy {
+    position: absolute;
+    top: 0;
+    left: calc(100% + 6px);
+    flex-basis: auto;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "emberwake",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json",
+    "test": "vitest run",
+    "assets:manifest": "node --experimental-strip-types --no-warnings=ExperimentalWarning tools/asset-pipeline/emit.ts"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^9.8.2",
+    "miniplex": "^2.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
