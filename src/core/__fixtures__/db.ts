@@ -67,6 +67,8 @@ const skills: Record<string, SkillDef> = {
   'skill.drakeCall': { id: 'skill.drakeCall', name: 'Drake Call', description: '', apCost: 2, target: 'enemy', element: 'physical', kind: 'physical', power: 1, syncGain: 30 },
   'skill.sweep': { id: 'skill.sweep', name: 'Glaive Sweep', description: '', apCost: 3, target: 'allEnemies', element: 'physical', kind: 'physical', power: 0.8 },
   'skill.hex': { id: 'skill.hex', name: 'Hollow Hex', description: '', apCost: 5, target: 'enemy', element: 'shadow', kind: 'magical', power: 1.2 },
+  'skill.spark': { id: 'skill.spark', name: 'Wick Spark', description: '', apCost: 2, target: 'enemy', element: 'fire', kind: 'magical', power: 1 },
+  'skill.cinderRain': { id: 'skill.cinderRain', name: 'Cinder Rain', description: '', apCost: 3, target: 'allEnemies', element: 'fire', kind: 'magical', power: 0.6 },
   'skill.stunBite': {
     id: 'skill.stunBite', name: 'Numbing Bite', description: '', apCost: 2, target: 'enemy', element: 'physical', kind: 'physical', power: 0.5,
     inflicts: { status: 'stun', chance: 1, turns: 1, potency: 0 },
@@ -84,6 +86,12 @@ const dragonForms: Record<string, DragonFormDef> = {
     id: 'form.elderDrake', name: 'Elder Drake', element: 'fire', sprite: 'drake.elder',
     syncRequired: 100, apCostToEnter: 30, apDrainPerTurn: 10, maxTurns: 2,
     statMultipliers: { atk: 3 }, affinities: {}, skills: ['skill.claw'],
+  },
+  'form.ashenSovereign': {
+    id: 'form.ashenSovereign', name: 'Ashen Sovereign', element: 'fire', sprite: 'drake.sovereign',
+    syncRequired: 50, apCostToEnter: 10, apDrainPerTurn: 5, maxTurns: 3,
+    requiresFlag: 'story.emberOath', apex: true,
+    statMultipliers: { atk: 4 }, affinities: { fire: 0 }, skills: ['skill.claw', 'skill.emberBreath'],
   },
 };
 
@@ -133,6 +141,8 @@ const enemies: Record<string, EnemyDef> = {
   'en.brute': enemy('en.brute', { name: 'Stillguard Brute', stats: stats({ maxHp: 5000, atk: 60, def: 0, spd: 50 }) }),
   'en.caster': enemy('en.caster', { name: 'Covenant Acolyte', stats: stats({ maxHp: 5000, mag: 40, spd: 50, maxAp: 999 }), skills: ['skill.hex'], skillBias: 1 }),
   'en.sweeper': enemy('en.sweeper', { name: 'Chain Warden', stats: stats({ maxHp: 5000, atk: 40, spd: 50, maxAp: 999 }), skills: ['skill.sweep'], skillBias: 1 }),
+  'en.glass': enemy('en.glass', { name: 'Glass Moth', stats: stats({ maxHp: 1, def: 0, spd: 1 }), xp: 3, coin: 2 }),
+  'en.mage': enemy('en.mage', { name: 'Stillflame Cantor', stats: stats({ maxHp: 5000, mag: 40, spd: 50, maxAp: 999 }), skills: ['skill.cinderRain'], skillBias: 1 }),
   'en.biter': enemy('en.biter', { name: 'Numbing Eel', stats: stats({ maxHp: 5000, atk: 10, spd: 50, maxAp: 999 }), skills: ['skill.stunBite'], skillBias: 1 }),
 };
 
@@ -155,6 +165,20 @@ const gear: Record<string, GearDef> = {
     id: 'gear.talon', name: 'Test Talon', slot: 'signature', description: '', stats: { atk: 3 }, icon: '!', archetype: 'signature', boundHero: 'vesna',
     hookId: 'hook.counterAttack', hookParams: { chance: 1, power: 1 }, hookText: 'Always counters.',
   },
+  'gear.surgeScale': { id: 'gear.surgeScale', name: 'Surge Scale', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.dragonSurge', hookParams: { sync: 10, ap: 4 }, hookText: '' },
+  'gear.quarryFletch': { id: 'gear.quarryFletch', name: 'Quarry Fletching', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.markedQuarry', hookParams: { chance: 1, turns: 2, potency: 0.5 }, hookText: '' },
+  'gear.quarryDull': { id: 'gear.quarryDull', name: 'Blunt Fletching', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.markedQuarry', hookParams: { chance: 0, turns: 2, potency: 0.5 }, hookText: '' },
+  'gear.mendBell': { id: 'gear.mendBell', name: 'Mending Bell', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.mendingEcho', hookParams: { fraction: 0.1 }, hookText: '' },
+  'gear.bulwarkPlate': { id: 'gear.bulwarkPlate', name: 'Bulwark Plate', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.bulwark', hookParams: { armor: 20, turns: 2, potency: 0.5 }, hookText: '' },
+  'gear.bulwarkDull': { id: 'gear.bulwarkDull', name: 'Cracked Plate', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.bulwark', hookParams: { chance: 0, armor: 20, turns: 2, potency: 0.5 }, hookText: '' },
+  'gear.pilferGlove': { id: 'gear.pilferGlove', name: 'Quickfinger Glove', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.pilfer', hookParams: { chance: 1, coin: 15 }, hookText: '' },
+  'gear.pilferDull': { id: 'gear.pilferDull', name: 'Clumsy Glove', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.pilfer', hookParams: { chance: 0, coin: 15 }, hookText: '' },
+  'gear.echoLens': { id: 'gear.echoLens', name: 'Echo Lens', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.spellEcho', hookParams: { chance: 1, power: 0.5 }, hookText: '' },
+  'gear.echoDull': { id: 'gear.echoDull', name: 'Fogged Lens', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.spellEcho', hookParams: { chance: 0, power: 0.5 }, hookText: '' },
+  'gear.rootCharm': { id: 'gear.rootCharm', name: 'Rootbind Charm', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.rootbind', hookParams: { chance: 1, turns: 1 }, hookText: '' },
+  'gear.rootDull': { id: 'gear.rootDull', name: 'Withered Charm', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.rootbind', hookParams: { chance: 0, turns: 1 }, hookText: '' },
+  'gear.reapSickle': { id: 'gear.reapSickle', name: 'Reaping Sickle', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.reap', hookParams: { ap: 6, potency: 0.5, turns: 2 }, hookText: '' },
+  'gear.reapDull': { id: 'gear.reapDull', name: 'Rusted Sickle', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature', hookId: 'hook.reap', hookParams: { chance: 0, ap: 6, potency: 0.5, turns: 2 }, hookText: '' },
   'gear.talonNever': {
     id: 'gear.talonNever', name: 'Dull Talon', slot: 'signature', description: '', stats: {}, icon: '!', archetype: 'signature',
     hookId: 'hook.counterAttack', hookParams: { chance: 0, power: 1 }, hookText: 'Never counters.',
@@ -198,10 +222,26 @@ const quests: QuestDef[] = [
     activateWhen: { kind: 'flag', key: 'evt:accept:q.after', atLeast: 1 },
     objectives: [{ id: 'o.never', text: 'Never', completeWhen: { kind: 'not', of: { kind: 'always' } } }],
   }),
+  // Investigation driven by `count` conditions over clue flags; recruits a hero.
+  quest({
+    id: 'q.inquiry',
+    kind: 'investigation',
+    discoverWhen: { kind: 'count', atLeast: 1, of: [{ kind: 'flag', key: 'clue:tithe' }, { kind: 'flag', key: 'clue:ash' }, { kind: 'flag', key: 'clue:bell' }] },
+    activateWhen: { kind: 'always' },
+    objectives: [
+      {
+        id: 'o.two', text: 'Find two clues',
+        completeWhen: { kind: 'count', atLeast: 2, of: [{ kind: 'flag', key: 'clue:tithe' }, { kind: 'flag', key: 'clue:ash' }, { kind: 'flag', key: 'clue:bell' }] },
+      },
+    ],
+    rewards: [{ type: 'hero', heroId: 'orla' }, { type: 'flag', key: 'inquiry.done', value: true }],
+  }),
 ];
 
+const CLUE_FLAGS = ['clue:tithe', 'clue:ash', 'clue:bell'].map((key) => ({ kind: 'flag' as const, key }));
+
 const fieldActions = Object.fromEntries(
-  (['fish', 'drakeSight', 'huntShot', 'huntDash', 'none'] as const).map((id) => [id, { id, label: id, glyph: '?', description: '', cooldownSec: 0, range: 0 }]),
+  (['fish', 'drakeSight', 'huntShot', 'huntDash', 'roll', 'glide', 'grapple', 'leap', 'commune', 'unseal', 'none'] as const).map((id) => [id, { id, label: id, glyph: '?', description: '', cooldownSec: 0, range: 0 }]),
 ) as Record<FieldActionId, FieldActionDef>;
 
 export const fixtureDb: GameDatabase = {
@@ -214,11 +254,12 @@ export const fixtureDb: GameDatabase = {
       affinities: { fire: 0.5 },
       skills: [{ skillId: 'skill.drakeCall', level: 1 }, { skillId: 'skill.mend', level: 1 }, { skillId: 'skill.flameLash', level: 5 }],
       fusionAffinity: ['ashka', 'mirelle', 'zephra'],
-      dragonForms: [{ formId: 'form.cinderDrake', level: 1 }, { formId: 'form.elderDrake', level: 10 }],
+      // Apex form listed first on purpose: `availableForms` must still sort it last.
+      dragonForms: [{ formId: 'form.ashenSovereign', level: 1 }, { formId: 'form.cinderDrake', level: 1 }, { formId: 'form.elderDrake', level: 10 }],
     }),
     tobin: hero('tobin', { playable: true, baseStats: stats({ spd: 11 }), fusionAffinity: ['mirelle'] }),
     vesna: hero('vesna', { playable: true, baseStats: stats({ maxHp: 200, atk: 30, spd: 14 }), skills: [{ skillId: 'skill.sweep', level: 1 }], fusionAffinity: ['ashka'] }),
-    orla: hero('orla'),
+    orla: hero('orla', { baseStats: stats({ mag: 30, spd: 13 }), skills: [{ skillId: 'skill.spark', level: 1 }, { skillId: 'skill.cinderRain', level: 1 }], joinQuest: 'q.inquiry' }),
     hadrik: hero('hadrik'),
     pim: hero('pim'),
     quill: hero('quill'),
@@ -238,6 +279,9 @@ export const fixtureDb: GameDatabase = {
     'enc.caster': { id: 'enc.caster', name: 'Caster', enemies: ['en.caster'], canFlee: true },
     'enc.sweeper': { id: 'enc.sweeper', name: 'Sweeper', enemies: ['en.sweeper'], canFlee: true },
     'enc.biter': { id: 'enc.biter', name: 'Biter', enemies: ['en.biter'], canFlee: true },
+    'enc.glass': { id: 'enc.glass', name: 'Moths', enemies: ['en.glass', 'en.glass'], canFlee: true },
+    'enc.mage': { id: 'enc.mage', name: 'Cantor', enemies: ['en.mage'], canFlee: true },
+    'enc.pair': { id: 'enc.pair', name: 'Pair', enemies: ['en.dummy', 'en.dummy'], canFlee: true },
     'enc.fast': { id: 'enc.fast', name: 'Fast', enemies: ['en.fast'], canFlee: true },
   },
   gear,
@@ -250,9 +294,36 @@ export const fixtureDb: GameDatabase = {
   },
   quests,
   dialogues: {},
-  acts: [],
-  world: { seed: 1, playerStart: { x: 0, z: 0 }, regions: [], props: [], npcs: [], encounterZones: [], fishingSpots: [], paths: [], water: [] },
-  township: { name: 'Test', regionId: 'region.test', plots: [], buildings: [], recruits: [] },
+  acts: [{ act: 1, title: 'Act I', synopsis: '', beats: [], questIds: ['q.ledger', 'q.chain'] }],
+  storyGraph: [
+    { id: 'node.ledger', act: 1, title: 'The Ledger', regionId: 'region.lanternwick', questId: 'q.ledger', next: ['node.chain'] },
+    { id: 'node.chain', act: 1, title: 'The Chain', regionId: 'region.saltmarket', questId: 'q.chain', next: [] },
+  ],
+  clues: [
+    { id: 'tithe', title: 'Tithe Ledger', text: '', regionId: 'region.lanternwick', investigationId: 'q.inquiry', foundWhen: { kind: 'flag', key: 'clue:tithe' } },
+    { id: 'ash', title: 'Ash Sigil', text: '', regionId: 'region.saltmarket', investigationId: 'q.inquiry', foundWhen: { kind: 'flag', key: 'clue:ash' } },
+    { id: 'bell', title: 'Silent Bell', text: '', regionId: 'region.saltmarket', investigationId: 'q.inquiry', foundWhen: { kind: 'flag', key: 'clue:bell' } },
+  ],
+  endings: [
+    { id: 'end.dawn', title: 'Dawn Unstilled', summary: '', priority: 2, when: { kind: 'count', atLeast: 3, of: CLUE_FLAGS } },
+    { id: 'end.ember', title: 'A Banked Ember', summary: '', priority: 1, when: { kind: 'count', atLeast: 2, of: CLUE_FLAGS } },
+    { id: 'end.still', title: 'The Still Flame', summary: '', priority: 0, when: { kind: 'always' } },
+  ],
+  world: {
+    seed: 1, playerStart: { x: 0, z: 0 }, regions: [], props: [], npcs: [], encounterZones: [], fishingSpots: [], paths: [], water: [],
+    chunks: [{ cx: 0, cz: 0, name: 'Frontier', biome: 'frontier', act: 1, scatterProps: ['lantern'], foliageDensity: 0.5 }],
+    traversalGates: [
+      { id: 'gate.boulder', kind: 'boulder', label: 'Fallen boulder', position: { x: 10, z: 10 }, width: 4, depth: 2, sides: [{ x: 10, z: 8 }, { x: 10, z: 12 }], clearsPermanently: true },
+    ],
+  },
+  township: {
+    name: 'Test', regionId: 'region.test', plots: [{ id: 'plot.a', name: 'Plot A', position: { x: 0, z: 0 }, accepts: ['bld.forge'] }],
+    buildings: [{
+      id: 'bld.forge', name: 'Forge', description: '', prop: 'house', requiresRecruit: 'npc.smith', cost: { coin: 10, items: [] }, unlocksFlag: 'township.forge', perk: '',
+      upgrades: [{ level: 2, name: 'Forge II', description: '', cost: { coin: 20, items: [] }, unlocksFlag: 'township.forge.2', perk: '', propScale: 1.2 }],
+    }],
+    recruits: [{ npcId: 'npc.smith', trade: 'smith', requires: { kind: 'always' }, requirementText: '', townshipPosition: { x: 1, z: 1 }, unlocksBuildings: ['bld.forge'] }],
+  },
   species: {},
   fish: {},
   start: { party: ['kael'], leader: 'kael', level: 1, coin: 0, inventory: {}, gearOwned: [], loadouts: {}, spirits: ['ashka', 'mirelle'], flags: {} },

@@ -11,10 +11,11 @@
  * Flee: party only, needs `canFlee`. Chance = clamp(0.5 + 0.5 × (pSpd − eSpd) / max(pSpd, eSpd), 0.1, 0.95)
  * with average effective spd of the living on each side; a failed flee uses the turn.
  */
-import type { Combatant, CombatAction, CombatantId, CombatState, DragonFormId, SkillDef } from '@/types/contracts';
+import type { Combatant, CombatAction, CombatState, DragonFormId } from '@/types/contracts';
 import { clamp } from '../stats';
-import { aliveOnSide, emit, gainSync, patchC, roll, SYNC_ON_ACT, type CombatCtx } from './context';
-import { applyStatus, basicAttack, changeAp, heal, performHit, revertForm, runHooks } from './damage';
+import { isTruthyFlag } from '../quests';
+import { aliveOnSide, combatFlags, emit, gainSync, patchC, roll, SYNC_ON_ACT, type CombatCtx } from './context';
+import { basicAttack, changeAp, heal, resolveSkill, revertForm, runHooks, skillTargets } from './damage';
 import { clampVitals, skillsFor, statsFor } from './effective';
 import { advance, checkEnd, isOver } from './turns';
 
@@ -23,47 +24,33 @@ export type Validation = { readonly ok: true } | { readonly ok: false; readonly 
 const OK: Validation = { ok: true };
 const fail = (reason: string): Validation => ({ ok: false, reason });
 
-function opposite(side: Combatant['side']): Combatant['side'] {
-  return side === 'party' ? 'enemy' : 'party';
-}
-
-export function formAvailability(ctx: CombatCtx, c: Combatant): readonly { readonly formId: DragonFormId; readonly usable: boolean; readonly reason?: string }[] {
+/**
+ * Form availability for the actor, in hero order with `apex` forms last.
+ * Reasons are checked in order: unknown form, level, story flag (`requiresFlag`
+ * must be truthy in the flags passed via `EncounterSetup.flags`), KO, already
+ * transformed, Sync, AP.
+ */
+export function formAvailability(ctx: CombatCtx, state: CombatState, c: Combatant): readonly { readonly formId: DragonFormId; readonly usable: boolean; readonly reason?: string }[] {
   if (c.heroId === undefined) return [];
   const hero = ctx.db.heroes[c.heroId];
-  return hero.dragonForms.map(({ formId, level }) => {
+  if (hero === undefined) return [];
+  const flags = combatFlags(state);
+  const isApex = (id: DragonFormId): number => (ctx.db.dragonForms[id]?.apex === true ? 1 : 0);
+  const entries = hero.dragonForms
+    .map((e, i) => ({ ...e, i }))
+    .sort((a, b) => isApex(a.formId) - isApex(b.formId) || a.i - b.i);
+  return entries.map(({ formId, level }) => {
     const form = ctx.db.dragonForms[formId];
     let reason: string | undefined;
     if (!form) reason = 'Unknown form.';
     else if (c.level < level) reason = `Unlocks at Lv ${level}.`;
+    else if (form.requiresFlag !== undefined && !isTruthyFlag(flags[form.requiresFlag])) reason = `${form.name} is still sealed (needs story flag "${form.requiresFlag}").`;
     else if (!c.alive) reason = 'Knocked out.';
     else if (c.dragon !== null) reason = c.dragon.formId === formId ? 'Already transformed.' : 'Already in another form.';
     else if (c.sync < form.syncRequired) reason = `Needs ${form.syncRequired} Sync (have ${c.sync}).`;
     else if (c.ap < form.apCostToEnter) reason = `Needs ${form.apCostToEnter} AP (have ${c.ap}).`;
     return reason === undefined ? { formId, usable: true } : { formId, usable: false, reason };
   });
-}
-
-/** Resolve a skill's targets (alive, relative to the actor's side). */
-export function skillTargets(state: CombatState, actor: Combatant, skill: SkillDef, targetId: CombatantId | undefined): readonly CombatantId[] | string {
-  const foes = opposite(actor.side);
-  switch (skill.target) {
-    case 'self':
-      return [actor.id];
-    case 'allEnemies':
-      return aliveOnSide(state, foes).map((c) => c.id);
-    case 'allAllies':
-      return aliveOnSide(state, actor.side).map((c) => c.id);
-    case 'enemy':
-    case 'ally': {
-      if (targetId === undefined) return 'A target is required.';
-      const t = state.combatants[targetId];
-      if (!t) return `Unknown target ${targetId}.`;
-      if (!t.alive) return `${t.name} is down.`;
-      const wanted = skill.target === 'enemy' ? foes : actor.side;
-      if (t.side !== wanted) return `${skill.name} must target ${skill.target === 'enemy' ? 'a foe' : 'an ally'}.`;
-      return [targetId];
-    }
-  }
 }
 
 export function validate(ctx: CombatCtx, state: CombatState, action: CombatAction): Validation {
@@ -105,7 +92,7 @@ export function validate(ctx: CombatCtx, state: CombatState, action: CombatActio
       return OK;
     }
     case 'transform': {
-      const entry = formAvailability(ctx, actor).find((f) => f.formId === action.formId);
+      const entry = formAvailability(ctx, state, actor).find((f) => f.formId === action.formId);
       if (!entry) return fail(`${actor.name} has no form ${action.formId}.`);
       return entry.usable ? OK : fail(entry.reason ?? 'Form unavailable.');
     }
@@ -130,43 +117,11 @@ export function fleeChance(ctx: CombatCtx, state: CombatState): number {
   return clamp(0.5 + (0.5 * (p - e)) / m, 0.1, 0.95);
 }
 
-function resolveSkill(ctx: CombatCtx, state: CombatState, actor: Combatant, skill: SkillDef, targetId: CombatantId | undefined): CombatState {
-  const targets = skillTargets(state, actor, skill, targetId);
-  if (typeof targets === 'string') return state;
-  let s = skill.apCost > 0 ? changeAp(ctx, state, actor.id, -skill.apCost) : state;
-  let landed = false;
-  const single = skill.target === 'enemy' || skill.target === 'ally' || skill.target === 'self';
-  for (const tid of targets) {
-    const t = s.combatants[tid];
-    if (!t || !t.alive) continue;
-    if (skill.kind === 'physical' || skill.kind === 'magical') {
-      s = performHit(ctx, s, actor.id, tid, { kind: skill.kind, power: skill.power, element: skill.element, singleTarget: single, isCounter: false, skillId: skill.id });
-      landed = true;
-    } else {
-      s = emit(s, { type: 'attack', actorId: actor.id, targetId: tid, skillId: skill.id, element: skill.element });
-      if (skill.kind === 'heal') {
-        const a = s.combatants[actor.id];
-        if (a) s = heal(ctx, s, tid, statsFor(ctx, a).mag * skill.power);
-      }
-      landed = true;
-    }
-    const inf = skill.inflicts;
-    if (inf && s.combatants[tid]?.alive) {
-      const r = roll(s);
-      s = r.state;
-      if (r.value < inf.chance) s = applyStatus(s, tid, { id: inf.status, turns: inf.turns, potency: inf.potency });
-    }
-    if (isOver(s) || !s.combatants[actor.id]?.alive) break;
-  }
-  if (landed && skill.syncGain !== undefined) s = gainSync(ctx, s, actor.id, skill.syncGain);
-  return s;
-}
-
 /** Apply an already-validated action. Does not advance the turn. */
 function resolve(ctx: CombatCtx, state: CombatState, actor: Combatant, action: CombatAction): CombatState {
   switch (action.type) {
     case 'attack':
-      return gainSync(ctx, basicAttack(ctx, state, actor.id, action.targetId, { power: 1, isCounter: false }), actor.id, SYNC_ON_ACT);
+      return gainSync(ctx, basicAttack(ctx, state, actor.id, action.targetId, { power: 1, fromHook: false }), actor.id, SYNC_ON_ACT);
     case 'skill': {
       const skill = ctx.db.skills[action.skillId];
       if (!skill) return state;

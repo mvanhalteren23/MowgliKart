@@ -14,8 +14,8 @@ import { parseHexColor } from './spriteMath';
 export const PATTERN_SLOTS = ['plaster', 'timber', 'roof', 'stone', 'wood', 'thatch', 'cloth', 'plain'] as const;
 export type PatternSlot = (typeof PATTERN_SLOTS)[number];
 
-/** Extra prop kinds the engine places itself. */
-export type PropKind = PropDef['kind'] | 'barge' | 'plot';
+/** Extra prop kinds the engine places itself (`sails` = the turning windmill rotor, instanced separately). */
+export type PropKind = PropDef['kind'] | 'barge' | 'plot' | 'sails';
 
 export interface PropInstance {
   readonly kind: PropKind;
@@ -26,14 +26,15 @@ export interface PropInstance {
   readonly tint?: string;
 }
 
-/** Oriented rectangle the player may stand on even over deep water (docks). */
+/** Oriented rectangle the player may stand on even over deep water (docks, bridges). */
 export interface WalkArea {
   readonly x: number;
   readonly z: number;
   readonly hx: number;
   readonly hz: number;
   readonly rot: number;
-  readonly deck: number;
+  /** Absolute world height of the deck surface. */
+  readonly y: number;
 }
 
 type Rgb = readonly [number, number, number];
@@ -90,6 +91,11 @@ export class PropGeometryBuilder {
     this.colors.push(color[0], color[1], color[2]);
     this.tiles.push(slot);
     this.emissive.push(glow);
+  }
+
+  /** Untextured quad from 4 world-local corners (used by the rotor blades). */
+  flatQuad(p: readonly (readonly [number, number, number])[], n: readonly [number, number, number], color: Rgb, slot: number): void {
+    this.quad(p, n, [[0, 0], [1, 0], [1, 1], [0, 1]], color, slot, 0);
   }
 
   /** Quad from 4 corners (counter-clockwise seen from the normal side). */
@@ -203,6 +209,55 @@ export class PropGeometryBuilder {
     });
   }
 
+  /**
+   * Faceted low-poly rock / gem: a jittered 6-sided ring between a top apex and
+   * a buried bottom apex (flat-shaded). `seed` varies the silhouette deterministically.
+   */
+  rock(x: number, y0: number, z: number, rx: number, ry: number, rz: number, slot: PatternSlot, color: Rgb, opts: { glow?: number; seed?: number; tilt?: number } = {}): void {
+    const si = PATTERN_SLOTS.indexOf(slot);
+    const g = opts.glow ?? 0;
+    let sd = (opts.seed ?? 1) * 9301 + 49297;
+    const rnd = (): number => {
+      sd = (sd * 9301 + 49297) % 233280;
+      return sd / 233280;
+    };
+    this.withTransform({ tx: x, ty: y0, tz: z, rot: rnd() * Math.PI }, () => {
+      const n = 6;
+      const ring: [number, number, number][] = [];
+      const mid = ry * (0.35 + rnd() * 0.15);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const k = 0.8 + rnd() * 0.35;
+        ring.push([Math.sin(a) * rx * k, mid + (rnd() - 0.5) * ry * 0.2, Math.cos(a) * rz * k]);
+      }
+      const lean = opts.tilt ?? 0;
+      const top: [number, number, number] = [lean * rx, ry, (rnd() - 0.5) * rz * 0.3];
+      const bottom: [number, number, number] = [0, -ry * 0.25, 0];
+      const face = (a: readonly [number, number, number], b: readonly [number, number, number], c: readonly [number, number, number]): void => {
+        const ux = b[0] - a[0];
+        const uy = b[1] - a[1];
+        const uz = b[2] - a[2];
+        const vx = c[0] - a[0];
+        const vy = c[1] - a[1];
+        const vz = c[2] - a[2];
+        let nx = uy * vz - uz * vy;
+        let ny = uz * vx - ux * vz;
+        let nz = ux * vy - uy * vx;
+        const l = Math.hypot(nx, ny, nz) || 1;
+        nx /= l;
+        ny /= l;
+        nz /= l;
+        this.tri([a, b, c], [nx, ny, nz], [[0, 0], [rx, 0], [rx * 0.5, ry]], color, si, g);
+      };
+      for (let i = 0; i < n; i++) {
+        const a = ring[i] ?? [0, 0, 0];
+        const b = ring[(i + 1) % n] ?? [0, 0, 0];
+        face(a, b, top);
+        face(b, a, bottom);
+      }
+    });
+  }
+
   /** Collider in the current transform's space (centre + local rotation). */
   collideBox(x: number, z: number, hx: number, hz: number, rot = 0): void {
     const p = this.toWorld(x, z);
@@ -214,9 +269,10 @@ export class PropGeometryBuilder {
     this.colliders.push({ kind: 'circle', x: p.x, z: p.z, r: r * this.xf.s });
   }
 
+  /** Standable deck `deck` metres above the current transform's origin. */
   walkArea(x: number, z: number, hx: number, hz: number, deck: number): void {
     const p = this.toWorld(x, z);
-    this.walkAreas.push({ x: p.x, z: p.z, hx: hx * this.xf.s, hz: hz * this.xf.s, rot: this.xf.rot, deck });
+    this.walkAreas.push({ x: p.x, z: p.z, hx: hx * this.xf.s, hz: hz * this.xf.s, rot: this.xf.rot, y: this.xf.ty + deck * this.xf.s });
   }
 
   private toWorld(x: number, z: number): { x: number; z: number } {
@@ -244,6 +300,18 @@ const C = {
   moss: [0.62, 0.74, 0.55] as Rgb,
   water: [0.2, 0.35, 0.5] as Rgb,
   rope: [0.85, 0.75, 0.55] as Rgb,
+  canvas: [0.93, 0.88, 0.74] as Rgb,
+  cactus: [0.42, 0.62, 0.36] as Rgb,
+  ice: [0.78, 0.9, 1] as Rgb,
+  leaf: [0.36, 0.56, 0.32] as Rgb,
+  basalt: [0.3, 0.28, 0.31] as Rgb,
+  lava: [1, 0.45, 0.18] as Rgb,
+  crystal: [0.72, 0.56, 1] as Rgb,
+  gold: [0.96, 0.8, 0.42] as Rgb,
+  pit: [0.07, 0.07, 0.12] as Rgb,
+  river: [0.32, 0.6, 0.78] as Rgb,
+  ward: [0.62, 0.9, 1] as Rgb,
+  cliff: [0.62, 0.58, 0.56] as Rgb,
 };
 
 const tintOr = (tint: string | undefined, fallback: Rgb): Rgb => (tint ? parseHexColor(tint) : fallback);
@@ -408,6 +476,207 @@ function plot(b: PropGeometryBuilder): void {
   b.box(3, 0.7, 0, 0.05, 0.05, 6, 'plain', C.rope);
 }
 
+
+function tent(b: PropGeometryBuilder, tint?: string): void {
+  const cloth = tintOr(tint, C.canvas);
+  b.withTransform({ rot: Math.PI / 4 }, () => b.pyramid(0, 0, 0, 3.4, 2.6, 'cloth', cloth));
+  b.cylinder(0, 0, 0, 0.06, 3, 4, 'wood', C.darkWood);
+  b.box(0, 0.6, 1.25, 0.8, 1.2, 0.05, 'plain', C.window);
+  b.collideCircle(0, 0, 1.5);
+}
+
+function windmill(b: PropGeometryBuilder, tint?: string): void {
+  const wall = tintOr(tint, C.white);
+  b.cylinder(0, -0.4, 0, 2.2, 1.2, 8, 'stone', C.darkStone);
+  b.cylinder(0, 0.6, 0, 1.9, 6.6, 8, 'plaster', wall);
+  b.withTransform({ rot: Math.PI / 8 }, () => b.pyramid(0, 7.2, 0, 4.6, 2.4, 'thatch', C.white));
+  b.box(0, 1.1, 1.85, 1, 1.9, 0.12, 'wood', C.darkWood);
+  b.box(0, 4.6, 1.88, 0.7, 0.7, 0.08, 'plain', C.window);
+  b.box(0, 6.2, 2.05, 0.5, 0.5, 0.6, 'wood', C.darkWood);
+  b.collideCircle(0, 0, 2.2);
+}
+
+/** Windmill hub offset in the windmill's local frame (the rotor turns about local z). */
+export const SAILS_HUB = { x: 0, y: 6.2, z: 2.4 } as const;
+
+function sails(b: PropGeometryBuilder): void {
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    // Blades lie in the local xy plane: build along +y then rotate about z by hand.
+    const blade = (along: number, across: number, len: number, wid: number, color: Rgb, slot: PatternSlot): void => {
+      const cx = -sn * along + c * across;
+      const cy = c * along + sn * across;
+      const hx = wid / 2;
+      const hy = len / 2;
+      const corners: [number, number][] = [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
+      const pts = corners.map(([px, py]) => [cx + c * px - sn * py, cy + sn * px + c * py, 0] as [number, number, number]);
+      const si = PATTERN_SLOTS.indexOf(slot);
+      b.flatQuad(pts, [0, 0, 1], color, si);
+      b.flatQuad([...pts].reverse(), [0, 0, -1], color, si);
+    };
+    blade(2.4, 0, 4.6, 0.16, C.darkWood, 'wood');
+    blade(2.7, 0.45, 3.8, 0.8, C.canvas, 'cloth');
+  }
+}
+
+function tower(b: PropGeometryBuilder, tint?: string): void {
+  const stone = tintOr(tint, C.stone);
+  b.cylinder(0, -0.4, 0, 2.6, 1.4, 10, 'stone', C.darkStone);
+  b.cylinder(0, 0.8, 0, 2.3, 10.4, 10, 'stone', stone);
+  for (let i = 0; i < 10; i += 2) {
+    const a = (i / 10) * Math.PI * 2 + 0.3;
+    b.box(Math.sin(a) * 2.2, 11.6, Math.cos(a) * 2.2, 0.9, 0.9, 0.6, 'stone', stone, { rot: a });
+  }
+  b.withTransform({ rot: Math.PI / 4 }, () => b.pyramid(0, 11.2, 0, 3.6, 3.4, 'roof', C.slate));
+  b.box(0, 1.2, 2.3, 1.1, 2.2, 0.12, 'wood', C.darkWood);
+  b.box(0, 6.5, 2.31, 0.5, 1, 0.08, 'plain', C.lamp, { glow: 0.7 });
+  b.collideCircle(0, 0, 2.6);
+}
+
+function fortWall(b: PropGeometryBuilder, tint?: string): void {
+  const stone = tintOr(tint, C.stone);
+  b.box(0, 1.6, 0, 12, 4.4, 1.8, 'stone', stone);
+  for (let i = 0; i < 6; i++) b.box(-5 + i * 2, 4.2, 0, 1.1, 0.9, 1.9, 'stone', stone);
+  b.box(-6.4, 2.4, 0, 1.6, 6, 2.4, 'stone', C.darkStone);
+  b.box(6.4, 2.4, 0, 1.6, 6, 2.4, 'stone', C.darkStone);
+  b.collideBox(0, 0, 7.2, 1.2);
+}
+
+function gateArch(b: PropGeometryBuilder, tint?: string): void {
+  const stone = tintOr(tint, C.stone);
+  b.box(-2.6, 2.4, 0, 1.4, 5.6, 1.4, 'stone', stone);
+  b.box(2.6, 2.4, 0, 1.4, 5.6, 1.4, 'stone', stone);
+  b.box(0, 5.6, 0, 7, 1.2, 1.6, 'stone', stone);
+  b.pyramid(0, 6.2, 0, 1.4, 1.1, 'stone', C.darkStone);
+  b.box(0, 5.6, 0.82, 1, 0.6, 0.05, 'plain', C.lamp, { glow: 0.8 });
+  b.collideBox(-2.6, 0, 0.75, 0.75);
+  b.collideBox(2.6, 0, 0.75, 0.75);
+}
+
+function bridge(b: PropGeometryBuilder): void {
+  b.box(0, 0.4, 0, 3.6, 0.35, 14, 'wood', C.wood);
+  for (const x of [-1.75, 1.75]) {
+    b.box(x, 1.05, 0, 0.12, 0.1, 14, 'wood', C.darkWood);
+    for (let z = -6.5; z <= 6.6; z += 2.6) b.box(x, 0.8, z, 0.14, 0.9, 0.14, 'wood', C.darkWood);
+  }
+  for (const z of [-4.5, 0, 4.5]) {
+    b.cylinder(-1.5, -3, z, 0.2, 3.3, 6, 'stone', C.darkStone);
+    b.cylinder(1.5, -3, z, 0.2, 3.3, 6, 'stone', C.darkStone);
+  }
+  b.walkArea(0, 0, 1.7, 7.2, 0.58);
+}
+
+function cactus(b: PropGeometryBuilder, tint?: string): void {
+  const green = tintOr(tint, C.cactus);
+  b.cylinder(0, 0, 0, 0.36, 3.2, 7, 'plain', green);
+  b.cylinder(0, 3.2, 0, 0.26, 0.25, 7, 'plain', green);
+  b.box(0.65, 1.5, 0, 0.9, 0.34, 0.34, 'plain', green);
+  b.cylinder(1, 1.5, 0, 0.22, 1.4, 6, 'plain', green);
+  b.box(-0.55, 2.1, 0, 0.7, 0.3, 0.3, 'plain', green);
+  b.cylinder(-0.85, 2.1, 0, 0.2, 0.9, 6, 'plain', green);
+  b.box(0, 3.45, 0, 0.2, 0.2, 0.2, 'plain', [0.98, 0.55, 0.6], { glow: 0.3 });
+  b.collideCircle(0, 0, 0.5);
+}
+
+function iceSpire(b: PropGeometryBuilder, tint?: string): void {
+  const ice = tintOr(tint, C.ice);
+  b.rock(0, 0, 0, 0.9, 6, 0.9, 'plain', ice, { glow: 0.22, seed: 3 });
+  b.rock(1.1, 0, 0.4, 0.55, 3.2, 0.55, 'plain', ice, { glow: 0.18, seed: 7, tilt: 0.35 });
+  b.rock(-0.9, 0, -0.5, 0.5, 2.4, 0.5, 'plain', ice, { glow: 0.18, seed: 11, tilt: -0.3 });
+  b.collideCircle(0, 0, 1.1);
+}
+
+function mangrove(b: PropGeometryBuilder, tint?: string): void {
+  const leaf = tintOr(tint, C.leaf);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    b.box(Math.cos(a) * 0.7, 0.55, Math.sin(a) * 0.7, 0.14, 1.4, 0.14, 'wood', C.darkWood, { rot: a });
+  }
+  b.cylinder(0, 0.9, 0, 0.28, 3.2, 6, 'wood', C.darkWood);
+  b.rock(0, 3.6, 0, 2.4, 1.6, 2.2, 'plain', leaf, { seed: 5 });
+  b.rock(1.2, 3.2, 0.6, 1.4, 1.2, 1.3, 'plain', [leaf[0] * 0.85, leaf[1] * 0.9, leaf[2] * 0.85], { seed: 9 });
+  b.collideCircle(0, 0, 0.8);
+}
+
+function basalt(b: PropGeometryBuilder, tint?: string): void {
+  const rock = tintOr(tint, C.basalt);
+  const cols: readonly (readonly [number, number, number])[] = [[0, 0, 3.6], [0.95, 0.2, 2.6], [-0.85, 0.5, 2.2], [0.3, -0.95, 1.8], [-0.4, -0.7, 3], [1.1, -0.8, 1.3]];
+  cols.forEach(([x, z, h], i) => b.cylinder(x, -0.2, z, 0.52, h, 6, 'stone', i % 2 ? rock : [rock[0] * 1.15, rock[1] * 1.12, rock[2] * 1.15]));
+  b.box(0.2, 0.05, 0.9, 0.6, 0.06, 0.4, 'plain', C.lava, { glow: 1 });
+  b.collideCircle(0, 0, 1.5);
+}
+
+function crystal(b: PropGeometryBuilder, tint?: string): void {
+  const gem = tintOr(tint, C.crystal);
+  b.rock(0, 0, 0, 0.6, 3.2, 0.6, 'plain', gem, { glow: 0.55, seed: 2, tilt: 0.1 });
+  b.rock(0.7, 0, 0.3, 0.4, 2, 0.4, 'plain', gem, { glow: 0.5, seed: 4, tilt: 0.45 });
+  b.rock(-0.6, 0, 0.4, 0.35, 1.6, 0.35, 'plain', gem, { glow: 0.5, seed: 6, tilt: -0.5 });
+  b.rock(0.1, 0, -0.7, 0.3, 1.3, 0.3, 'plain', gem, { glow: 0.5, seed: 8, tilt: -0.2 });
+  b.rock(0, 0, 0, 1.2, 0.35, 1.1, 'stone', C.darkStone, { seed: 10 });
+  b.collideCircle(0, 0, 1.0);
+}
+
+function obelisk(b: PropGeometryBuilder, tint?: string): void {
+  const stone = tintOr(tint, C.darkStone);
+  b.box(0, 0.2, 0, 2, 0.6, 2, 'stone', C.stone);
+  b.box(0, 3.3, 0, 1, 5.8, 1, 'stone', stone);
+  b.pyramid(0, 6.2, 0, 1, 0.9, 'stone', stone);
+  b.box(0, 3.6, 0.51, 0.22, 3.6, 0.04, 'plain', C.stillFlame, { glow: 1 });
+  b.box(0.51, 3.6, 0, 0.04, 3.6, 0.22, 'plain', C.stillFlame, { glow: 1 });
+  b.collideCircle(0, 0, 1.0);
+}
+
+function cathedral(b: PropGeometryBuilder, tint?: string): void {
+  const wall = tintOr(tint, [0.92, 0.9, 0.86]);
+  b.box(0, -0.4, 0, 13, 1.6, 26, 'stone', C.darkStone);
+  b.box(0, 4, 0, 12, 8, 22, 'plaster', wall);
+  b.gable(0, 8, 0, 13, 23, 5, 'roof', C.slate, wall, 'plaster');
+  for (const x of [-4.6, 4.6]) {
+    b.box(x, 7, 12.4, 3.4, 14, 3.4, 'plaster', wall);
+    b.pyramid(x, 14, 12.4, 3.8, 6, 'roof', C.slate);
+  }
+  b.box(0, 9.5, 11.05, 2.6, 2.6, 0.1, 'plain', C.stillFlame, { glow: 1 });
+  b.box(0, 2, 11.05, 2.4, 4, 0.12, 'wood', C.darkWood);
+  for (const z of [-8, -4, 0, 4]) {
+    b.box(6.03, 4.5, z, 0.08, 3.4, 1.2, 'plain', C.window);
+    b.box(-6.03, 4.5, z, 0.08, 3.4, 1.2, 'plain', C.window);
+  }
+  b.collideBox(0, 0.6, 6.6, 12.8);
+}
+
+function stiltHouse(b: PropGeometryBuilder, tint?: string): void {
+  const wall = tintOr(tint, C.wood);
+  for (const [x, z] of [[-1.8, -1.8], [1.8, -1.8], [1.8, 1.8], [-1.8, 1.8]] as const) b.cylinder(x, -1.5, z, 0.16, 3.9, 5, 'wood', C.darkWood);
+  b.box(0, 2.4, 0, 4.6, 0.25, 4.6, 'wood', C.wood);
+  b.box(0, 3.6, 0, 3.8, 2.2, 3.8, 'timber', wall);
+  b.gable(0, 4.7, 0, 4.6, 4.6, 1.8, 'thatch', C.white, wall, 'timber');
+  b.box(0, 3.3, 1.92, 0.9, 1.5, 0.08, 'wood', C.darkWood);
+  b.box(0, 1.2, 2.7, 0.7, 2.6, 0.1, 'wood', C.darkWood, { rot: 0 });
+  b.collideBox(0, 0, 2.1, 2.1);
+}
+
+function skyPlatform(b: PropGeometryBuilder, tint?: string): void {
+  const rock = tintOr(tint, C.cliff);
+  b.cylinder(0, 0, 0, 0.5, 6, 6, 'stone', C.stone);
+  b.pyramid(0, 6.6, 0, 6, 3.4, 'stone', rock, 0, true);
+  b.box(0, 6.8, 0, 6, 0.4, 6, 'stone', [0.7, 0.85, 0.62]);
+  b.box(0, 7.5, 0, 0.7, 1, 0.7, 'stone', C.stone);
+  b.pyramid(0, 8, 0, 0.6, 0.7, 'plain', C.ward, 1);
+  b.collideCircle(0, 0, 0.8);
+}
+
+function statue(b: PropGeometryBuilder, tint?: string): void {
+  const stone = tintOr(tint, C.stone);
+  b.box(0, 0.4, 0, 2.2, 1, 2.2, 'stone', C.darkStone);
+  b.box(0, 1.7, 0, 1, 1.6, 0.7, 'stone', stone);
+  b.box(0, 2.9, 0, 1.3, 1, 0.8, 'stone', stone);
+  b.box(0, 3.7, 0, 0.55, 0.6, 0.55, 'stone', stone);
+  b.box(0.85, 3.1, 0.2, 0.25, 2.8, 0.25, 'stone', stone, { rot: 0.2 });
+  b.collideCircle(0, 0, 1.2);
+}
+
 const KIT: Readonly<Record<PropKind, (b: PropGeometryBuilder, tint?: string) => void>> = {
   house,
   chapel,
@@ -423,6 +692,23 @@ const KIT: Readonly<Record<PropKind, (b: PropGeometryBuilder, tint?: string) => 
   shrine,
   barge,
   plot,
+  tent,
+  windmill,
+  sails,
+  tower,
+  fortWall,
+  gateArch,
+  bridge,
+  cactus,
+  iceSpire,
+  mangrove,
+  basalt,
+  crystal,
+  obelisk,
+  cathedral,
+  stiltHouse,
+  skyPlatform,
+  statue,
 };
 
 /** Radius kept clear of foliage around each prop kind. */
@@ -441,13 +727,71 @@ export const PROP_CLEARANCE: Readonly<Record<PropKind, number>> = {
   shrine: 2,
   barge: 6,
   plot: 5,
+  tent: 2.5,
+  windmill: 4,
+  sails: 0,
+  tower: 4,
+  fortWall: 8,
+  gateArch: 5,
+  bridge: 8,
+  cactus: 1.2,
+  iceSpire: 2,
+  mangrove: 2.6,
+  basalt: 2.2,
+  crystal: 1.6,
+  obelisk: 1.8,
+  cathedral: 15,
+  stiltHouse: 3.5,
+  skyPlatform: 3.5,
+  statue: 2,
 };
 
 /** Base height at which a prop is placed. Docks/barges float at deck level. */
 export function propBaseHeight(world: WorldMapDef, p: PropInstance): number {
   if (p.kind === 'dock') return WATER_LEVEL + 0.45;
   if (p.kind === 'barge') return WATER_LEVEL;
+  if (p.kind === 'bridge') {
+    // Rest on the lower abutment, never below the waterline.
+    const ex = Math.sin(p.rotation) * 7 * p.scale;
+    const ez = Math.cos(p.rotation) * 7 * p.scale;
+    const a = sampleHeight(world, p.x + ex, p.z + ez);
+    const c = sampleHeight(world, p.x - ex, p.z - ez);
+    return Math.max(WATER_LEVEL + 0.25, Math.min(a, c) - 0.3);
+  }
+  if (p.kind === 'mangrove' || p.kind === 'stiltHouse') return Math.max(WATER_LEVEL - 0.3, sampleHeight(world, p.x, p.z));
   return sampleHeight(world, p.x, p.z);
+}
+
+/** Build one kind into a fresh builder at the origin (instancing templates). */
+export function buildKindTemplate(kind: PropKind, tint?: string): PropGeometryBuilder {
+  const b = new PropGeometryBuilder();
+  KIT[kind](b, tint);
+  return b;
+}
+
+/** Colliders of a prop instance without building its geometry. */
+export function propColliders(world: WorldMapDef, p: PropInstance): { colliders: readonly Collider[]; walkAreas: readonly WalkArea[] } {
+  const t = templateCollision(p.kind);
+  const y = propBaseHeight(world, p);
+  const b = new PropGeometryBuilder();
+  b.withTransform({ rot: p.rotation, s: p.scale, tx: p.x, ty: y, tz: p.z }, () => {
+    for (const c of t.colliders) {
+      if (c.kind === 'circle') b.collideCircle(c.x, c.z, c.r);
+      else b.collideBox(c.x, c.z, c.hx, c.hz, c.rot);
+    }
+    for (const w of t.walkAreas) b.walkArea(w.x, w.z, w.hx, w.hz, w.y);
+  });
+  return { colliders: b.colliders, walkAreas: b.walkAreas };
+}
+
+const templateCache = new Map<PropKind, PropGeometryBuilder>();
+function templateCollision(kind: PropKind): PropGeometryBuilder {
+  let t = templateCache.get(kind);
+  if (!t) {
+    t = buildKindTemplate(kind);
+    templateCache.set(kind, t);
+  }
+  return t;
 }
 
 export function propFromDef(p: PropDef): PropInstance {
@@ -474,7 +818,7 @@ export function walkAreaDeck(areas: readonly WalkArea[], x: number, z: number): 
     const s = Math.sin(-a.rot);
     const lx = dx * c + dz * s;
     const lz = -dx * s + dz * c;
-    if (Math.abs(lx) <= a.hx && Math.abs(lz) <= a.hz) return WATER_LEVEL + 0.45 + a.deck;
+    if (Math.abs(lx) <= a.hx && Math.abs(lz) <= a.hz) return a.y;
   }
   return null;
 }

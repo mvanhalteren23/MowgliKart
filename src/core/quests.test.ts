@@ -91,6 +91,7 @@ describe('quest state machine', () => {
       'q.ledger': { status: 'HIDDEN', objectives: { 'o.rats': false, 'o.herbs': false, 'o.report': false } },
       'q.chain': { status: 'HIDDEN', objectives: { 'o.free': false } },
       'q.after': { status: 'HIDDEN', objectives: { 'o.never': false } },
+      'q.inquiry': { status: 'HIDDEN', objectives: { 'o.two': false } },
     });
   });
 

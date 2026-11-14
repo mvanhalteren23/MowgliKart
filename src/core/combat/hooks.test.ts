@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CombatState, EncounterSetup, PartyMemberSetup } from '@/types/contracts';
-import { HOOK_COUNTER_ATTACK } from '@/types/contracts';
+import { HOOK_COUNTER_ATTACK, HOOK_IDS } from '@/types/contracts';
 import { fixtureDb } from '../__fixtures__/db';
 import { core, eventsSince, get, member, ofType, patch, runEnemies } from '../__fixtures__/helpers';
 import { BUILTIN_HOOKS, createHookRegistry, type CombatHookImpl } from '../hooks';
@@ -100,7 +100,7 @@ describe('hook registry extensibility', () => {
         kernel.emit(state, { type: 'hook', ownerId, hookId: 'hook.test.rally', sourceGear, note: 'rally' }),
     };
     const registry = createHookRegistry([...BUILTIN_HOOKS, rallying]);
-    expect(registry.list().map((h) => h.id)).toEqual([HOOK_COUNTER_ATTACK, 'hook.test.rally']);
+    expect(registry.list().map((h) => h.id)).toEqual([...Object.values(HOOK_IDS), 'hook.test.rally']);
     const db = {
       ...fixtureDb,
       gear: {

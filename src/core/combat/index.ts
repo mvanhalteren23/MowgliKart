@@ -21,7 +21,7 @@ export function createCombat(db: GameDatabase, registry: HookRegistry): CoreServ
     },
     availableForms: (state, id) => {
       const c = state.combatants[id];
-      return c ? formAvailability(ctx, c) : [];
+      return c ? formAvailability(ctx, state, c) : [];
     },
   };
 }

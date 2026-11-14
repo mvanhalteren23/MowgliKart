@@ -1,10 +1,11 @@
 import type { Combatant, CombatantId, CombatState, EncounterSetup, PartyMemberSetup } from '@/types/contracts';
+import { COMBAT_PARTY_SIZE } from '@/types/contracts';
 import { canFuse, buildChain } from '../fusion';
 import { equippedGear, statsWithLoadout } from '../gear';
 import { skillsAt } from '../progression';
 import { seed as toSeed } from '../rng';
 import { clamp } from '../stats';
-import type { CombatCtx } from './context';
+import type { CombatCtx, CoreCombatState } from './context';
 import { statsFor } from './effective';
 import { advance, computeOrder } from './turns';
 
@@ -17,6 +18,7 @@ export function enemyCombatantId(index: number, enemyId: string): CombatantId {
 
 function heroCombatant(ctx: CombatCtx, m: PartyMemberSetup, liberatedRegions: number): Combatant {
   const hero = ctx.db.heroes[m.heroId];
+  if (hero === undefined) throw new Error(`Unknown hero ${m.heroId}`);
   const level = Math.max(1, Math.floor(m.level));
   const baseStats = statsWithLoadout(ctx.db, hero, m.loadout, { level, liberatedRegions });
   const baseSkills = skillsAt(hero, level);
@@ -51,11 +53,28 @@ function heroCombatant(ctx: CombatCtx, m: PartyMemberSetup, liberatedRegions: nu
   return { ...draft, hp, ap: clamp(Math.floor(m.ap), 0, eff.maxAp), alive: hp > 0 };
 }
 
+/**
+ * The heroes actually fielded: party order, duplicates dropped (first wins),
+ * at most COMBAT_PARTY_SIZE. Any of the nine heroes may be fielded; heroes with
+ * no dragon forms simply never gain Sync, heroes with no fusion affinity fight unfused.
+ */
+export function fieldedParty(party: readonly PartyMemberSetup[]): readonly PartyMemberSetup[] {
+  const seen = new Set<string>();
+  const out: PartyMemberSetup[] = [];
+  for (const m of party) {
+    if (seen.has(m.heroId) || out.length >= COMBAT_PARTY_SIZE) continue;
+    seen.add(m.heroId);
+    out.push(m);
+  }
+  return out;
+}
+
+/** Combat start. `setup.flags` is captured on the state (see `CoreCombatState`). */
 export function startCombat(ctx: CombatCtx, setup: EncounterSetup, seed: number): CombatState {
   const enc = ctx.db.encounters[setup.encounterId];
   if (!enc) throw new Error(`Unknown encounter ${setup.encounterId}`);
   const combatants: Record<CombatantId, Combatant> = {};
-  for (const m of setup.party) {
+  for (const m of fieldedParty(setup.party)) {
     const c = heroCombatant(ctx, m, setup.liberatedRegions);
     combatants[c.id] = c;
   }
@@ -84,7 +103,7 @@ export function startCombat(ctx: CombatCtx, setup: EncounterSetup, seed: number)
       hooks: [],
     };
   });
-  const initial: CombatState = {
+  const initial: CoreCombatState = {
     encounterId: enc.id,
     phase: 'awaitingInput',
     round: 1,
@@ -97,6 +116,7 @@ export function startCombat(ctx: CombatCtx, setup: EncounterSetup, seed: number)
     canFlee: enc.canFlee,
     liberatedRegions: setup.liberatedRegions,
     rewards: null,
+    flags: setup.flags ?? {},
   };
   return advance(ctx, { ...initial, order: computeOrder(ctx, initial) });
 }

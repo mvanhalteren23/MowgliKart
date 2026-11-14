@@ -15,6 +15,13 @@
  *
  * Flag conditions: `equals` compares strictly (a missing flag equals `false`);
  * `atLeast` compares numbers (true → 1, missing/false → 0); neither → truthy.
+ * `count` holds when at least `atLeast` of its sub-conditions hold (so
+ * `atLeast ≤ 0` is always true); it nests like `all`/`any` and is honoured
+ * everywhere a condition appears (discover / activate / reveal / complete).
+ *
+ * Rewards are collected verbatim in completion order — including `hero`
+ * (recruitment), `spirit`, `gear`, … which the store applies. Only `flag`
+ * rewards are applied by core, immediately, so they can cascade.
  */
 import type {
   Condition,
@@ -49,6 +56,11 @@ function asNumber(v: FlagValue | undefined): number {
   return 0;
 }
 
+/** A flag is truthy unless it is missing, `false`, `0` or `''`. */
+export function isTruthyFlag(v: FlagValue | undefined): boolean {
+  return v !== undefined && v !== false && v !== 0 && v !== '';
+}
+
 export function evaluate(condition: Condition, flags: WorldFlags, log: QuestLog): boolean {
   switch (condition.kind) {
     case 'always':
@@ -61,7 +73,7 @@ export function evaluate(condition: Condition, flags: WorldFlags, log: QuestLog)
       }
       if (condition.atLeast !== undefined) return asNumber(v) >= condition.atLeast;
       if (condition.equals !== undefined) return true;
-      return v !== undefined && v !== false && v !== 0 && v !== '';
+      return isTruthyFlag(v);
     }
     case 'quest':
       return (log[condition.questId]?.status ?? 'HIDDEN') === condition.status;
@@ -73,6 +85,11 @@ export function evaluate(condition: Condition, flags: WorldFlags, log: QuestLog)
       return condition.of.some((c) => evaluate(c, flags, log));
     case 'not':
       return !evaluate(condition.of, flags, log);
+    case 'count': {
+      let n = 0;
+      for (const c of condition.of) if (evaluate(c, flags, log)) n += 1;
+      return n >= condition.atLeast;
+    }
   }
 }
 

@@ -3,19 +3,23 @@
  *
  * Turn start for the actor (in this order):
  *   1. `turnStart` event; guard from its previous turn ends.
- *   2. Broken fusion: `brokenTurns` −1; on reaching 0 → `armorRestore`, armor refilled.
+ *   2. Broken fusion: `brokenTurns` counts the suppressed turns the host still has to
+ *      act through. If it is > 0, it drops by 1 and the host acts suppressed this turn;
+ *      once it is 0 at a turn start → `armorRestore`, armor refilled, and the host
+ *      acts fused. So a break always costs exactly FUSION_BREAK_TURNS suppressed host turns.
  *   3. Dragon form: if `turnsInForm ≥ maxTurns` → revert('maxTurns'); else if AP
  *      can't pay `apDrainPerTurn` → revert('apDepleted'); else pay and turnsInForm +1.
  *      A reverted actor still acts this turn in base form.
  *   4. Statuses: burn (p × maxHp, ignores armor/affinity), regen (p × maxHp);
  *      every status' `turns` −1, expiring ones emit `status{applied:false}`.
  *      A stun present at turn start skips the turn.
- *   5. `onTurnStart` hooks.
+ *   5. `onTurnStart` hooks (every living owner, transformed or not, stunned or not).
  */
 import type { Combatant, CombatantId, CombatRewards, CombatState, ItemId } from '@/types/contracts';
-import { aliveOnSide, allCombatants, emit, patchC, roll, type CombatCtx } from './context';
+import { aliveOnSide, allCombatants, emit, isOver, patchC, roll, type CombatCtx } from './context';
 import { changeAp, heal, knockOut, revertForm, runHooks } from './damage';
 import { statsFor } from './effective';
+import { pilferedCoin } from '../hooks';
 
 export function computeOrder(ctx: CombatCtx, state: CombatState): readonly CombatantId[] {
   return allCombatants(state)
@@ -25,9 +29,7 @@ export function computeOrder(ctx: CombatCtx, state: CombatState): readonly Comba
     .map((x) => x.id);
 }
 
-export function isOver(state: CombatState): boolean {
-  return state.phase === 'victory' || state.phase === 'defeat' || state.phase === 'fled';
-}
+export { isOver };
 
 function computeRewards(ctx: CombatCtx, state: CombatState): { readonly rewards: CombatRewards; readonly state: CombatState } {
   let s = state;
@@ -47,6 +49,7 @@ function computeRewards(ctx: CombatCtx, state: CombatState): { readonly rewards:
     }
   }
   const enc = ctx.db.encounters[state.encounterId];
+  coin += pilferedCoin(state);
   const rewards: CombatRewards = {
     xp,
     coin,
@@ -72,8 +75,7 @@ export function checkEnd(ctx: CombatCtx, state: CombatState): CombatState {
 function tickFusion(state: CombatState, c: Combatant): CombatState {
   const f = c.fusion;
   if (f === null || !f.broken) return state;
-  const left = f.brokenTurns - 1;
-  if (left > 0) return patchC(state, c.id, (x) => ({ ...x, fusion: { ...f, brokenTurns: left } }));
+  if (f.brokenTurns > 0) return patchC(state, c.id, (x) => ({ ...x, fusion: { ...f, brokenTurns: f.brokenTurns - 1 } }));
   const s = patchC(state, c.id, (x) => ({ ...x, fusion: { ...f, broken: false, brokenTurns: 0, armor: f.armorMax } }));
   return emit(s, { type: 'armorRestore', targetId: c.id });
 }

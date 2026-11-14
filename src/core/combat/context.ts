@@ -1,4 +1,4 @@
-import type { Combatant, CombatantId, CombatEvent, CombatState, GameDatabase } from '@/types/contracts';
+import type { Combatant, CombatantId, CombatEvent, CombatState, GameDatabase, WorldFlags } from '@/types/contracts';
 import type { HookRegistry } from '../hooks';
 import { next } from '../rng';
 
@@ -40,7 +40,7 @@ export function aliveOnSide(state: CombatState, side: Combatant['side']): readon
 
 /** Drake-blooded heroes (any dragon forms) gain/track Sync. */
 export function isDrakeBlooded(ctx: CombatCtx, c: Combatant): boolean {
-  return c.heroId !== undefined && ctx.db.heroes[c.heroId].dragonForms.length > 0;
+  return c.heroId !== undefined && (ctx.db.heroes[c.heroId]?.dragonForms.length ?? 0) > 0;
 }
 
 export const SYNC_ON_ACT = 12;
@@ -51,4 +51,23 @@ export function gainSync(ctx: CombatCtx, state: CombatState, id: CombatantId, am
   const c = state.combatants[id];
   if (!c || !c.alive || amount <= 0 || !isDrakeBlooded(ctx, c)) return state;
   return patchC(state, id, (x) => ({ ...x, sync: Math.min(SYNC_MAX, x.sync + amount) }));
+}
+
+export function isOver(state: CombatState): boolean {
+  return state.phase === 'victory' || state.phase === 'defeat' || state.phase === 'fled';
+}
+
+/**
+ * World flags captured from `EncounterSetup.flags` at combat start. The contract's
+ * `CombatState` has no slot for them, so core keeps them in an extra `flags`
+ * property on the state object (structurally still a `CombatState`; object
+ * spreads in every reducer carry it along). Absent ⇒ no flags.
+ */
+export type CoreCombatState = CombatState & { readonly flags?: WorldFlags };
+
+const NO_FLAGS: WorldFlags = {};
+
+export function combatFlags(state: CombatState): WorldFlags {
+  const f = (state as CoreCombatState).flags;
+  return typeof f === 'object' && f !== null ? f : NO_FLAGS;
 }

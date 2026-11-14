@@ -57,9 +57,23 @@ export function releaseReel(): void {
   runtime.input.reelHeld = false;
 }
 
-/** Read the reel input for this frame; `tapped` is consumed (one-shot). */
+/** One-shot "tap" without holding (first crank motion during a bite hooks the fish). */
+export function tapReel(): void {
+  state.reelTapped = true;
+}
+
+let crankSource: (() => boolean) | null = null;
+
+/** The crank pad registers a function telling whether it is turning fast enough to count as holding. */
+export function setCrankSource(fn: (() => boolean) | null): void {
+  crankSource = fn;
+}
+
+/** Read the reel input for this frame; `tapped` is consumed (one-shot). Hold button OR fast crank = holding. */
 export function consumeReelInput(): { readonly holding: boolean; readonly tapped: boolean } {
-  const out = { holding: state.reelHeld, tapped: state.reelTapped };
+  const cranking = crankSource?.() ?? false;
+  const out = { holding: state.reelHeld || cranking, tapped: state.reelTapped };
+  runtime.input.reelHeld = out.holding;
   state.reelTapped = false;
   return out;
 }

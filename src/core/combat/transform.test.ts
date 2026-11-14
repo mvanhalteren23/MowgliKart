@@ -40,20 +40,28 @@ describe('Armor Break', () => {
     expect(s.log[brk - 1]).toMatchObject({ type: 'damage', targetId: KAEL });
     expect(s.log[brk]).toEqual({ type: 'armorBreak', targetId: KAEL });
 
-    // Kael's turn start has already ticked once: still suppressed.
+    // Exactly FUSION_BREAK_TURNS (= 2) host turns are acted suppressed, then the fusion re-forms.
+    expect(FUSION_BREAK_TURNS).toBe(2);
+    for (let turn = 1; turn <= FUSION_BREAK_TURNS; turn++) {
+      expect(s.activeId).toBe(KAEL);
+      expect(s.phase).toBe('awaitingInput');
+      expect(fusion(s)).toMatchObject({ armor: 0, broken: true, brokenTurns: FUSION_BREAK_TURNS - turn, spirits: ['ashka'] });
+      expect(core.combat.effectiveStats(s, KAEL).atk).toBe(get(s, KAEL).baseStats.atk);
+      expect(core.combat.availableSkills(s, KAEL)).not.toContain('skill.flameLash');
+      expect(s.log.some((e) => e.type === 'armorRestore')).toBe(false);
+      // hits while broken are not absorbed
+      const b = s;
+      s = runEnemies(core.combat.step(s, { type: 'guard' }));
+      const d = ofType(eventsSince(b, s), 'damage').find((x) => x.targetId === KAEL);
+      expect(d?.absorbedByArmor).toBe(0);
+    }
+
+    // third host turn start: restored with full armor, acts fused
+    const restoreAt = s.log.findIndex((e) => e.type === 'armorRestore');
+    expect(s.log[restoreAt]).toEqual({ type: 'armorRestore', targetId: KAEL });
+    const turnStarts = s.log.slice(brk).filter((e) => e.type === 'turnStart' && e.actorId === KAEL).length;
+    expect(turnStarts).toBe(FUSION_BREAK_TURNS + 1);
     expect(s.activeId).toBe(KAEL);
-    expect(fusion(s)).toMatchObject({ armor: 0, broken: true, brokenTurns: FUSION_BREAK_TURNS - 1, spirits: ['ashka'] });
-    expect(core.combat.effectiveStats(s, KAEL).atk).toBe(get(s, KAEL).baseStats.atk);
-    expect(core.combat.availableSkills(s, KAEL)).not.toContain('skill.flameLash');
-
-    // hits while broken are not absorbed
-    const b2 = s;
-    s = runEnemies(core.combat.step(s, { type: 'guard' }));
-    const d2 = ofType(eventsSince(b2, s), 'damage').find((d) => d.targetId === KAEL);
-    expect(d2?.absorbedByArmor).toBe(0);
-
-    // next host turn start: restored with full armor
-    expect(eventsSince(b2, s)).toContainEqual({ type: 'armorRestore', targetId: KAEL });
     expect(fusion(s)).toEqual({ spirits: ['ashka'], armor: 60, armorMax: 60, broken: false, brokenTurns: 0 });
     expect(core.combat.effectiveStats(s, KAEL).atk).toBe(fusedAtk);
     expect(core.combat.availableSkills(s, KAEL)).toContain('skill.flameLash');
@@ -71,6 +79,7 @@ describe('Dragon transformation (Sync/AP)', () => {
     expect(core.combat.availableForms(s, KAEL)).toEqual([
       { formId: 'form.cinderDrake', usable: false, reason: 'Needs 50 Sync (have 0).' },
       { formId: 'form.elderDrake', usable: false, reason: 'Unlocks at Lv 10.' },
+      { formId: 'form.ashenSovereign', usable: false, reason: 'Ashen Sovereign is still sealed (needs story flag "story.emberOath").' },
     ]);
     s = core.combat.step(s, { type: 'skill', skillId: 'skill.drakeCall', targetId: DUMMY });
     expect(get(s, KAEL).sync).toBe(42);

@@ -89,7 +89,7 @@ export function chronicleEntries(quest: QuestDef, status: QuestStatus): { readon
     .filter((e) => e.text.trim().length > 0);
 }
 
-export type RewardNames = Pick<GameDatabase, 'gear' | 'items' | 'spirits'>;
+export type RewardNames = Pick<GameDatabase, 'gear' | 'items' | 'spirits'> & { readonly heroes?: Readonly<Partial<Record<string, { readonly name: string }>>> };
 
 export function formatReward(r: Reward, db: RewardNames): string | null {
   switch (r.type) {
@@ -105,5 +105,7 @@ export function formatReward(r: Reward, db: RewardNames): string | null {
       return `✧ Warden ${db.spirits[r.spiritId]?.name ?? r.spiritId}`;
     case 'flag':
       return null;
+    case 'hero':
+      return `⚑ ${db.heroes?.[r.heroId]?.name ?? r.heroId} joins`;
   }
 }
