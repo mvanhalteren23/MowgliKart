@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { getServices, useGame } from '@/app/store';
-import { clearMoveKeys, pressReel, releaseReel, setMoveKey } from './inputBridge';
+import { clearMoveKeys, pressReel, releaseReel, setBoost, setMoveKey, setSprint } from './inputBridge';
+import { useUiLocal } from './uiLocal';
 import { visibleChoices } from './components/DialogueBox';
 
 const MOVE: Readonly<Record<string, 'left' | 'right' | 'up' | 'down'>> = {
@@ -18,12 +19,19 @@ const MOVE: Readonly<Record<string, 'left' | 'right' | 'up' | 'down'>> = {
  * Desktop keyboard: WASD/arrows move, Space/Enter context action (advance
  * dialogue, hold-to-reel while fishing, continue after combat), Q/E cycle
  * leader, 1–9 swap (or pick a dialogue choice), F field action, C chronicle,
- * I inspector, T township, Esc closes drawers.
+ * I inspector, T township, M map, Shift sprint/boost, Esc closes drawers.
+ * During a QTE the overlay captures arrows/WASD/Space first (capture phase).
  */
 export function useKeyboard(): void {
   useEffect(() => {
     const onDown = (e: KeyboardEvent): void => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        // Shift = sprint on foot, boost while mounted.
+        if (useGame.getState().mountedOn) setBoost('key', true);
+        else setSprint('key', true);
+        return;
+      }
       const dir = MOVE[e.code];
       if (dir) {
         setMoveKey(dir, true);
@@ -61,9 +69,15 @@ export function useKeyboard(): void {
       }
       if (st.mode !== 'overworld') return;
 
-      const drawer = st.ui.chronicleOpen || st.ui.inspectorOpen || st.ui.townshipOpen;
+      const ui = useUiLocal.getState();
+      const drawer = st.ui.chronicleOpen || st.ui.inspectorOpen || st.ui.townshipOpen || ui.mapOpen;
       switch (e.code) {
+        case 'KeyM':
+          if (st.ui.chronicleOpen) st.toggleChronicle(false);
+          ui.setMapOpen(!ui.mapOpen);
+          return;
         case 'Escape':
+          if (ui.mapOpen) ui.setMapOpen(false);
           if (st.ui.chronicleOpen) st.toggleChronicle(false);
           if (st.ui.inspectorOpen) st.toggleInspector(false);
           if (st.ui.townshipOpen) st.toggleTownship(false);
@@ -116,9 +130,15 @@ export function useKeyboard(): void {
     const onUp = (e: KeyboardEvent): void => {
       const dir = MOVE[e.code];
       if (dir) setMoveKey(dir, false);
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        setSprint('key', false);
+        setBoost('key', false);
+      }
       if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') releaseReel();
     };
     const onBlur = (): void => {
+      setSprint('key', false);
+      setBoost('key', false);
       clearMoveKeys();
       releaseReel();
     };

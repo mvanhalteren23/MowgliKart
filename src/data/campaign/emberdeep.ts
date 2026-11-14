@@ -75,13 +75,13 @@ export const emberdeep: ChapterContent = {
   spots: [{ id: 'spot.boilingSpring', name: 'The Boiling Spring', position: P(60, 74), fish: ['fish.boilfinChub', 'fish.sulphurEel', 'fish.magmaKoi'] }],
   enemies: {
     magmaHulk: foe('magmaHulk', 'Magma Hulk', 'enemy.beast.magmaHulk', 24, 'brute', {
-      affinities: { fire: 0.2, water: 1.6 }, skills: ['skill.enemy.slagHurl'], drops: [{ itemId: 'item.obsidianSlag', chance: 0.6 }],
+      affinities: { fire: 0.2, water: 1.6, ice: 1.5 }, skills: ['skill.enemy.slagHurl'], drops: [{ itemId: 'item.obsidianSlag', chance: 0.6 }],
     }),
     kilnStoker: foe('kilnStoker', 'Kiln Stoker', 'enemy.humanoid.kilnStoker', 25, 'skirmisher', {
-      affinities: { fire: 0.5, water: 1.3 }, skills: ['skill.enemy.slagHurl', 'skill.enemy.titheStrike'], drops: [{ itemId: 'item.obsidianSlag', chance: 0.5 }],
+      affinities: { fire: 0.5, water: 1.3, ice: 1.3 }, skills: ['skill.enemy.slagHurl', 'skill.enemy.quenchSpray', 'skill.enemy.titheStrike'], drops: [{ itemId: 'item.obsidianSlag', chance: 0.5 }],
     }),
     cinderSoul: foe('cinderSoul', 'Stilled Cinder-Soul', 'enemy.wisp.cinderSoul', 25, 'caster', {
-      affinities: { physical: 0.6, fire: 0.3, water: 1.6 }, skills: ['skill.enemy.emberSpit', 'skill.enemy.kilnBlast'], drops: [{ itemId: 'item.wispDust', chance: 0.6 }],
+      affinities: { physical: 0.6, fire: 0.3, water: 1.6, ice: 1.4 }, skills: ['skill.enemy.emberSpit', 'skill.enemy.kilnBlast'], drops: [{ itemId: 'item.wispDust', chance: 0.6 }],
     }),
     kilnForeman: foe('kilnForeman', 'Kiln Foreman Tarrow', 'enemy.humanoid.kilnForeman', 26, 'tank', {
       affinities: { fire: 0.5, holy: 0.8 }, skills: ['skill.enemy.shieldWall', 'skill.enemy.slagHurl'], drops: [{ itemId: 'item.obsidianSlag', chance: 1 }],

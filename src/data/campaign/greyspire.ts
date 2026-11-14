@@ -81,7 +81,7 @@ export const greyspire: ChapterContent = {
       affinities: { holy: 0.5, shadow: 1.3 }, skills: ['skill.enemy.shieldWall', 'skill.enemy.titheStrike'], drops: [{ itemId: 'item.stillWax', chance: 0.5 }],
     }),
     stilledSeraph: foe('stilledSeraph', 'Stilled Seraph', 'enemy.wisp.stilledSeraph', 31, 'caster', {
-      affinities: { physical: 0.6, holy: 0.4, fire: 1.4, shadow: 1.3 }, skills: ['skill.enemy.stillingVerdict', 'skill.enemy.stillMend'], drops: [{ itemId: 'item.stillWax', chance: 0.5 }],
+      affinities: { physical: 0.6, holy: 0.4, fire: 1.4, shadow: 1.3 }, skills: ['skill.enemy.stillingVerdict', 'skill.enemy.fontSurge', 'skill.enemy.stillMend'], drops: [{ itemId: 'item.stillWax', chance: 0.5 }],
     }),
     ossuaryHound: foe('ossuaryHound', 'Ossuary Hound', 'enemy.beast.ossuaryHound', 30, 'skirmisher', {
       affinities: { shadow: 0.5, holy: 1.4, fire: 1.2 }, skills: ['skill.enemy.gnash', 'skill.enemy.ossuaryHowl'], drops: [{ itemId: 'item.wolfPelt', chance: 0.5 }],

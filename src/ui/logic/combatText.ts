@@ -20,8 +20,16 @@ export function targetModeFor(target: SkillTarget): TargetMode {
 export type NameOf = (id: CombatantId) => string;
 export type SkillNameOf = (id: string) => string;
 
+/** Optional lookups for Phase 3 events (reactions / hazards). */
+export interface ExtraNames {
+  readonly reaction?: (id: string) => string;
+  readonly hazard?: (id: string) => string;
+}
+
 /** One floating combat-log line per meaningful event; `null` for bookkeeping events. */
-export function formatCombatEvent(ev: CombatEvent, nameOf: NameOf, skillName: SkillNameOf, formName: SkillNameOf = (id) => id): string | null {
+export function formatCombatEvent(ev: CombatEvent, nameOf: NameOf, skillName: SkillNameOf, formName: SkillNameOf = (id) => id, extra: ExtraNames = {}): string | null {
+  const reactionName = extra.reaction ?? ((id: string) => id);
+  const hazardName = extra.hazard ?? ((id: string) => id);
   switch (ev.type) {
     case 'turnStart':
       return null;
@@ -59,6 +67,18 @@ export function formatCombatEvent(ev: CombatEvent, nameOf: NameOf, skillName: Sk
       return ev.reason;
     case 'end':
       return ev.outcome === 'victory' ? 'Victory!' : ev.outcome === 'defeat' ? 'Defeat…' : 'Escaped.';
+    case 'reaction':
+      return `${reactionName(ev.reactionId)}!`;
+    case 'hazardSpawn':
+      return `${hazardName(ev.hazardId)} spreads over the ${ev.side === 'party' ? 'party' : 'enemy'} line`;
+    case 'hazardTick':
+      return null; // shown as a per-combatant tick number instead
+    case 'hazardExpire':
+      return `${hazardName(ev.hazardId)} fades`;
+    case 'qteStart':
+    case 'qteResult':
+    case 'hitStop':
+      return null; // QTE overlay / grade banner / flash handle these
   }
 }
 

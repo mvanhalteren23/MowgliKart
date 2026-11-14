@@ -4,10 +4,14 @@ import { chapters, merge, mergeRecord } from './campaign';
 import { dialogues } from './dialogues';
 import { dragonForms } from './dragonForms';
 import { encounters, enemies } from './enemies';
+import { allAssetRequests } from '@/assets/manifests';
 import { gear } from './gear';
+import { hazards } from './hazards';
 import { fieldActions, heroes } from './heroes';
 import { items } from './items';
+import { mounts, stamina } from './mounts';
 import { investigations, sliceQuests } from './quests';
+import { reactions } from './reactions';
 import { skills } from './skills';
 import { spirits } from './spirits';
 import { clues, endings, storyGraph } from './story';
@@ -16,6 +20,8 @@ import { fish, species } from './wildlife';
 import { sliceWorld } from './world';
 
 export * as ids from './ids';
+export { HAZARD } from './hazards';
+export { LODGE_LEVEL2_FLAG, MOUNT } from './mounts';
 export { BUILDING, CHAIN, ENC, FLAG, GATE, INV, MAIN, NPC, QUEST, REGION, SPECIES, SPOT } from './ids';
 
 /** Recursively freezes authored content so nobody can mutate the shared database at runtime. */
@@ -63,6 +69,11 @@ const database: GameDatabase = {
   storyGraph,
   clues,
   endings,
+  hazards,
+  reactions,
+  mounts,
+  stamina,
+  assetRequests: allAssetRequests,
   world,
   township,
   species: { ...species, ...mergeRecord((c) => c.species) },

@@ -14,7 +14,12 @@ import { PartyRail } from './components/PartyRail';
 import { MenuButtons, QuestChip } from './components/QuestChip';
 import { Stick } from './components/Stick';
 import { TownshipPanel } from './components/TownshipPanel';
+import { MoveControls } from './components/MoveControls';
+import { StaminaGauge } from './components/Stamina';
+import { FlightBanner, TravelMap } from './components/TravelMap';
+import { useUiLocal } from './uiLocal';
 import './hud.css';
+import './phase3.css';
 
 /**
  * Root HUD overlay. Mounted above the WebGL canvas once services are bound.
@@ -25,7 +30,9 @@ export function Hud() {
   const chronicleOpen = useGame((s) => s.ui.chronicleOpen);
   const inspectorOpen = useGame((s) => s.ui.inspectorOpen);
   const townshipOpen = useGame((s) => s.ui.townshipOpen);
-  const drawerOpen = chronicleOpen || inspectorOpen || townshipOpen;
+  const mapOpen = useUiLocal((s) => s.mapOpen);
+  const setMapOpen = useUiLocal((s) => s.setMapOpen);
+  const drawerOpen = chronicleOpen || inspectorOpen || townshipOpen || mapOpen;
   const overworld = mode === 'overworld';
   const blocked = !overworld || drawerOpen;
   const canHunt = useGame((s) => {
@@ -39,6 +46,10 @@ export function Hud() {
   useKeyboard();
   useEffect(() => setMovementBlocked(blocked), [blocked]);
   useEffect(() => () => resetAllInput(), []);
+  // The map is a HUD-local sheet: close it when another drawer opens or the mode changes.
+  useEffect(() => {
+    if (!overworld || chronicleOpen || inspectorOpen || townshipOpen) setMapOpen(false);
+  }, [overworld, chronicleOpen, inspectorOpen, townshipOpen, setMapOpen]);
 
   return (
     <div className="ew-hud" data-mode={mode} data-testid="hud">
@@ -48,6 +59,9 @@ export function Hud() {
       {(overworld || mode === 'dialogue') && <QuestChip />}
       {overworld && <MenuButtons />}
       {overworld && <ActionCluster />}
+      {overworld && <StaminaGauge />}
+      {overworld && !drawerOpen && <MoveControls />}
+      {overworld && <FlightBanner />}
       {overworld && canHunt && <HuntAimOverlay />}
       {mode === 'combat' && <CombatHud />}
       {mode === 'dialogue' && <DialogueBox />}
@@ -55,6 +69,7 @@ export function Hud() {
       {overworld && chronicleOpen && <Chronicle />}
       {overworld && inspectorOpen && <Inspector />}
       {overworld && townshipOpen && <TownshipPanel />}
+      {overworld && mapOpen && <TravelMap />}
       <Toasts />
       <PerfChip />
       <RotateVeil />

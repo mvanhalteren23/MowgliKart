@@ -14,13 +14,36 @@ const state = {
   blocked: true,
   reelHeld: false,
   reelTapped: false,
+  sprint: { button: false, stick: false, key: false } as Record<SprintSource, boolean>,
+  boost: { button: false, key: false } as Record<BoostSource, boolean>,
 };
+
+export type SprintSource = 'button' | 'stick' | 'key';
+export type BoostSource = 'button' | 'key';
 
 function flush(): void {
   const k = state.keys;
   const v = combineMove(state.stick, keysToVector(k.left, k.right, k.up, k.down), state.blocked);
   runtime.input.moveX = v.x;
   runtime.input.moveY = v.y;
+  const sp = state.sprint;
+  const bo = state.boost;
+  runtime.input.sprint = !state.blocked && (sp.button || sp.stick || sp.key);
+  runtime.input.boost = !state.blocked && (bo.button || bo.key);
+}
+
+/** Sprint is held while any source holds it (button, double-tap-hold on the stick, Shift). */
+export function setSprint(source: SprintSource, held: boolean): void {
+  if (state.sprint[source] === held) return;
+  state.sprint[source] = held;
+  flush();
+}
+
+/** Mounted boost (button or Shift while riding). */
+export function setBoost(source: BoostSource, held: boolean): void {
+  if (state.boost[source] === held) return;
+  state.boost[source] = held;
+  flush();
 }
 
 export function setStickVector(x: number, y: number): void {
@@ -81,6 +104,8 @@ export function consumeReelInput(): { readonly holding: boolean; readonly tapped
 /** Reset everything (unmount / window blur). */
 export function resetAllInput(): void {
   state.stick = { x: 0, y: 0 };
+  state.sprint = { button: false, stick: false, key: false };
+  state.boost = { button: false, key: false };
   clearMoveKeys();
   releaseReel();
   state.reelTapped = false;

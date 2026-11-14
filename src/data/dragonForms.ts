@@ -6,10 +6,11 @@ import { FLAG } from './ids';
  *   Ember Whelp (hatchling, L1)   40 Sync · 8 AP + 4/turn  — turn 2–3 at the slice start.
  *   Ashen Cinderdrake (fire, L6)  70 Sync · 14 + 6/turn    — the late-fight payoff of Act I.
  *   Rimehorn Wyrm (ice, L11)      65 Sync · 16 + 7/turn    — sustain/defence, Act II opener.
- *   Thunderhide Drake (L16)       75 Sync · 18 + 8/turn    — burst, mid Act II.
+ *   Thunderhide Drake (lightning, L16)       75 Sync · 18 + 8/turn    — burst, mid Act II.
  *   Sovereign Wyrm (apex, L24)    90 Sync · 26 + 10/turn   — story-gated by the Act III caldera.
  * Kael's AP pool (20 + 3/level) always covers entry + 2–3 drains, never the full max turns
  * without Ember Draughts or the Drakeheart Sigil — forms are sustained, not free.
+ * Every form's signature skill opens a quick-time finisher (see `skills.ts`).
  */
 export const dragonForms = {
   'form.emberWhelp': {
@@ -30,14 +31,14 @@ export const dragonForms = {
     id: 'form.rimeWyrm', name: 'Rimehorn Wyrm', element: 'water', sprite: 'dragon.rimeWyrm',
     syncRequired: 65, apCostToEnter: 16, apDrainPerTurn: 7, maxTurns: 4,
     statMultipliers: { maxHp: 1.3, def: 1.6, res: 1.5, mag: 1.35, atk: 1.2 },
-    affinities: { water: 0, fire: 1.2, wind: 0.8 },
+    affinities: { ice: 0, water: 0.5, fire: 1.25, wind: 0.8 },
     skills: ['skill.rimeBreath', 'skill.glacierFang'],
   },
   'form.thunderDrake': {
-    id: 'form.thunderDrake', name: 'Thunderhide Drake', element: 'wind', sprite: 'dragon.thunderDrake',
+    id: 'form.thunderDrake', name: 'Thunderhide Drake', element: 'lightning', sprite: 'dragon.thunderDrake',
     syncRequired: 75, apCostToEnter: 18, apDrainPerTurn: 8, maxTurns: 4,
     statMultipliers: { atk: 1.75, mag: 1.5, spd: 1.5, def: 1.2 },
-    affinities: { wind: 0, earth: 1.25 },
+    affinities: { lightning: 0, wind: 0.75, earth: 1.25, water: 1.1 },
     skills: ['skill.thunderclap', 'skill.stormTalon'],
   },
   'form.sovereignWyrm': {

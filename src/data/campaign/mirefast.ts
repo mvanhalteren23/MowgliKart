@@ -97,10 +97,10 @@ export const mirefast: ChapterContent = {
   ],
   enemies: {
     bogLurker: foe('bogLurker', 'Bog Lurker', 'enemy.beast.bogLurker', 11, 'brute', {
-      affinities: { water: 0.5, fire: 1.3 }, skills: ['skill.enemy.bogDrag'], drops: [{ itemId: 'item.bogIron', chance: 0.4 }],
+      affinities: { water: 0.5, fire: 1.3, lightning: 1.35 }, skills: ['skill.enemy.bogDrag'], drops: [{ itemId: 'item.bogIron', chance: 0.4 }],
     }),
     mireLight: foe('mireLight', 'Captive Mire-Light', 'enemy.wisp.mireLight', 12, 'caster', {
-      affinities: { physical: 0.7, water: 0.6, earth: 1.4 }, skills: ['skill.enemy.stillChill'],
+      affinities: { physical: 0.7, water: 0.6, earth: 1.4, lightning: 0.5 }, skills: ['skill.enemy.stillChill'],
       drops: [{ itemId: 'item.wispDust', chance: 0.7 }, { itemId: 'item.marshWax', chance: 0.4 }],
     }),
     abbeyPenitent: foe('abbeyPenitent', 'Abbey Penitent', 'enemy.humanoid.abbeyPenitent', 12, 'caster', {
@@ -115,7 +115,7 @@ export const mirefast: ChapterContent = {
       drops: [{ itemId: 'item.marshWax', chance: 1 }, { itemId: 'item.hiTonic', chance: 0.6 }],
     }),
     clockworkHulk: foe('clockworkHulk', 'Covenant Clockwork Hulk', 'enemy.beast.clockworkHulk', 20, 'boss', {
-      affinities: { water: 1.4, wind: 0.8, earth: 0.7 }, skills: ['skill.enemy.gnash', 'skill.enemy.shieldWall'], drops: [{ itemId: 'item.bogIron', chance: 1 }],
+      affinities: { water: 1.4, wind: 0.8, earth: 0.7, lightning: 1.5 }, skills: ['skill.enemy.gnash', 'skill.enemy.shieldWall', 'skill.enemy.sparkCoil'], drops: [{ itemId: 'item.bogIron', chance: 1 }],
     }),
   },
   encounters: {

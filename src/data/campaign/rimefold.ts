@@ -86,13 +86,13 @@ export const rimefold: ChapterContent = {
   spots: [{ id: 'spot.frozenMere', name: 'Ice-Hole on the Frozen Mere', position: P(180, 196), fish: ['fish.icefinCod', 'fish.frostChar', 'fish.auroraTrout'] }],
   enemies: {
     rimeWolf: foe('rimeWolf', 'Rime Wolf', 'enemy.beast.rimeWolf', 18, 'skirmisher', {
-      affinities: { water: 0.5, fire: 1.4 }, skills: ['skill.enemy.frostBite', 'skill.enemy.packHowl'], drops: [{ itemId: 'item.rimeFur', chance: 0.6 }],
+      affinities: { water: 0.5, ice: 0.3, fire: 1.4, lightning: 1.15 }, skills: ['skill.enemy.frostBite', 'skill.enemy.packHowl'], drops: [{ itemId: 'item.rimeFur', chance: 0.6 }],
     }),
     reliquaryKnight: foe('reliquaryKnight', 'Reliquary Knight', 'enemy.humanoid.reliquaryKnight', 19, 'tank', {
       affinities: { holy: 0.6, shadow: 1.3 }, skills: ['skill.enemy.shieldWall', 'skill.enemy.titheStrike'], drops: [{ itemId: 'item.frostCrystal', chance: 0.5 }],
     }),
     frostWisp: foe('frostWisp', 'Stilled Frost-Wisp', 'enemy.wisp.frostWisp', 19, 'caster', {
-      affinities: { physical: 0.7, water: 0.4, fire: 1.6 }, skills: ['skill.enemy.stillChill', 'skill.enemy.frostBite'], drops: [{ itemId: 'item.frostCrystal', chance: 0.5 }],
+      affinities: { physical: 0.7, water: 0.4, ice: 0, fire: 1.6 }, skills: ['skill.enemy.stillChill', 'skill.enemy.frostBite'], drops: [{ itemId: 'item.frostCrystal', chance: 0.5 }],
     }),
     lanternBearer: foe('lanternBearer', 'Lantern-Bearer', 'enemy.humanoid.lanternBearer', 20, 'caster', {
       affinities: { holy: 0.5, shadow: 1.4 }, skills: ['skill.enemy.reliquaryLight', 'skill.enemy.stillMend'], drops: [{ itemId: 'item.frostCrystal', chance: 0.4 }],
@@ -102,10 +102,10 @@ export const rimefold: ChapterContent = {
       drops: [{ itemId: 'item.frostCrystal', chance: 1 }, { itemId: 'item.hiTonic', chance: 0.7 }],
     }),
     whiteStag: foe('whiteStag', 'The White Stag of Rime', 'enemy.beast.whiteStag', 23, 'boss', {
-      affinities: { water: 0.5, fire: 1.3 }, skills: ['skill.enemy.gnash', 'skill.enemy.frostBite'], drops: [{ itemId: 'item.rimeFur', chance: 1 }],
+      affinities: { water: 0.5, ice: 0.4, fire: 1.3 }, skills: ['skill.enemy.gnash', 'skill.enemy.frostBite'], drops: [{ itemId: 'item.rimeFur', chance: 1 }],
     }),
     frostblight: foe('frostblight', 'Frostblight', 'enemy.wisp.frostblight', 23, 'bossCaster', {
-      affinities: { physical: 0.6, water: 0.4, fire: 1.6, earth: 1.2 }, skills: ['skill.enemy.stillChill', 'skill.enemy.sapBind'], drops: [{ itemId: 'item.frostCrystal', chance: 1 }],
+      affinities: { physical: 0.6, water: 0.4, ice: 0.2, fire: 1.6, earth: 1.2 }, skills: ['skill.enemy.stillChill', 'skill.enemy.sapBind'], drops: [{ itemId: 'item.frostCrystal', chance: 1 }],
     }),
   },
   encounters: {

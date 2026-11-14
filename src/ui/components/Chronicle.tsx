@@ -4,6 +4,7 @@ import { foundClues, getServices, resolveEnding, useGame } from '@/app/store';
 import type { QuestDef, QuestKind } from '@/types/contracts';
 import { chainStageLabel, clueBoard, endingProgress, groupChains, layoutStoryGraph, visibleChains, type ChainView, type StoryGraphLayout } from '../logic/campaign';
 import { CHRONICLE_TABS, chronicleEntries, formatReward, openCounts, questsForTab, statusOf, visibleObjectives } from '../logic/questSelectors';
+import { useUiLocal } from '../uiLocal';
 import { HeroPortrait, Sheet, TapButton, cx } from './common';
 
 const ROMAN = ['', 'I', 'II', 'III'] as const;
@@ -239,6 +240,7 @@ export function Chronicle() {
   const log = useGame((s) => s.questLog);
   const trackedId = useGame((s) => s.trackedQuestId);
   const toggleChronicle = useGame((s) => s.toggleChronicle);
+  const setMapOpen = useUiLocal((s) => s.setMapOpen);
   const { db } = getServices();
   const storyGraph = db.storyGraph ?? [];
 
@@ -265,6 +267,16 @@ export function Chronicle() {
       onClose={() => toggleChronicle(false)}
       closeTestId="chronicle-close"
     >
+      <TapButton
+        className="ew-btn--pill ew-chronicle__map"
+        data-testid="chronicle-open-map"
+        onTap={() => {
+          toggleChronicle(false);
+          setMapOpen(true);
+        }}
+      >
+        🗺 Fast-travel map
+      </TapButton>
       <div className="ew-tabs" role="tablist">
         <TapButton role="tab" aria-selected={tab === 'story'} className={cx('ew-tab', tab === 'story' && 'is-on')} data-testid="chronicle-tab-story" onTap={() => setTab('story')}>
           Story

@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { getServices, useGame } from '@/app/store';
 import type { Combatant, CombatantId, CombatState, SkillId } from '@/types/contracts';
 import { armorPips, formatCombatEvent, sortForms, targetModeFor, type TargetMode } from '../logic/combatText';
+import type { TickNumber } from '../logic/hazards';
 import { Bar, HeroPortrait, SpritePortrait, TapButton, cx } from './common';
+import { HazardChips, TickNumbers, useHazardTicks } from './Hazards';
+import { QteFeedback, QteOverlay } from './QteOverlay';
 
 type Pending = { readonly kind: 'attack' } | { readonly kind: 'skill'; readonly skillId: SkillId; readonly mode: TargetMode };
 
@@ -15,7 +18,7 @@ function maxOf(combat: CombatState, c: Combatant): { maxHp: number; maxAp: numbe
   }
 }
 
-function PartyCard({ combat, c, targetable, onPick, compact }: { combat: CombatState; c: Combatant; targetable: boolean; onPick: () => void; compact: boolean }) {
+function PartyCard({ combat, c, targetable, onPick, compact, ticks }: { combat: CombatState; c: Combatant; targetable: boolean; onPick: () => void; compact: boolean; ticks: readonly TickNumber[] }) {
   const { db } = getServices();
   const max = maxOf(combat, c);
   const hero = c.heroId ? db.heroes[c.heroId] : undefined;
@@ -65,11 +68,12 @@ function PartyCard({ combat, c, targetable, onPick, compact }: { combat: CombatS
         )}
         {c.statuses.length > 0 && <span className="ew-statuses">{c.statuses.map((s) => `${s.id}(${s.turns})`).join(' ')}</span>}
       </span>
+      <TickNumbers ticks={ticks} id={c.id} />
     </TapButton>
   );
 }
 
-function EnemyPlate({ combat, c, targetable, onPick }: { combat: CombatState; c: Combatant; targetable: boolean; onPick: () => void }) {
+function EnemyPlate({ combat, c, targetable, onPick, ticks }: { combat: CombatState; c: Combatant; targetable: boolean; onPick: () => void; ticks: readonly TickNumber[] }) {
   const max = maxOf(combat, c);
   return (
     <TapButton
@@ -86,6 +90,7 @@ function EnemyPlate({ combat, c, targetable, onPick }: { combat: CombatState; c:
         <Bar value={c.hp} max={max.maxHp} tone="hp" thin />
         {c.statuses.length > 0 && <span className="ew-statuses">{c.statuses.map((s) => s.id).join(' ')}</span>}
       </span>
+      <TickNumbers ticks={ticks} id={c.id} />
     </TapButton>
   );
 }
@@ -100,7 +105,12 @@ function CombatLog({ combat }: { combat: CombatState }) {
     seen.current = combat.log.length;
     const nameOf = (id: CombatantId): string => combat.combatants[id]?.name ?? id;
     const texts = fresh
-      .map((ev) => formatCombatEvent(ev, nameOf, (id) => db.skills[id]?.name ?? id, (id) => db.dragonForms[id]?.name ?? id))
+      .map((ev) =>
+        formatCombatEvent(ev, nameOf, (id) => db.skills[id]?.name ?? id, (id) => db.dragonForms[id]?.name ?? id, {
+          reaction: (id) => db.reactions?.find((r) => r.id === id)?.name ?? id,
+          hazard: (id) => db.hazards?.[id]?.name ?? id,
+        }),
+      )
       .filter((t): t is string => t !== null);
     if (texts.length === 0) return;
     setLines((prev) => [...prev, ...texts.map((text) => ({ id: seq.current++, text }))].slice(-3));
@@ -108,7 +118,7 @@ function CombatLog({ combat }: { combat: CombatState }) {
   return (
     <div className="ew-clog" aria-live="polite" data-testid="combat-log">
       {lines.map((l) => (
-        <div key={l.id} className="ew-clog__line">
+        <div key={l.id} className={cx('ew-clog__line', l.text.endsWith('!') && 'is-loud')}>
           {l.text}
         </div>
       ))}
@@ -251,11 +261,27 @@ function ResultPanel({ combat }: { combat: CombatState }) {
   );
 }
 
+const EMPTY_COMBAT: CombatState = {
+  encounterId: '',
+  phase: 'awaitingInput',
+  round: 0,
+  order: [],
+  turnIndex: 0,
+  activeId: null,
+  combatants: {},
+  log: [],
+  rng: 0,
+  canFlee: false,
+  liberatedRegions: 0,
+  rewards: null,
+};
+
 /** Turn-based combat overlay. Enemy pacing is the store's job; this only renders + issues player actions. */
 export function CombatHud() {
   const combat = useGame((s) => s.combat);
   const act = useGame((s) => s.combatAct);
   const [pending, setPending] = useState<Pending | null>(null);
+  const ticks = useHazardTicks(combat ?? EMPTY_COMBAT);
 
   const activeId = combat?.activeId ?? null;
   const phase = combat?.phase;
@@ -267,7 +293,8 @@ export function CombatHud() {
   const party = all.filter((c) => c.side === 'party');
   const enemies = all.filter((c) => c.side === 'enemy');
   const actor = combat.activeId ? combat.combatants[combat.activeId] : undefined;
-  const awaiting = combat.phase === 'awaitingInput' && actor?.side === 'party';
+  const qte = combat.qte ?? null;
+  const awaiting = combat.phase === 'awaitingInput' && actor?.side === 'party' && !qte;
   const over = combat.phase === 'victory' || combat.phase === 'defeat' || combat.phase === 'fled';
   const enemyPick = awaiting && (pending === null || pending.kind === 'attack' || pending.mode === 'enemy');
   const allyPick = awaiting && pending?.kind === 'skill' && pending.mode === 'ally';
@@ -283,18 +310,22 @@ export function CombatHud() {
     <div className="ew-combat" data-testid="combat-hud" data-phase={combat.phase}>
       <div className="ew-enemies">
         {enemies.map((c) =>
-          c.alive ? <EnemyPlate key={c.id} combat={combat} c={c} targetable={enemyPick} onPick={() => target(c.id)} /> : null,
+          c.alive ? <EnemyPlate key={c.id} combat={combat} c={c} targetable={enemyPick} onPick={() => target(c.id)} ticks={ticks} /> : null,
         )}
+        <HazardChips combat={combat} side="enemy" />
       </div>
       <div className={cx('ew-party', party.length > 3 && 'ew-party--compact')}>
+        <HazardChips combat={combat} side="party" />
         {party.map((c) => (
-          <PartyCard key={c.id} combat={combat} c={c} targetable={allyPick} compact={party.length > 3} onPick={() => target(c.id)} />
+          <PartyCard key={c.id} combat={combat} c={c} targetable={allyPick} compact={party.length > 3} onPick={() => target(c.id)} ticks={ticks} />
         ))}
       </div>
       <CombatLog combat={combat} />
       <div className="ew-round">Round {combat.round}</div>
       {awaiting && actor && <CommandMenu combat={combat} actor={actor} pending={pending} setPending={setPending} />}
       {combat.phase === 'enemyTurn' && <div className="ew-cmd ew-cmd--wait">Enemy turn…</div>}
+      {qte && combat.phase === 'awaitingInput' && <QteOverlay key={`${combat.log.length}:${qte.actorId}:${qte.skillId}`} qte={qte} />}
+      <QteFeedback combat={combat} />
       {over && <ResultPanel combat={combat} />}
     </div>
   );

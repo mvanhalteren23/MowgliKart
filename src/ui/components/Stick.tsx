@@ -1,5 +1,6 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
-import { setStickVector } from '../inputBridge';
+import { setSprint, setStickVector } from '../inputBridge';
+import { isDoubleTapHold, type TapMark } from '../logic/stamina';
 import { clampOrigin, computeStick, followOrigin, type Point } from '../logic/stickMath';
 
 const RADIUS = 52;
@@ -12,6 +13,8 @@ export function Stick() {
   const baseRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const active = useRef<{ id: number; origin: Point } | null>(null);
+  /** Last release (for double-tap-and-hold → sprint). */
+  const lastUp = useRef<TapMark | null>(null);
 
   const local = (e: { clientX: number; clientY: number }): Point => {
     const r = zoneRef.current?.getBoundingClientRect();
@@ -48,8 +51,11 @@ export function Stick() {
     setStickVector(v.x, v.y);
   };
 
-  const release = (): void => {
+  const release = (finger?: Point): void => {
+    if (finger && active.current) lastUp.current = { t: performance.now(), x: finger.x, y: finger.y };
     active.current = null;
+    setSprint('stick', false);
+    zoneRef.current?.classList.remove('is-sprinting');
     place(null);
     if (knobRef.current) knobRef.current.style.transform = '';
     setStickVector(0, 0);
@@ -63,6 +69,7 @@ export function Stick() {
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('visibilitychange', onBlur);
       setStickVector(0, 0);
+      setSprint('stick', false);
     };
   }, []);
 
@@ -75,8 +82,14 @@ export function Stick() {
         if (active.current || (e.pointerType === 'mouse' && e.button !== 0)) return;
         const zone = zoneRef.current;
         if (!zone) return;
-        const origin = clampOrigin(local(e), zone.clientWidth, zone.clientHeight, MARGIN);
+        const p = local(e);
+        const origin = clampOrigin(p, zone.clientWidth, zone.clientHeight, MARGIN);
         active.current = { id: e.pointerId, origin };
+        if (isDoubleTapHold(lastUp.current, { t: performance.now(), x: p.x, y: p.y })) {
+          setSprint('stick', true);
+          zone.classList.add('is-sprinting');
+        }
+        lastUp.current = null;
         try {
           zone.setPointerCapture(e.pointerId);
         } catch {
@@ -89,7 +102,7 @@ export function Stick() {
         if (active.current?.id === e.pointerId) update(local(e));
       }}
       onPointerUp={(e) => {
-        if (active.current?.id === e.pointerId) release();
+        if (active.current?.id === e.pointerId) release(local(e));
       }}
       onPointerCancel={(e) => {
         if (active.current?.id === e.pointerId) release();

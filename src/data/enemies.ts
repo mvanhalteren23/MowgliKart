@@ -18,7 +18,7 @@ export const enemies = {
   stilledWisp: {
     id: 'stilledWisp', name: 'Stilled Wisp', sprite: 'enemy.wisp.stilled', level: 3,
     stats: { maxHp: 40, maxAp: 14, atk: 6, def: 14, mag: 14, res: 8, spd: 11, luck: 4 },
-    affinities: { physical: 0.7, fire: 1.5, holy: 0.5, water: 0.8 },
+    affinities: { physical: 0.7, fire: 1.5, holy: 0.5, water: 0.8, ice: 0.8 },
     skills: ['skill.enemy.stillChill'],
     xp: 20, coin: 4, skillBias: 0.6,
     drops: [{ itemId: 'item.wispDust', chance: 0.7 }, { itemId: 'item.emberDraught', chance: 0.12 }],
@@ -26,7 +26,7 @@ export const enemies = {
   shoreclaw: {
     id: 'shoreclaw', name: 'Shoreclaw', sprite: 'enemy.beast.shoreclaw', level: 3,
     stats: { maxHp: 62, maxAp: 10, atk: 14, def: 16, mag: 2, res: 6, spd: 7, luck: 4 },
-    affinities: { water: 0.5, fire: 1.2, earth: 1.3 },
+    affinities: { water: 0.5, fire: 1.2, earth: 1.3, lightning: 1.4 },
     skills: ['skill.enemy.pinch', 'skill.enemy.shellUp'],
     xp: 22, coin: 8, skillBias: 0.4,
     drops: [{ itemId: 'item.shoreclawShell', chance: 0.65 }, { itemId: 'item.tonic', chance: 0.2 }],
@@ -74,7 +74,7 @@ export const enemies = {
   ringHound: {
     id: 'ringHound', name: 'Ring-Hound', sprite: 'enemy.beast.ringHound', level: 4,
     stats: { maxHp: 55, maxAp: 8, atk: 14, def: 8, mag: 2, res: 6, spd: 15, luck: 5 },
-    affinities: { fire: 0.8, water: 1.2 },
+    affinities: { fire: 0.8, water: 1.2, lightning: 1.2 },
     skills: ['skill.enemy.rend'],
     xp: 24, coin: 5, skillBias: 0.3,
     drops: [{ itemId: 'item.wolfPelt', chance: 0.4 }],

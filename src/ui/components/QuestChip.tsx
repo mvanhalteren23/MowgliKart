@@ -3,6 +3,7 @@ import { getServices, useGame } from '@/app/store';
 import { runtime } from '@/app/runtime';
 import { compassBearing, compassLabel, formatDistance, windArrowAngle } from '../logic/hudMath';
 import { currentObjective, trackerMarker } from '../logic/questSelectors';
+import { useUiLocal } from '../uiLocal';
 import { TapButton } from './common';
 
 /** Tracked quest + objective + live compass arrow (rAF → refs), and wind for hunters. */
@@ -76,8 +77,20 @@ export function MenuButtons() {
   const toggleChronicle = useGame((s) => s.toggleChronicle);
   const toggleInspector = useGame((s) => s.toggleInspector);
   const toggleTownship = useGame((s) => s.toggleTownship);
+  const setMapOpen = useUiLocal((s) => s.setMapOpen);
   return (
     <div className="ew-menu">
+      <TapButton
+        className="ew-btn--round"
+        data-testid="btn-map"
+        aria-label="Fast-travel map"
+        onTap={() => {
+          toggleChronicle(false);
+          setMapOpen(!useUiLocal.getState().mapOpen);
+        }}
+      >
+        🗺
+      </TapButton>
       <TapButton className="ew-btn--round" data-testid="btn-chronicle" aria-label="Chronicle" onTap={() => toggleChronicle()}>
         📜
       </TapButton>

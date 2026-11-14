@@ -1,4 +1,19 @@
-import type { SkillDef } from '@/types/contracts';
+import type { QteSpec, SkillDef } from '@/types/contracts';
+
+/**
+ * Quick-time presets for heavy skills. Pools mix directional swipes with a tap; longer
+ * sequences get a slightly wider window so a 4-prompt finisher stays fair on a phone.
+ */
+const SWIPES = ['up', 'down', 'left', 'right', 'tap'] as const;
+const qte = (prompts: 2 | 3 | 4, windowMs: number, hitStopMs: number, good = 1.3, perfect = 1.6): QteSpec => ({
+  prompts, windowMs, pool: SWIPES, goodMultiplier: good, perfectMultiplier: perfect, perfectWithin: 0.45, hitStopMs,
+});
+/** Hero heavy skills: short, snappy. */
+const HEAVY = qte(2, 900, 90);
+const HEAVY3 = qte(3, 850, 110);
+/** Dragon-form finishers: longer, bigger hit-stop. */
+const FINISHER = qte(3, 950, 120, 1.3, 1.65);
+const APEX = qte(4, 1000, 140, 1.35, 1.7);
 
 /**
  * Balance reference (combat lives in core):
@@ -20,6 +35,7 @@ export const skills = {
     id: 'skill.emberBrand', name: 'Ember Brand', description: 'Sears a drake-sigil into the foe. May burn.',
     apCost: 7, target: 'enemy', element: 'fire', kind: 'magical', power: 1.6,
     inflicts: { status: 'burn', chance: 0.6, turns: 3, potency: 5 }, syncGain: 8,
+    qte: HEAVY,
   },
 
   /* ── Tobin Marsh ──────────────────────────────────────────────────── */
@@ -31,6 +47,7 @@ export const skills = {
   'skill.windVolley': {
     id: 'skill.windVolley', name: 'Wind Volley', description: 'Loose five shafts on the breeze. Hits all foes.',
     apCost: 7, target: 'allEnemies', element: 'wind', kind: 'physical', power: 0.8,
+    qte: HEAVY3,
   },
   'skill.fieldDressing': {
     id: 'skill.fieldDressing', name: 'Field Dressing', description: 'Warden\'s poultice and a tight wrap. Heals one ally.',
@@ -48,8 +65,10 @@ export const skills = {
     inflicts: { status: 'guardUp', chance: 1, turns: 2, potency: 0.35 },
   },
   'skill.cinderLunge': {
-    id: 'skill.cinderLunge', name: 'Cinder Lunge', description: 'A crowd-roaring thrust wreathed in arena-fire.',
+    id: 'skill.cinderLunge', name: 'Cinder Lunge', description: 'A crowd-roaring thrust wreathed in arena-fire. May burn.',
     apCost: 7, target: 'enemy', element: 'fire', kind: 'physical', power: 1.7,
+    inflicts: { status: 'burn', chance: 0.5, turns: 2, potency: 5 },
+    qte: HEAVY,
   },
 
   /* ── Locked roster ────────────────────────────────────────────────── */
@@ -76,8 +95,8 @@ export const skills = {
     apCost: 4, target: 'enemy', element: 'wind', kind: 'physical', power: 1.3,
   },
   'skill.cogSnare': {
-    id: 'skill.cogSnare', name: 'Cog Snare', description: 'A clockwork trap. May stun.',
-    apCost: 6, target: 'enemy', element: 'physical', kind: 'physical', power: 0.7,
+    id: 'skill.cogSnare', name: 'Cog Snare', description: 'A spark-coil clockwork trap. Crackles with lightning; may stun.',
+    apCost: 6, target: 'enemy', element: 'lightning', kind: 'physical', power: 0.7,
     inflicts: { status: 'stun', chance: 0.45, turns: 1, potency: 1 },
   },
   'skill.lumenLance': {
@@ -112,6 +131,7 @@ export const skills = {
     id: 'skill.whelpFlame', name: 'Whelp Flame', description: 'A young drake\'s gout of fire over every foe.',
     apCost: 4, target: 'allEnemies', element: 'fire', kind: 'magical', power: 1.0,
     inflicts: { status: 'burn', chance: 0.3, turns: 2, potency: 4 },
+    qte: FINISHER,
   },
   'skill.ashClaw': {
     id: 'skill.ashClaw', name: 'Ash Claw', description: 'Talons black with old soot.',
@@ -121,6 +141,7 @@ export const skills = {
     id: 'skill.drakeInferno', name: 'Drake Inferno', description: 'The Ashen Drake remembers how a sky burns.',
     apCost: 8, target: 'allEnemies', element: 'fire', kind: 'magical', power: 1.7,
     inflicts: { status: 'burn', chance: 0.5, turns: 3, potency: 6 },
+    qte: FINISHER,
   },
   'skill.wyrmRend': {
     id: 'skill.wyrmRend', name: 'Wyrm Rend', description: 'Jaw and claw together. Ignores guard.',
@@ -161,6 +182,7 @@ export const skills = {
     id: 'skill.wyrmfireArc', name: 'Wyrmfire Arc', description: 'Kael sweeps a crescent of drake-fire across every foe.',
     apCost: 9, target: 'allEnemies', element: 'fire', kind: 'magical', power: 1.25, syncGain: 12,
     inflicts: { status: 'burn', chance: 0.35, turns: 2, potency: 8 },
+    qte: HEAVY3,
   },
   'skill.lamentCall': {
     id: 'skill.lamentCall', name: 'Lament Call', description: 'A breath of the clan horn: the whole party steels itself.',
@@ -175,6 +197,7 @@ export const skills = {
   'skill.galeLongshot': {
     id: 'skill.galeLongshot', name: 'Gale Longshot', description: 'One arrow, aimed for an hour, loosed in a heartbeat.',
     apCost: 9, target: 'enemy', element: 'wind', kind: 'physical', power: 2.3,
+    qte: HEAVY,
   },
   'skill.crowdPleaser': {
     id: 'skill.crowdPleaser', name: 'Crowd-Pleaser', description: 'Vesna plays to the stands. Attack up, guard up.',
@@ -185,6 +208,7 @@ export const skills = {
     id: 'skill.ashenWhirl', name: 'Ashen Whirl', description: 'The glaive spins until the air catches fire.',
     apCost: 9, target: 'allEnemies', element: 'fire', kind: 'physical', power: 1.3,
     inflicts: { status: 'burn', chance: 0.3, turns: 2, potency: 8 },
+    qte: HEAVY3,
   },
   'skill.galeHymn': {
     id: 'skill.galeHymn', name: 'Gale Hymn', description: 'Orla sings and the wind answers, cutting every foe.',
@@ -198,6 +222,7 @@ export const skills = {
   'skill.cycloneAria': {
     id: 'skill.cycloneAria', name: 'Cyclone Aria', description: 'The final verse of the Galecrest chimes, sung free.',
     apCost: 12, target: 'allEnemies', element: 'wind', kind: 'magical', power: 1.6,
+    qte: HEAVY3,
   },
   'skill.shieldSlam': {
     id: 'skill.shieldSlam', name: 'Shield Slam', description: 'A quarry-slab of a shield to the face. May stun.',
@@ -212,6 +237,7 @@ export const skills = {
   'skill.landslide': {
     id: 'skill.landslide', name: 'Landslide', description: 'Hadrik brings the hillside down on them.',
     apCost: 11, target: 'allEnemies', element: 'earth', kind: 'physical', power: 1.55,
+    qte: HEAVY3,
   },
   'skill.springVolley': {
     id: 'skill.springVolley', name: 'Spring Volley', description: 'Pim overwinds the magazine and lets it all go.',
@@ -226,6 +252,7 @@ export const skills = {
     id: 'skill.clockworkTempest', name: 'Clockwork Tempest', description: 'A swarm of spring-darts that never seems to run down.',
     apCost: 11, target: 'allEnemies', element: 'wind', kind: 'physical', power: 1.45,
     inflicts: { status: 'defDown', chance: 0.4, turns: 2, potency: 0.2 },
+    qte: HEAVY3,
   },
   'skill.redaction': {
     id: 'skill.redaction', name: 'Redaction', description: 'Quill strikes a line through the foe\'s defences.',
@@ -235,6 +262,7 @@ export const skills = {
   'skill.illuminatedVerse': {
     id: 'skill.illuminatedVerse', name: 'Illuminated Verse', description: 'A margin note that burns gold across every foe.',
     apCost: 9, target: 'allEnemies', element: 'holy', kind: 'magical', power: 1.2,
+    qte: HEAVY3,
   },
   'skill.errata': {
     id: 'skill.errata', name: 'Errata', description: '"Correction: you are not wounded." Heals one ally a great deal.',
@@ -254,6 +282,7 @@ export const skills = {
     id: 'skill.rootquake', name: 'Rootquake', description: 'The roots of Hollowroot heave up through the enemy line.',
     apCost: 11, target: 'allEnemies', element: 'earth', kind: 'magical', power: 1.5,
     inflicts: { status: 'stun', chance: 0.2, turns: 1, potency: 1 },
+    qte: HEAVY3,
   },
   'skill.lanternSnuff': {
     id: 'skill.lanternSnuff', name: 'Lantern Snuff', description: 'Pinch out the light behind their eyes. May stun.',
@@ -267,31 +296,35 @@ export const skills = {
   'skill.eclipseStrike': {
     id: 'skill.eclipseStrike', name: 'Eclipse Strike', description: 'One cut from the unlit side of the world.',
     apCost: 10, target: 'enemy', element: 'shadow', kind: 'physical', power: 2.4,
+    qte: HEAVY3,
   },
 
   /* ── Campaign dragon forms ────────────────────────────────────────── */
   'skill.rimeBreath': {
-    id: 'skill.rimeBreath', name: 'Rime Breath', description: 'A glacier exhaled. Soaks every foe.',
-    apCost: 6, target: 'allEnemies', element: 'water', kind: 'magical', power: 1.35,
+    id: 'skill.rimeBreath', name: 'Rime Breath', description: 'A glacier exhaled. Rime settles on every foe and may soak them.',
+    apCost: 6, target: 'allEnemies', element: 'ice', kind: 'magical', power: 1.35,
     inflicts: { status: 'soak', chance: 0.5, turns: 2, potency: 0.25 },
   },
   'skill.glacierFang': {
     id: 'skill.glacierFang', name: 'Glacier Fang', description: 'Teeth of old ice.',
-    apCost: 5, target: 'enemy', element: 'water', kind: 'physical', power: 1.9,
+    apCost: 5, target: 'enemy', element: 'ice', kind: 'physical', power: 1.9,
+    qte: FINISHER,
   },
   'skill.thunderclap': {
     id: 'skill.thunderclap', name: 'Thunderclap', description: 'Wings meet overhead. May stun everyone it reaches.',
-    apCost: 8, target: 'allEnemies', element: 'wind', kind: 'magical', power: 1.5,
+    apCost: 8, target: 'allEnemies', element: 'lightning', kind: 'magical', power: 1.5,
     inflicts: { status: 'stun', chance: 0.25, turns: 1, potency: 1 },
   },
   'skill.stormTalon': {
     id: 'skill.stormTalon', name: 'Storm Talon', description: 'A dive from the cloud-roof.',
-    apCost: 6, target: 'enemy', element: 'wind', kind: 'physical', power: 2.3,
+    apCost: 6, target: 'enemy', element: 'lightning', kind: 'physical', power: 2.3,
+    qte: FINISHER,
   },
   'skill.sovereignFlame': {
     id: 'skill.sovereignFlame', name: 'Sovereign Flame', description: 'The fire that chooses to flicker. Nothing stilled survives it.',
     apCost: 12, target: 'allEnemies', element: 'fire', kind: 'magical', power: 2.2,
     inflicts: { status: 'burn', chance: 0.6, turns: 3, potency: 14 },
+    qte: APEX,
   },
   'skill.crownOfEmbers': {
     id: 'skill.crownOfEmbers', name: 'Crown of Embers', description: 'Every Warden-bound heart burns brighter.',
@@ -314,8 +347,8 @@ export const skills = {
     apCost: 4, target: 'enemy', element: 'wind', kind: 'physical', power: 1.3,
   },
   'skill.enemy.chimeToll': {
-    id: 'skill.enemy.chimeToll', name: 'Chime Toll', description: 'A stilling bell rings through every bone.',
-    apCost: 6, target: 'allEnemies', element: 'holy', kind: 'magical', power: 0.85,
+    id: 'skill.enemy.chimeToll', name: 'Chime Toll', description: 'A charged Covenant bell; the toll arcs through every bone.',
+    apCost: 6, target: 'allEnemies', element: 'lightning', kind: 'magical', power: 0.85,
     inflicts: { status: 'stun', chance: 0.12, turns: 1, potency: 1 },
   },
   'skill.enemy.shieldWall': {
@@ -348,7 +381,7 @@ export const skills = {
   },
   'skill.enemy.frostBite': {
     id: 'skill.enemy.frostBite', name: 'Frost Bite', description: 'The cold gets its teeth in. May soak.',
-    apCost: 4, target: 'enemy', element: 'water', kind: 'physical', power: 1.35,
+    apCost: 4, target: 'enemy', element: 'ice', kind: 'physical', power: 1.35,
     inflicts: { status: 'soak', chance: 0.35, turns: 2, potency: 0.2 },
   },
   'skill.enemy.reliquaryLight': {
@@ -377,6 +410,22 @@ export const skills = {
   'skill.enemy.stillMend': {
     id: 'skill.enemy.stillMend', name: 'Still Mend', description: 'Stolen spirit-warmth knits a wound.',
     apCost: 6, target: 'ally', element: 'holy', kind: 'heal', power: 2.0,
+  },
+
+  'skill.enemy.sparkCoil': {
+    id: 'skill.enemy.sparkCoil', name: 'Spark Coil', description: 'A clockwork coil dumps its charge. Deadly in standing water.',
+    apCost: 5, target: 'enemy', element: 'lightning', kind: 'magical', power: 1.3,
+    inflicts: { status: 'stun', chance: 0.2, turns: 1, potency: 1 },
+  },
+  'skill.enemy.quenchSpray': {
+    id: 'skill.enemy.quenchSpray', name: 'Quench Spray', description: 'A stoker swings the quenching hose. Hisses on anything burning.',
+    apCost: 4, target: 'enemy', element: 'water', kind: 'magical', power: 1.2,
+    inflicts: { status: 'soak', chance: 0.4, turns: 2, potency: 0.2 },
+  },
+  'skill.enemy.fontSurge': {
+    id: 'skill.enemy.fontSurge', name: 'Font Surge', description: 'The cathedral font overflows across the line.',
+    apCost: 6, target: 'allEnemies', element: 'water', kind: 'magical', power: 0.9,
+    inflicts: { status: 'soak', chance: 0.3, turns: 2, potency: 0.2 },
   },
 
   /* ── Enemy skills ─────────────────────────────────────────────────── */

@@ -88,11 +88,11 @@ export const galecrest: ChapterContent = {
   ],
   enemies: {
     chimeAcolyte: foe('chimeAcolyte', 'Chime Acolyte', 'enemy.humanoid.chimeAcolyte', 6, 'caster', {
-      affinities: { holy: 0.6, shadow: 1.3 }, skills: ['skill.enemy.chimeToll', 'skill.enemy.acolyteMend'],
+      affinities: { holy: 0.6, shadow: 1.3, lightning: 0.7 }, skills: ['skill.enemy.chimeToll', 'skill.enemy.acolyteMend'],
       drops: [{ itemId: 'item.chimeShard', chance: 0.5 }, { itemId: 'item.tonic', chance: 0.25 }],
     }),
     galeHarrier: foe('galeHarrier', 'Gale Harrier', 'enemy.beast.galeHarrier', 6, 'skirmisher', {
-      affinities: { wind: 0.5, earth: 1.3 }, skills: ['skill.enemy.galeRake'],
+      affinities: { wind: 0.5, earth: 1.3, lightning: 1.3 }, skills: ['skill.enemy.galeRake'],
       drops: [{ itemId: 'item.galeFeather', chance: 0.6 }],
     }),
     spireJailer: foe('spireJailer', 'Spire Jailer', 'enemy.humanoid.spireJailer', 7, 'tank', {
@@ -100,11 +100,11 @@ export const galecrest: ChapterContent = {
       drops: [{ itemId: 'item.covenantIron', chance: 0.6 }],
     }),
     stilledZephyr: foe('stilledZephyr', 'Stilled Zephyr', 'enemy.wisp.stilledZephyr', 7, 'caster', {
-      affinities: { physical: 0.7, wind: 0.5, fire: 1.4 }, skills: ['skill.enemy.stillChill'],
+      affinities: { physical: 0.7, wind: 0.5, fire: 1.4, ice: 1.2 }, skills: ['skill.enemy.stillChill'],
       drops: [{ itemId: 'item.wispDust', chance: 0.6 }, { itemId: 'item.chimeShard', chance: 0.3 }],
     }),
     chimeCantor: foe('chimeCantor', 'Cantor Imrey of the Chimes', 'enemy.humanoid.chimeCantor', 8, 'bossCaster', {
-      affinities: { holy: 0.5, wind: 0.8, shadow: 1.4 }, skills: ['skill.enemy.chimeToll', 'skill.enemy.stillingHymn', 'skill.enemy.acolyteMend'],
+      affinities: { holy: 0.5, wind: 0.8, shadow: 1.4, lightning: 0.6 }, skills: ['skill.enemy.chimeToll', 'skill.enemy.stillingHymn', 'skill.enemy.acolyteMend'],
       drops: [{ itemId: 'item.chimeShard', chance: 1 }, { itemId: 'item.hiTonic', chance: 0.5 }],
     }),
   },

@@ -130,3 +130,27 @@ describe('campaign playthrough (legal moves only)', () => {
     expect(plot && p.township.levels[plot]).toBe(3);
   });
 });
+
+describe('Phase 3 mounts unlock through play', () => {
+  it('drake flight unlocks with the Act I story and the strider through Hearthstead', () => {
+    const p = fresh();
+    p.dispatch({ type: 'enterRegion', regionId: 'lanternwick' });
+    for (const m of Object.values(db.mounts)) expect(p.holds(m.unlockWhen), m.id).toBe(false);
+    const flight = Object.values(db.mounts).find((m) => m.kind === 'flight')!;
+    const beast = Object.values(db.mounts).find((m) => m.kind === 'beast')!;
+    // Play the story in order until flight opens: it must happen inside Act I.
+    let unlockedIn: number | null = null;
+    for (const node of db.storyGraph) {
+      p.drive(node.questId);
+      if (p.holds(flight.unlockWhen)) { unlockedIn = node.act; break; }
+      for (const q of db.quests.filter((x) => x.act === node.act && x.kind === 'companion' && x.companion === 'kael')) {
+        if (p.status(q.id) !== 'COMPLETED') p.drive(q.id);
+      }
+      if (p.holds(flight.unlockWhen)) { unlockedIn = node.act; break; }
+    }
+    expect(unlockedIn).toBe(1);
+    // The strider: raise the Hunting Lodge to its second level by legal play.
+    p.upgradeTo('building.lodge', 2);
+    expect(p.holds(beast.unlockWhen)).toBe(true);
+  });
+});
