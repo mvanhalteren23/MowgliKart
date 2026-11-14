@@ -5,6 +5,7 @@ import { runtime } from '@/app/runtime';
 import { bindServices, useGame } from '@/app/store';
 import { createCoreServices } from '@/core';
 import { gameData } from '@/data';
+import { assetRegistry } from '@/engine/assets/registry';
 import { bootstrapAssets } from '@/engine/bootstrapAssets';
 import { createWorldSystems } from '@/systems';
 
@@ -19,6 +20,8 @@ for (const z of gameData.world.encounterZones) spriteIds.add(z.sprite);
 bootstrapAssets([...spriteIds]);
 
 bindServices({ db: gameData, core: createCoreServices(gameData), systems: createWorldSystems(gameData) });
+// External art pipeline: seed from the manifest requests and listen for delivered files.
+assetRegistry.start();
 
 // Debug/test handle (used by the Playwright smoke test).
 (window as unknown as Record<string, unknown>).__emberwake = { useGame, runtime, db: gameData };

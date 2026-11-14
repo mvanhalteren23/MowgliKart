@@ -6,7 +6,8 @@ Vite · TypeScript (strict) · React Three Fiber · Three.js · Zustand · Minip
 ```
 npm install
 npm run dev        # play at the printed URL (landscape; touch or keyboard)
-npm test           # 432 tests
+npm test           # 574 tests
+npm run assets:manifest   # regenerate shared_pipeline/manifests/pending_assets.json
 npm run build      # typecheck + bundle
 ```
 
@@ -25,6 +26,14 @@ C chronicle · I inspector · T township.
 - Kael's dragon forms: a hatchling, cinder, rime and storm forms, and an apex form unlocked in Act III.
 - Gesture mini-games: drag-to-aim hunting with wind and scent; flick-to-cast, crank-to-reel fishing.
 - Hearthstead township: six residents, six buildings, each upgradable to level 3.
+
+## Phase 3
+- Elemental chaining in combat (water, fire, ice, lightning, wind, earth) creates terrain hazards: puddles,
+  steam vents, electrified water, frozen lakes, smoke clouds and ember fields.
+- Quick-time swipe/tap prompts on heavy skills grade miss / good / perfect for bonus damage and hit-stop.
+- Stamina-limited sprinting; a ground beast mount; dragon flight with fast travel to any discovered region.
+- Art for these features comes from an external art agent through `shared_pipeline/` (see its README);
+  until delivered, the game shows labelled debug outlines and wireframes and hot-swaps the art in when it arrives.
 
 ## Layout
 | Path | What |
