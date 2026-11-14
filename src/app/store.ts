@@ -13,6 +13,8 @@ import { COMBAT_PARTY_SIZE } from '@/types/contracts';
 import type {
   CombatState,
   EndingDef,
+  MountDef,
+  RegionDef,
   ClueDef,
   FieldActionOptions,
   CoreServices,
@@ -81,6 +83,8 @@ const EMPTY_STATE: GameState = {
   clearedZones: [],
   toasts: [],
   ui: { chronicleOpen: false, inspectorOpen: false, townshipOpen: false, inspectorHero: 'kael' },
+  mountedOn: null,
+  flightTarget: null,
 };
 
 /* ── Derived hero sheet (shared by store, UI inspector and tests) ───────── */
@@ -113,6 +117,18 @@ export function resolveEnding(state: Pick<GameState, 'flags' | 'questLog'>): End
   const { db, core } = getServices();
   const reached = db.endings.filter((e) => core.quests.evaluate(e.when, state.flags, state.questLog));
   return reached.sort((a, b) => b.priority - a.priority)[0] ?? null;
+}
+
+/** Regions the party has entered — the fast-travel network. */
+export function discoveredWaypoints(state: Pick<GameState, 'flags'>): readonly RegionDef[] {
+  const { db } = getServices();
+  return db.world.regions.filter((r) => typeof state.flags[`evt:enter:${r.id}`] === 'number' && (state.flags[`evt:enter:${r.id}`] as number) > 0);
+}
+
+/** Mounts whose unlock condition holds and whose providing hero is in the party. */
+export function availableMounts(state: Pick<GameState, 'flags' | 'questLog' | 'party'>): readonly MountDef[] {
+  const { db, core } = getServices();
+  return Object.values(db.mounts).filter((m) => (!m.hero || state.party.includes(m.hero)) && core.quests.evaluate(m.unlockWhen, state.flags, state.questLog));
 }
 
 /** Investigation clues found so far. */
@@ -684,6 +700,59 @@ export const useGame = create<GameStore>()((set, get) => {
       for (const e of r.events) get().dispatchWorldEvent(e);
     },
 
+    mount(mountId) {
+      const st = get();
+      const { db } = getServices();
+      const def = db.mounts[mountId];
+      if (!def || st.mode !== 'overworld') return;
+      if (!availableMounts(st).some((m) => m.id === mountId)) {
+        toast(def.unlockText, 'warn');
+        return;
+      }
+      if (!getServices().core.stamina.canDrain(runtime.stamina)) {
+        toast('Too winded to ride — catch your breath.', 'warn');
+        return;
+      }
+      set({ mountedOn: mountId });
+    },
+
+    dismount() {
+      if (!get().mountedOn) return;
+      runtime.requests.flyTo = null;
+      set({ mountedOn: null, flightTarget: null });
+    },
+
+    flyTo(regionId) {
+      const st = get();
+      const { db } = getServices();
+      if (st.mode !== 'overworld') return;
+      const region = db.world.regions.find((r) => r.id === regionId);
+      if (!region || !discoveredWaypoints(st).some((r) => r.id === regionId)) {
+        toast('You have not been there yet.', 'warn');
+        return;
+      }
+      const flight = availableMounts(st).find((m) => m.kind === 'flight');
+      if (!flight) {
+        toast(Object.values(db.mounts).find((m) => m.kind === 'flight')?.unlockText ?? 'No way to fly yet.', 'warn');
+        return;
+      }
+      if (st.mountedOn !== flight.id) get().mount(flight.id);
+      if (get().mountedOn !== flight.id) return;
+      runtime.requests.flyTo = { x: region.center.x, z: region.center.z };
+      set({ flightTarget: regionId, ui: { ...get().ui, chronicleOpen: false, inspectorOpen: false, townshipOpen: false } });
+    },
+
+    arrive(reason) {
+      const st = get();
+      if (!st.mountedOn && !st.flightTarget) return;
+      const { db } = getServices();
+      const region = db.world.regions.find((r) => r.id === st.flightTarget);
+      runtime.requests.flyTo = null;
+      set({ mountedOn: null, flightTarget: null });
+      if (reason === 'arrived' && region) toast(`Landed at ${region.name}.`, 'info');
+      if (reason === 'exhausted') toast('Out of stamina — forced landing!', 'warn');
+    },
+
     trackQuest(questId) {
       set({ trackedQuestId: questId });
     },
@@ -726,6 +795,10 @@ export function bindServices(s: Services): void {
   runtime.requests.fieldAction = null;
   runtime.requests.huntAim = null;
   runtime.requests.traverseGate = null;
+  runtime.requests.flyTo = null;
+  runtime.input.sprint = false;
+  runtime.input.boost = false;
+  if (s.db.stamina && typeof s.core.stamina?.initial === 'function') runtime.stamina = s.core.stamina.initial(s.db.stamina);
   useGame.setState(newGame(s));
   const start = s.db.world.playerStart;
   runtime.player.x = start.x;

@@ -32,7 +32,9 @@ Stack: Vite · TypeScript (strict) · React 19 · React Three Fiber · Three.js 
 | `src/core/**` | `core-sim` | Pure deterministic sim. **No** three / react / DOM / `src/data` imports. |
 | `src/engine/**` (rest) | `engine-hd2d` | R3F scene, streaming, sprites, cameras. |
 | `src/ui/**` | `mobile-ui` | DOM HUD overlay. No three imports. |
-| `src/data/**`, `src/systems/**` | `world-lore` | Content + pure world systems. No three / react / DOM. |
+| `src/data/**`, `src/systems/**`, `src/assets/manifests/**` | `world-lore` | Content, pure world systems, asset requests. No three / react / DOM. |
+| `src/engine/assets/**`, `tools/asset-pipeline/**` | `engine-hd2d` | Asset registry (client) + manifest emitter / watcher (node). |
+| `shared_pipeline/**`, `public/assets/generated/**` | external art agent | Generated art only. Emberwake code never writes art files. |
 
 Cross-module communication goes only through `contracts.ts`, the Zustand store
 (`src/app/store.ts`) and the mutable runtime bus (`src/app/runtime.ts`).
@@ -41,6 +43,13 @@ Cross-module communication goes only through `contracts.ts`, the Zustand store
 - Every `.claude/agents/*.md` pins `model: claude-opus-5-5`. Never `inherit`, never `fable`.
 - Agents stay inside their owned paths, never run git commands, never `npm install` new packages.
 - Each agent finishes with `npx tsc --noEmit` clean for its files and its own Vitest files green.
+
+## Phase 3 rules
+- **No new procedural/placeholder art.** Every new visual is requested via an `AssetManifestEntry`
+  (`src/assets/manifests`) and rendered from `public/assets/generated/` once delivered; until then
+  show a debug wireframe/outline with the asset id. (The Phase 1–2 procedural bootstrapper stays as-is.)
+- **Do not modify `src/core/combat/**`.** Extend combat with `CombatModifierHandler` decorators.
+- Asset prompts describe an original style; never reference existing games or their art.
 
 ## Conventions
 - All contract data is `readonly`; state transitions return new objects (no mutation).

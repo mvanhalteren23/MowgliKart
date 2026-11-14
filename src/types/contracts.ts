@@ -21,7 +21,7 @@ export type HeroId = (typeof HERO_IDS)[number];
 export const SPIRIT_IDS = ['ashka', 'mirelle', 'zephra', 'tor', 'lumen', 'nyx'] as const;
 export type SpiritId = (typeof SPIRIT_IDS)[number];
 
-export const ELEMENTS = ['physical', 'fire', 'water', 'wind', 'earth', 'holy', 'shadow'] as const;
+export const ELEMENTS = ['physical', 'fire', 'water', 'wind', 'earth', 'holy', 'shadow', 'lightning', 'ice'] as const;
 export type Element = (typeof ELEMENTS)[number];
 
 export type DragonFormId = string;
@@ -174,6 +174,8 @@ export interface SkillDef {
   readonly inflicts?: { readonly status: StatusId; readonly chance: number; readonly turns: number; readonly potency: number };
   /** Sync gained by a drake-blooded user when this lands. */
   readonly syncGain?: number;
+  /** Heavy skills open a quick-time window before resolving (see `QteSpec`). */
+  readonly qte?: QteSpec;
 }
 
 /**
@@ -469,7 +471,9 @@ export type CombatAction =
   | { readonly type: 'item'; readonly itemId: ItemId; readonly targetId: CombatantId }
   | { readonly type: 'transform'; readonly formId: DragonFormId }
   | { readonly type: 'revert' }
-  | { readonly type: 'flee' };
+  | { readonly type: 'flee' }
+  /** Answer to an open `CombatState.qte` window (one entry per prompt, in order). */
+  | { readonly type: 'qte'; readonly results: readonly QteInputResult[] };
 
 export type CombatPhase = 'awaitingInput' | 'enemyTurn' | 'victory' | 'defeat' | 'fled';
 
@@ -489,7 +493,209 @@ export type CombatEvent =
   | { readonly type: 'ko'; readonly targetId: CombatantId }
   | { readonly type: 'flee'; readonly success: boolean }
   | { readonly type: 'invalid'; readonly reason: string }
-  | { readonly type: 'end'; readonly outcome: 'victory' | 'defeat' | 'fled' };
+  | { readonly type: 'end'; readonly outcome: 'victory' | 'defeat' | 'fled' }
+  // Phase 3 — emitted by combat modifiers
+  | { readonly type: 'reaction'; readonly reactionId: ReactionId; readonly targetId: CombatantId; readonly element: Element }
+  | { readonly type: 'hazardSpawn'; readonly hazardId: HazardId; readonly instanceId: number; readonly side: CombatSide }
+  | { readonly type: 'hazardTick'; readonly hazardId: HazardId; readonly instanceId: number; readonly targetId: CombatantId; readonly amount: number; readonly element: Element }
+  | { readonly type: 'hazardExpire'; readonly hazardId: HazardId; readonly instanceId: number; readonly side: CombatSide }
+  | { readonly type: 'qteStart'; readonly actorId: CombatantId; readonly skillId: SkillId; readonly sequence: readonly QteInput[]; readonly windowMs: number }
+  | { readonly type: 'qteResult'; readonly actorId: CombatantId; readonly grade: QteGrade; readonly multiplier: number }
+  /** Freeze-frame for impact: the engine pauses combat animation for `ms`. */
+  | { readonly type: 'hitStop'; readonly targetId: CombatantId; readonly ms: number };
+
+/* ── Phase 3: elemental reactions, hazards, quick-time events ─────────── */
+
+export type HazardId = string;
+export type ReactionId = string;
+
+/**
+ * A terrain hazard covering one side of the battle field. Ticks at the start of
+ * each living combatant's turn on that side, for `durationRounds` rounds.
+ * Hazard damage never KOs (it leaves at least 1 HP) so combat-end detection stays in the core state machine.
+ */
+export interface HazardDef {
+  readonly id: HazardId;
+  readonly name: string;
+  readonly description: string;
+  readonly durationRounds: number;
+  /** Damage over time: `fraction` × the victim's max HP, of `element` (affinities apply). */
+  readonly dot?: { readonly element: Element; readonly fraction: number };
+  readonly inflicts?: { readonly status: StatusId; readonly chance: number; readonly turns: number; readonly potency: number };
+  /** Damage of these elements dealt to combatants standing in the hazard is multiplied. */
+  readonly amplifies?: Readonly<Partial<Record<Element, number>>>;
+  /** 0..1 — single-target hits into this side lose this fraction of damage (smoke, steam). */
+  readonly obscures?: number;
+  /** HUD icon and battlefield FX — asset manifest ids. */
+  readonly iconAssetId: AssetId;
+  readonly fxAssetId: AssetId;
+}
+
+/**
+ * Elemental chaining: when a hit of `element` lands on a target that matches `when`,
+ * the reaction fires. An empty `when` matches every hit of that element.
+ */
+export interface ElementalReactionDef {
+  readonly id: ReactionId;
+  readonly name: string;
+  readonly element: Element;
+  readonly when: { readonly targetStatus?: StatusId; readonly sideHazard?: HazardId };
+  /** Hazard spawned on the target's side (refreshes duration if already present). */
+  readonly spawns?: HazardId;
+  /** Removed when the reaction fires (e.g. ice consumes the water puddle it freezes). */
+  readonly consumes?: { readonly status?: StatusId; readonly hazard?: HazardId };
+  /** Extra damage as a fraction of the triggering hit (0.5 = +50 %). */
+  readonly bonusDamage?: number;
+  readonly inflicts?: { readonly status: StatusId; readonly chance: number; readonly turns: number; readonly potency: number };
+  /** Lower runs first; at most one reaction per (hit, target). */
+  readonly priority: number;
+}
+
+export interface HazardInstance {
+  readonly instanceId: number;
+  readonly hazardId: HazardId;
+  readonly side: CombatSide;
+  readonly roundsLeft: number;
+  readonly sourceId: CombatantId | null;
+}
+
+export type QteInput = 'up' | 'down' | 'left' | 'right' | 'tap';
+export type QteGrade = 'miss' | 'good' | 'perfect';
+
+export interface QteSpec {
+  /** Number of prompts in the sequence (1–5). */
+  readonly prompts: number;
+  /** Time allowed per prompt (ms). */
+  readonly windowMs: number;
+  /** Pool the deterministic sequence is drawn from. */
+  readonly pool: readonly QteInput[];
+  readonly goodMultiplier: number;
+  readonly perfectMultiplier: number;
+  /** Fraction of `windowMs` an answer must beat (on every prompt) to grade perfect. */
+  readonly perfectWithin: number;
+  /** Hit-stop length on a good/perfect result (ms). */
+  readonly hitStopMs: number;
+}
+
+export interface QteWindow {
+  readonly actorId: CombatantId;
+  readonly skillId: SkillId;
+  readonly targetId?: CombatantId;
+  readonly sequence: readonly QteInput[];
+  readonly windowMs: number;
+  readonly perfectWithin: number;
+}
+
+/** `ms` = reaction time measured by the UI from prompt shown to input; `input: null` = timed out. */
+export interface QteInputResult {
+  readonly input: QteInput | null;
+  readonly ms: number;
+}
+
+/**
+ * Decorator over the combat service (`CoreServices['combat']`). Handlers wrap the core
+ * state machine without modifying it: they may intercept actions before `step`, and
+ * post-process the resulting state/events after it. `createCoreServices` returns the
+ * combat service already decorated with the built-in handlers (reactions, hazards, QTE).
+ */
+export interface CombatModifierHandler {
+  readonly id: string;
+  /** Return a state to short-circuit `step` (e.g. open a QTE window), or null to continue. */
+  beforeStep?(state: CombatState, action: CombatAction, next: (s: CombatState, a: CombatAction) => CombatState): CombatState | null;
+  /** Post-process: `prev` is the state before the step, `next` the core's result. */
+  afterStep?(prev: CombatState, next: CombatState, action: CombatAction): CombatState;
+  /** Extend start (e.g. initialise `hazards: []`). */
+  afterStart?(state: CombatState): CombatState;
+}
+
+/* ── Phase 3: stamina, mounts ─────────────────────────────────────────── */
+
+export interface StaminaTuning {
+  readonly max: number;
+  readonly regenPerSec: number;
+  /** Seconds without draining before regeneration starts. */
+  readonly regenDelaySec: number;
+  readonly sprintDrainPerSec: number;
+  readonly sprintSpeedMultiplier: number;
+  /** After hitting 0 the pool is `exhausted` until it refills to this fraction of max. */
+  readonly recoverFraction: number;
+}
+
+export interface StaminaState {
+  readonly current: number;
+  readonly max: number;
+  readonly exhausted: boolean;
+  /** Seconds since stamina was last drained. */
+  readonly idleSec: number;
+}
+
+export type MountId = string;
+
+export interface MountDef {
+  readonly id: MountId;
+  readonly name: string;
+  readonly description: string;
+  /** flight: dragon flight, ignores ground collision and crosses chunks; beast: fast ground mount. */
+  readonly kind: 'flight' | 'beast';
+  /** Hero who provides the mount (dragon flight is Kael's). */
+  readonly hero?: HeroId;
+  readonly speed: number; // m/s cruising
+  readonly boostSpeed: number; // m/s while boosting (drains extra stamina)
+  readonly staminaDrainPerSec: number; // while mounted
+  readonly boostDrainPerSec: number; // extra while boosting
+  readonly ignoresCollision: boolean;
+  /** Metres above ground the rider travels at. */
+  readonly altitude: number;
+  /** Camera spring-arm offsets the rider inherits. */
+  readonly camera: { readonly distance: number; readonly pitchDeg: number; readonly lookHeight: number };
+  readonly unlockWhen: Condition;
+  readonly unlockText: string;
+  /** Sprite sheet asset for the mount (manifest id). */
+  readonly assetId: AssetId;
+  readonly iconAssetId: AssetId;
+}
+
+/* ── Phase 3: external asset pipeline ─────────────────────────────────── */
+
+export type AssetId = string;
+export type AssetStatus = 'pending' | 'in_progress' | 'delivered' | 'rejected';
+
+/**
+ * One visual the external art agent must produce. Field names follow the shared
+ * pipeline schema exactly (snake_case). `category` and `animation_states` are optional extensions.
+ */
+export interface AssetManifestEntry {
+  readonly asset_id: AssetId;
+  readonly type: 'spritesheet' | 'sprite' | 'icon' | 'texture' | 'normal_map';
+  /** Repo-relative path the finished file must be written to (under `public/assets/generated/`). */
+  readonly target_path: string;
+  readonly resolution: { readonly width: number; readonly height: number };
+  readonly grid?: { readonly columns: number; readonly rows: number; readonly frame_width: number; readonly frame_height: number };
+  readonly fps?: number;
+  readonly loop?: boolean;
+  readonly alpha_channel: boolean;
+  readonly prompt_spec: string;
+  readonly status: AssetStatus;
+  readonly category?: 'mount' | 'hazard' | 'qte' | 'hud' | 'fx';
+  readonly animation_states?: readonly { readonly name: string; readonly row: number; readonly from: number; readonly count: number }[];
+}
+
+export interface AssetManifest {
+  readonly manifest_version: '1.0';
+  readonly project: string;
+  readonly assets: readonly AssetManifestEntry[];
+}
+
+/** Client-side view of one asset (see `src/engine/assets/registry.ts`). */
+export interface AssetRecord {
+  readonly assetId: AssetId;
+  readonly entry: AssetManifestEntry | null;
+  /** True once a production file is present and loadable. */
+  readonly ready: boolean;
+  /** Public URL (cache-busted with `version`) when ready. */
+  readonly url: string | null;
+  readonly version: number;
+}
 
 export interface CombatRewards {
   readonly xp: number;
@@ -518,6 +724,12 @@ export interface CombatState {
   readonly rewards: CombatRewards | null;
   /** World flags captured at encounter start (gates apex dragon forms). Never rebuild state field-by-field or these are lost. */
   readonly flags?: WorldFlags;
+  /** Phase 3 — elemental terrain hazards on each side of the field (managed by combat modifiers). */
+  readonly hazards?: readonly HazardInstance[];
+  /** Phase 3 — an open quick-time window; while set, the active hero must answer with a `qte` action. */
+  readonly qte?: QteWindow | null;
+  /** Monotonic id source for hazard instances. */
+  readonly hazardSeq?: number;
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -986,6 +1198,13 @@ export interface GameDatabase {
   readonly clues: readonly ClueDef[];
   /** Endings, highest `priority` whose `when` holds wins (see `resolveEnding` in the store). */
   readonly endings: readonly EndingDef[];
+  /** Phase 3 */
+  readonly hazards: Readonly<Record<HazardId, HazardDef>>;
+  readonly reactions: readonly ElementalReactionDef[];
+  readonly mounts: Readonly<Record<MountId, MountDef>>;
+  readonly stamina: StaminaTuning;
+  /** Every visual the external pipeline must deliver (see `src/assets/manifests`). */
+  readonly assetRequests: readonly AssetManifestEntry[];
   readonly world: WorldMapDef;
   readonly township: TownshipDef;
   readonly species: Readonly<Record<SpeciesId, SpeciesDef>>;
@@ -1041,6 +1260,13 @@ export interface CoreServices {
     effectiveStats(state: CombatState, id: CombatantId): Stats;
     availableSkills(state: CombatState, id: CombatantId): readonly SkillId[];
     availableForms(state: CombatState, id: CombatantId): readonly { readonly formId: DragonFormId; readonly usable: boolean; readonly reason?: string }[];
+  };
+  readonly stamina: {
+    initial(tuning: StaminaTuning): StaminaState;
+    /** Advance by dt seconds while draining `drainPerSec` (0 = resting). */
+    tick(state: StaminaState, drainPerSec: number, dt: number, tuning: StaminaTuning): StaminaState;
+    /** Can a drain of this rate start now (false while exhausted or empty)? */
+    canDrain(state: StaminaState): boolean;
   };
   readonly quests: {
     initialLog(): QuestLog;
@@ -1165,6 +1391,10 @@ export interface GameState {
   readonly worldTime: number;
   readonly clearedZones: readonly string[];
   readonly toasts: readonly Toast[];
+  /** Phase 3 — current mount (null on foot). Stamina itself lives on the runtime bus. */
+  readonly mountedOn: MountId | null;
+  /** Fast-travel destination in flight (null when not auto-flying). */
+  readonly flightTarget: RegionId | null;
   readonly ui: {
     readonly chronicleOpen: boolean;
     readonly inspectorOpen: boolean;
@@ -1205,6 +1435,13 @@ export interface GameActions {
   dismissToast(id: number): void;
   /** Engine → store, ~4 Hz: advance world time (drives wind + cooldowns). */
   tickWorld(dt: number): void;
+  /** Mount/dismount. Fails (toast) if locked or the providing hero is not in the party. */
+  mount(mountId: MountId): void;
+  dismount(): void;
+  /** Fast travel: mount the unlocked flight mount and fly to a discovered region (`evt:enter:<id>`). */
+  flyTo(regionId: RegionId): void;
+  /** Engine → store: the flight reached its destination (or stamina forced a landing). */
+  arrive(reason: 'arrived' | 'exhausted' | 'cancelled'): void;
 }
 
 export type GameStore = GameState & GameActions;
@@ -1216,7 +1453,9 @@ export type GameStore = GameState & GameActions;
 /** The ONLY mutable contract. Written every frame; never put it in React state. */
 export interface RuntimeBus {
   /** UI writes, engine reads. Analog stick, each axis −1..1 (y: up on screen = −1 = north/−z). */
-  input: { moveX: number; moveY: number; reelHeld: boolean };
+  input: { moveX: number; moveY: number; reelHeld: boolean; sprint: boolean; boost: boolean };
+  /** Engine writes each frame via `core.stamina.tick`; UI reads in rAF. */
+  stamina: StaminaState;
   /** Engine writes, UI may read (minimap / tracker arrow). */
   player: { x: number; z: number; facing: number; moving: boolean; speed: number };
   /** Engine writes: 0 = overworld framing, 1 = combat framing. */
@@ -1228,6 +1467,8 @@ export interface RuntimeBus {
     huntAim: { angle: number; power: number } | null;
     /** Set with a traversal request: the gate to cross (engine validates proximity). */
     traverseGate: string | null;
+    /** Fast-travel request: fly to this point (engine consumes and clears). */
+    flyTo: Vec2 | null;
   };
   /** Engine writes each frame (dev overlay + perf test). */
   perf: { drawCalls: number; fps: number; triangles: number };
