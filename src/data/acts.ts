@@ -1,51 +1,50 @@
 import type { StoryActDef } from '@/types/contracts';
-import { QUEST } from './ids';
 
-export const acts: readonly StoryActDef[] = [
+/**
+ * Act synopses. `questIds` is filled in by `src/data/index.ts` from each quest's `act`
+ * so the chronicle always lists every quest in the database.
+ */
+export const acts: readonly Omit<StoryActDef, 'questIds'>[] = [
   {
     act: 1,
     title: 'Act I — The Lanternwick Ledger',
     synopsis:
-      'On the Lanternwick frontier, forty sacks of tithe-grain vanish between the mill and the Covenant\'s Greyford post, and the Hollow Covenant demands the settlers pay twice. Kael, last of the Ashen Drake clan, follows the ledger with warden Tobin Marsh and the arena duelist Vesna — and finds the Covenant robbing its own faithful. Along the way he recovers his clan\'s drowned relic, Vesna buys back her freedom in the Cinder Ring, and a cleared field called Hearthstead becomes a village.',
+      'Kael, last of the Ashen Drake clan, finally walks back into Ashfall Hollow, where his clan burned, and hears of lanterns that did not flicker. Home on the Lanternwick frontier, forty sacks of tithe-grain vanish and the Hollow Covenant demands the settlers pay twice. Following the ledger with Tobin and Vesna, Kael finds the Covenant robbing its own faithful — then carries the fight to the wind-spire city of Galecrest, where the chanter Orla joins, and to the border fortress of Marrowgate, where the quarryman Hadrik rolls through the gate.',
     beats: [
-      'Lanternwick at lantern-light: Elder Maren asks Kael to trace the missing tithe-grain.',
-      'Wenna the miller and Brother Caul\'s too-neat ledger point down the grain road.',
-      'Drake-Sight pierces a Covenant glamour: Pell the carter, hidden and terrified, names Captain Ferris.',
-      'The tithe wagon is broken on the grain road; the true ledger page shows the grain went to Deacon Vash.',
-      'Companion — Embers of the Clan: Isolde guides Kael to the drowned shrine in Mirror Tarn; Ashka remembers, and the Wyrm\'s Lament is reclaimed.',
-      'Companion — Debts of the Cinder Ring: Vesna runs down a bristleboar by hand and beats Halvard the Unbowed for her marker and the Cinder Ring Talon.',
+      'Prologue — Ashfall Hollow: Kael wakes the shade of his clan\'s last keeper with Drake-Sight and drives the Covenant gleaners from the burned hall.',
+      'The Lanternwick Ledger: a hidden witness, a broken tithe wagon, and Deacon Vash cast out of the Greyford tithe-post.',
+      'Embers of the Clan and Debts of the Cinder Ring: the Wyrm\'s Lament rises from Mirror Tarn; Vesna burns her marker.',
       'Hearthstead rises: Bram\'s carpentry and Gilda\'s smithy turn a survey stake into a home.',
-      'Greyford is stormed, Deacon Vash falls, and the occupied tithe-post is liberated. The grain comes home — and Greyspire takes notice.',
+      'The Chimes of Galecrest: Orla is freed and Cantor Imrey\'s chime-cages fall silent. The mills turn again.',
+      'The Siege of Marrowgate: a glamoured sapper, a tunnel, and Marshal Vale broken. Hadrik joins; the roads west and south open.',
     ],
-    questIds: [QUEST.ledger, QUEST.embers, QUEST.debts, QUEST.timber, QUEST.anvil],
   },
   {
     act: 2,
     title: 'Act II — The Hollow Covenant',
     synopsis:
-      'With Greyford free, the frontier begins to talk. Across the coast, the tarn and the highlands, Kael\'s party pulls on separate threads in any order — doctored harbour tithes, wisps singing Covenant hymns, the lanterns seen on the night the Ashen Drake hall burned. Each thread frees a region, wakes a sealed Warden, and adds a locked companion to the roster. Together they reveal that the Covenant does not worship spirits: it stills them, and feeds them to something under Greyspire.',
+      'Beyond the Fallen Pass and the Sundered Gorge, the continent opens. In the order the party chooses, Kael\'s companions free the marsh-lights of Mirefast (Pim), open the Ledger Hall of Saffrane (Quill), save the Heartwood of Hollowroot (Moss) and empty the Lantern Hall of the Rimefold (Sable). Each new companion opens roads the others could not. Across every chunk, clues pile up: the Covenant does not worship spirits — it stills them, weighs them, and ships them to the Greyspire Works.',
     beats: [
-      'Thessaly the wayfarer lays out three threads; the party may pursue them in any order.',
-      'Salt in the Ledgers: Saltmarket\'s double-inked tithe-books lead to the Greyspire Works and to Orla of the Brinefolk.',
-      'The Stilled Choir: the tarn wisps\' hymn is a binding-chant; Quill, an apostate archivist, deciphers it.',
-      'The Ashen Road: Covenant lanterns on the night of the burning; Kael learns a Deacon lit the fire on the Hierophant\'s word.',
-      'Sealed Wardens — Zephra, Tor, Lumen, Nyx — are found caged in chime, quarry, lantern and shadow; freeing each changes a region.',
-      'Hadrik, Pim, Moss and Sable join as the frontier turns against the Covenant.',
+      'Two roads from Marrowgate: the marshes (Hadrik rolls the Fallen Pass) or the great forest (Orla glides the Sundered Gorge).',
+      'The Drowned Abbey: Pim jams the sluice that drinks the marsh-lights; Abbess Morrow falls.',
+      'The Ledger Hall of Saffrane: Pim bounds the Mire Ford; Quill audits the auditors and Comptroller Vey.',
+      'The Felling of Hollowroot: Moss and a hidden dryad stop Fellwarden Grath\'s saws.',
+      'The Reliquary of Rime: Moss opens the Rimepine; Sable and the party empty a thousand lanterns.',
+      'Investigations — Salt in the Ledgers, the Stilled Choir, the Ashen Road, the Greyspire Works and the Hierophant\'s Name — can be pursued in any order.',
+      'Personal quests: each companion earns a relic that grows with them and a signature that changes how they fight.',
     ],
-    questIds: [QUEST.saltLedgers, QUEST.stilledChoir, QUEST.ashenRoad],
   },
   {
     act: 3,
     title: 'Act III — The Still Flame',
     synopsis:
-      'Beneath the cathedral at Greyspire burns the Still Flame: a fire that does not flicker because it is fed on silenced Wardens. The Hierophant means to add the last free hearth-spirit, Ashka, and with her the drake-blood in Kael — and with it, the end of every spirit that ever chose. The party must descend through the cathedral\'s ledger-vaults, sound the Wyrm\'s Lament, and let the Flame flicker at last.',
+      'Quill unseals the caldera road and Sable climbs the Frost Scarp: in the Emberdeep Caldera the Kilnworks render stilled Wardens into fuel. Kael douses them, and the Banked Flame at the caldera\'s heart names him its sovereign. Then, behind the Hierophant\'s Veil south of Hearthstead, Greyspire: a cathedral built over a fire that does not flicker, fed for a century on Wardens — and first lit with drake-blood. What Kael does there depends on how much of the truth he has gathered, and who stands with him.',
     beats: [
-      'The Covenant answers the frontier\'s defiance with an army of the stilled.',
-      'Greyspire\'s ledger-vaults: a century of tithes, every one a spirit\'s silence.',
-      'The Hierophant reveals the Still Flame and offers Kael his clan back — as embers in the fire.',
-      'Kael takes his final dragon form; Ashka and Mirelle\'s Steamveil shields the party as the Wardens are unbound.',
-      'The Wyrm\'s Lament is sounded for the first time in twenty years. The Flame flickers. The Wardens choose.',
+      'The Kilnworks: Forgemaster Skarn falls and the furnaces go cold.',
+      'The Sovereign\'s Crown: Kael\'s apex form, the Sovereign of the Banked Flame, awakens.',
+      'The Hierophant\'s Veil: Quill reads the cathedral\'s ward open.',
+      'Greyspire: Exarch Thorne, the hidden sacristan, and the sanctum stair.',
+      'The Hierophant falls. The Still Flame asks Kael to choose: quench it, feed it his blood — or, with every clue, every companion and every oath kept, sound the Wyrm\'s Lament and call the Wardens home.',
     ],
-    questIds: [QUEST.stillFlame],
   },
 ];

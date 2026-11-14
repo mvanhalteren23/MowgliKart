@@ -1,5 +1,5 @@
 import type { DialogueDef } from '@/types/contracts';
-import { ENC, FLAG, QUEST } from './ids';
+import { ENC, FLAG, MAIN, QUEST } from './ids';
 
 const set = (key: string) => ({ type: 'setFlag', key, value: true }) as const;
 const accept = (questId: string) => ({ type: 'acceptQuest', questId }) as const;
@@ -17,6 +17,25 @@ export const dialogues = {
     choices: [
       { id: 'accept', label: 'I\'ll follow the ledger.', events: [accept(QUEST.ledger)] },
       { id: 'later', label: 'Give me a little time.' },
+    ],
+  },
+  'dlg.maren.prologue': {
+    id: 'dlg.maren.prologue',
+    lines: [
+      { speaker: 'Elder Maren', text: 'Kael. The north road came back with a rumour: Covenant gleaners are sifting Ashfall Hollow.' },
+      { speaker: 'Elder Maren', text: 'Your clan\'s hall. I know you\'ve never gone back. I think you should — before they finish.' },
+      { speaker: 'Kael', text: 'Twenty years of not looking. All right. North, then.' },
+    ],
+    choices: [
+      { id: 'accept', label: 'I\'ll go to Ashfall.', events: [accept(MAIN.prologue)] },
+      { id: 'later', label: 'Not yet.' },
+    ],
+  },
+  'dlg.maren.prologueHint': {
+    id: 'dlg.maren.prologueHint',
+    lines: [
+      { speaker: 'Elder Maren', text: 'The north road, past the chapel lane. Ashfall is a morning\'s walk.' },
+      { speaker: 'Elder Maren', text: 'Take Tobin and Vesna. Ghosts are easier in company.' },
     ],
   },
   'dlg.maren.active': {
@@ -297,12 +316,28 @@ export const dialogues = {
       { speaker: 'Harbormaster Odo', text: 'Go say hello before the tide turns.' },
     ],
   },
+  'dlg.odo.books': {
+    id: 'dlg.odo.books',
+    lines: [
+      { speaker: 'Harbormaster Odo', text: 'Since Greyford fell I\'ve been reading my own tithe-books. Properly, for once.' },
+      { speaker: 'Harbormaster Odo', text: 'Two inks. Black for us, grey for Greyspire. The grey column is always bigger.' },
+    ],
+    onEnd: [set('clue:harbourBooks')],
+  },
   'dlg.odo.harbour': {
     id: 'dlg.odo.harbour',
     lines: [
       { speaker: 'Harbormaster Odo', text: 'Saltmarket pays its tithe in herring and patience. Lately the Covenant wants more of both.' },
       { speaker: 'Harbormaster Odo', text: 'Land a lantern eel off my pier and the Brinefolk barge follows it in. Best trading on the coast.' },
     ],
+  },
+  'dlg.barge.manifest': {
+    id: 'dlg.barge.manifest',
+    lines: [
+      { speaker: 'Brinefolk Trader', text: 'The eel-light brought you. Then you may see what the barge does not show the Covenant.' },
+      { speaker: 'Brinefolk Trader', text: 'Our manifest: sealed crates, Saltmarket to "the Works". We are paid double not to open them. One hummed all the way.' },
+    ],
+    onEnd: [set('clue:bargeManifest')],
   },
   'dlg.barge.hello': {
     id: 'dlg.barge.hello',
@@ -315,7 +350,7 @@ export const dialogues = {
     id: 'dlg.thessaly.act2',
     lines: [
       { speaker: 'Thessaly', text: 'Greyford\'s free, they say. Good. Now follow the money: harbour tithes, tarn wisps, the old highland road.' },
-      { speaker: 'Thessaly', text: 'Every thread ends at Greyspire. When you\'re ready, I\'ll be here.' },
+      { speaker: 'Thessaly', text: 'Pull any thread you like, in any order. Every one of them ends at Greyspire.' },
     ],
   },
   'dlg.thessaly.idle': {

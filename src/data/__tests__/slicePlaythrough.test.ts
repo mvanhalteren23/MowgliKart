@@ -1,16 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { gameData } from '@/data';
-import { ENC, FLAG, NPC, QUEST, REGION, SPECIES, SPOT } from '@/data/ids';
+import { ENC, FLAG, INV, MAIN, NPC, QUEST, REGION, SPECIES, SPOT } from '@/data/ids';
 import { createWorldSystems } from '@/systems';
 import { Playthrough } from './harness';
 
 const fresh = () => new Playthrough(gameData, createWorldSystems(gameData));
+
+/** The Ashfall prologue, played by hand: it opens the Ledger. */
+function playPrologue(p: Playthrough): void {
+  p.dispatch({ type: 'enterRegion', regionId: REGION.lanternwick });
+  expect(p.status(MAIN.prologue)).toBe('DISCOVERED');
+  expect(p.dialogueFor(NPC.maren).id).toBe('dlg.maren.prologue');
+  p.talk(NPC.maren, 'accept');
+  expect(p.status(MAIN.prologue)).toBe('ACTIVE');
+  p.dispatch({ type: 'enterRegion', regionId: 'ashfallHollow' });
+  expect(p.zoneOpen('enc.gleanerPrior')).toBe(false);
+  p.reveal('npc.shadeAldra');
+  p.talk('npc.shadeAldra');
+  expect(p.flags[FLAG.shadeHeard]).toBe(true);
+  p.win('enc.gleanerPrior');
+  expect(p.status(MAIN.prologue)).toBe('COMPLETED');
+  expect(p.flags[FLAG.prologueDone]).toBe(true);
+}
 
 describe('slice playthrough (events exactly as the app dispatches them)', () => {
   it('The Lanternwick Ledger is completable and liberates the tithe-post', () => {
     const p = fresh();
     expect(p.status(QUEST.ledger)).toBe('HIDDEN');
     p.dispatch({ type: 'enterRegion', regionId: REGION.lanternwick });
+    expect(p.status(QUEST.ledger)).toBe('HIDDEN'); // chapter 2 waits for the prologue
+    playPrologue(p);
     expect(p.status(QUEST.ledger)).toBe('DISCOVERED');
     expect(p.dialogueFor(NPC.maren).id).toBe('dlg.maren.offer');
 
@@ -116,6 +135,7 @@ describe('slice playthrough (events exactly as the app dispatches them)', () => 
     expect(p.flags[FLAG.carpentry]).toBe(true);
 
     // Clear the wagon (main quest step) — guaranteed Covenant iron from the captain.
+    playPrologue(p);
     p.talk(NPC.maren, 'accept');
     p.talk(NPC.wenna);
     p.talk(NPC.caul);
@@ -136,8 +156,9 @@ describe('slice playthrough (events exactly as the app dispatches them)', () => 
     expect(p.dialogueFor(NPC.bram).id).toBe('dlg.bram.township');
   });
 
-  it('Act II investigations and the Act III spine stay hidden through the whole slice', () => {
+  it('after the Ledger the investigations open and the next chapter is discovered; Act III stays hidden', () => {
     const p = fresh();
+    playPrologue(p);
     p.talk(NPC.maren, 'accept');
     p.talk(NPC.wenna);
     p.talk(NPC.caul);
@@ -147,10 +168,16 @@ describe('slice playthrough (events exactly as the app dispatches them)', () => 
     p.win(ENC.tithePost);
     p.talk(NPC.thessaly);
     p.talk(NPC.isolde, 'accept');
-    for (const q of gameData.quests) {
-      if (q.kind === 'investigation' || q.act === 3) expect(p.status(q.id)).toBe('HIDDEN');
-    }
+    for (const q of gameData.quests) if (q.act === 3) expect(p.status(q.id)).toBe('HIDDEN');
+    expect(p.status(INV.saltLedgers)).toBe('DISCOVERED');
+    expect(p.status(INV.ashenRoad)).toBe('DISCOVERED');
+    expect(p.status(MAIN.galecrest)).toBe('DISCOVERED');
     expect(p.dialogueFor(NPC.thessaly).id).toBe('dlg.thessaly.act2');
+    // A clue found anywhere activates its investigation.
+    expect(p.dialogueFor(NPC.odo).id).toBe('dlg.odo.books');
+    p.talk(NPC.odo);
+    expect(p.status(INV.saltLedgers)).toBe('ACTIVE');
+    expect(p.log[INV.saltLedgers]?.objectives.harbourBooks).toBe(true);
   });
 
   it('landing a lantern eel at the pier surfaces the Brinefolk barge merchant', () => {
@@ -159,5 +186,8 @@ describe('slice playthrough (events exactly as the app dispatches them)', () => 
     p.fish(SPOT.pier, 'fish.lanternEel');
     expect(p.isPresent(NPC.barge)).toBe(true);
     expect(p.dialogueFor(NPC.odo).id).toBe('dlg.odo.barge');
+    p.talk(NPC.barge);
+    expect(p.flags['clue:bargeManifest']).toBe(true);
+    expect(p.dialogueFor(NPC.barge).id).toBe('dlg.barge.hello');
   });
 });

@@ -1,9 +1,10 @@
 import type { QuestDef } from '@/types/contracts';
 import { accepted, any, defeated, fieldDone, flagIs, talked } from '../conditions';
-import { ENC, FLAG, NPC, QUEST, SPECIES, SPOT } from '../ids';
+import { CHAIN, ENC, FLAG, NPC, QUEST, SPECIES, SPOT } from '../ids';
 
 export const embersOfTheClan: QuestDef = {
   id: QUEST.embers,
+  chain: { id: CHAIN.kael, stage: 1, of: 3, title: 'Embers of the Clan' },
   title: 'Embers of the Clan',
   kind: 'companion',
   act: 1,
@@ -52,6 +53,7 @@ export const embersOfTheClan: QuestDef = {
 
 export const debtsOfTheCinderRing: QuestDef = {
   id: QUEST.debts,
+  chain: { id: CHAIN.vesna, stage: 1, of: 3, title: 'Debts of the Cinder Ring' },
   title: 'Debts of the Cinder Ring',
   kind: 'companion',
   act: 1,

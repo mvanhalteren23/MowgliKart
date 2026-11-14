@@ -160,13 +160,13 @@ export const gear = {
     id: 'relic.ashenLaurel', name: 'Ashen Laurel', slot: 'relic', archetype: 'relic', icon: '🏵️', boundHero: 'vesna',
     description: 'The Sunken Ring\'s champion crown, woven of fire-blackened bay. It remembers every crowd that chanted her name.',
     stats: { atk: 3, def: 2 },
-    scaling: { perLevel: { atk: 5, def: 4, maxHp: 10 }, levelCurve: 'log', perLiberatedRegion: { atk: 1, maxHp: 4 }, cap: { atk: 22, def: 16, maxHp: 60 } },
+    scaling: { perLevel: { atk: 2, def: 1.5, maxHp: 6 }, levelCurve: 'log', perLiberatedRegion: { atk: 1, maxHp: 4 }, cap: { atk: 40, def: 30, maxHp: 120 } },
   },
   'relic.galeHymnal': {
     id: 'relic.galeHymnal', name: 'Hymnal of the High Wind', slot: 'relic', archetype: 'relic', icon: '📖', boundHero: 'orla',
     description: 'Every verse the Covenant tried to silence, written down at last. Each freed region adds a stanza.',
     stats: { mag: 3, maxAp: 3 },
-    scaling: { perLevel: { mag: 3, res: 2, maxAp: 3 }, levelCurve: 'sqrt', perLiberatedRegion: { mag: 1, maxAp: 1 }, cap: { mag: 26, res: 18, maxAp: 30 } },
+    scaling: { perLevel: { mag: 1.5, res: 1, maxAp: 1.5 }, levelCurve: 'sqrt', perLiberatedRegion: { mag: 1, maxAp: 1 }, cap: { mag: 40, res: 30, maxAp: 40 } },
   },
   'relic.quarryHeart': {
     id: 'relic.quarryHeart', name: 'Quarry-Heart Stone', slot: 'relic', archetype: 'relic', icon: '🪨', boundHero: 'hadrik',
@@ -178,7 +178,7 @@ export const gear = {
     id: 'relic.everwoundMainspring', name: 'Everwound Mainspring', slot: 'relic', archetype: 'relic', icon: '⚙️', boundHero: 'pim',
     description: 'A spring that winds itself on every step. Pim swears it has opinions.',
     stats: { spd: 2, atk: 2 },
-    scaling: { perLevel: { spd: 4, luck: 4, atk: 4 }, levelCurve: 'log', perLiberatedRegion: { luck: 1, spd: 1 }, cap: { spd: 20, luck: 20, atk: 18 } },
+    scaling: { perLevel: { spd: 1, luck: 1.5, atk: 1.5 }, levelCurve: 'log', perLiberatedRegion: { luck: 1, spd: 1 }, cap: { spd: 30, luck: 36, atk: 30 } },
   },
   'relic.unburnedLedger': {
     id: 'relic.unburnedLedger', name: 'The Unburned Ledger', slot: 'relic', archetype: 'relic', icon: '📕', boundHero: 'quill',
@@ -196,7 +196,7 @@ export const gear = {
     id: 'relic.moonlessLantern', name: 'Moonless Lantern', slot: 'relic', archetype: 'relic', icon: '🏮', boundHero: 'sable',
     description: 'An empty reliquary — the first she ever emptied. It shines darker every time she frees another.',
     stats: { atk: 2, luck: 3 },
-    scaling: { perLevel: { atk: 5, luck: 5, spd: 3 }, levelCurve: 'log', perLiberatedRegion: { luck: 1, atk: 1 }, cap: { atk: 22, luck: 24, spd: 14 } },
+    scaling: { perLevel: { atk: 1.5, luck: 1.5, res: 1 }, levelCurve: 'log', perLiberatedRegion: { luck: 1, atk: 1 }, cap: { atk: 36, luck: 40, res: 24 } },
   },
 
   /* ── Personal signatures (build-altering hooks, bound) ────────────── */

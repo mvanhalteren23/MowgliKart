@@ -1,6 +1,6 @@
 import type { QuestDef } from '@/types/contracts';
-import { accepted, any, defeated, entered, fieldDone, flagIs, liberated, never, obtained, talked } from '../conditions';
-import { ENC, FLAG, NPC, QUEST, REGION } from '../ids';
+import { accepted, defeated, fieldDone, flagIs, liberated, obtained, questIs } from '../conditions';
+import { ENC, FLAG, MAIN, NPC, QUEST, REGION } from '../ids';
 
 export const lanternwickLedger: QuestDef = {
   id: QUEST.ledger,
@@ -17,8 +17,8 @@ export const lanternwickLedger: QuestDef = {
     COMPLETED:
       'The true ledger page named the thief: the Covenant itself. Deacon Vash is broken, the Greyford tithe-post is free, and the grain is coming home. The Still Flame will not forgive it.',
   },
-  // initialLog() does not evaluate conditions, so discovery needs a real event.
-  discoverWhen: any(talked(NPC.maren), entered(REGION.lanternwick), accepted(QUEST.ledger)),
+  // Chapter 2 of the story graph: opens once the Ashfall prologue is done.
+  discoverWhen: questIs(MAIN.prologue, 'COMPLETED'),
   activateWhen: accepted(QUEST.ledger),
   objectives: [
     {
@@ -76,26 +76,4 @@ export const lanternwickLedger: QuestDef = {
     { type: 'item', itemId: 'item.hiTonic', qty: 2 },
     { type: 'flag', key: FLAG.act1Complete, value: true },
   ],
-};
-
-/** Act III spine — defined so the chronicle can name it; undiscoverable in the slice. */
-export const theStillFlame: QuestDef = {
-  id: QUEST.stillFlame,
-  title: 'The Still Flame',
-  kind: 'main',
-  act: 3,
-  summary: 'Beneath the cathedral at Greyspire, the Covenant feeds stilled Wardens into a flame that does not flicker.',
-  chronicle: {
-    HIDDEN: '',
-    DISCOVERED: 'Every road the Covenant built leads to Greyspire.',
-    ACTIVE: 'The Hierophant means to still the last free Warden — Ashka — and with her, the drake-blood in Kael.',
-    COMPLETED: 'The Still Flame gutters. For the first time in a century, the Wardens are free to choose.',
-  },
-  discoverWhen: never,
-  activateWhen: accepted(QUEST.stillFlame),
-  objectives: [
-    { id: 'reachGreyspire', text: 'Reach the cathedral at Greyspire.', completeWhen: never },
-    { id: 'quenchFlame', text: 'Quench the Still Flame.', completeWhen: never },
-  ],
-  rewards: [],
 };

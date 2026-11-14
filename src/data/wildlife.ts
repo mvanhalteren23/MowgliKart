@@ -13,7 +13,7 @@ export const species = {
     id: SPECIES.deer, name: 'Ashdeer', sprite: 'animal.deer.ash',
     speed: 9, wanderSpeed: 1.1, alertRadius: 16, scentSensitivity: 3.2,
     drops: [{ itemId: 'item.softHide', chance: 0.9 }, { itemId: 'item.smokedVenison', chance: 0.6 }, { itemId: 'item.antlerVelvet', chance: 0.2 }],
-    herd: { min: 3, max: 5 },
+    herd: { min: 3, max: 4 },
     habitat: [{ center: { x: 42, z: 150 }, radius: 22 }],
   },
   [SPECIES.boar]: {
@@ -27,14 +27,14 @@ export const species = {
     id: SPECIES.hare, name: 'Thistlehare', sprite: 'animal.hare.thistle',
     speed: 10, wanderSpeed: 1.4, alertRadius: 7, scentSensitivity: 1.2,
     drops: [{ itemId: 'item.hareFoot', chance: 0.8 }, { itemId: 'item.smokedVenison', chance: 0.2 }],
-    herd: { min: 2, max: 4 },
+    herd: { min: 2, max: 3 },
     habitat: [{ center: { x: 78, z: 152 }, radius: 14 }, { center: { x: 135, z: 228 }, radius: 10 }],
   },
   [SPECIES.grouse]: {
     id: SPECIES.grouse, name: 'Reedgrouse', sprite: 'animal.bird.reedgrouse',
     speed: 11, wanderSpeed: 0.9, alertRadius: 13, scentSensitivity: 0.4,
     drops: [{ itemId: 'item.grouseFeather', chance: 0.95 }],
-    herd: { min: 3, max: 6 },
+    herd: { min: 3, max: 4 },
     habitat: [{ center: { x: 128, z: 82 }, radius: 10 }],
   },
 } satisfies Record<string, SpeciesDef>;

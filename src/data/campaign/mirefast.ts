@@ -253,7 +253,7 @@ export const mirefast: ChapterContent = {
       summary: 'The abbey\'s bell-loft stair collapsed into the mire. Orla wants to sing from it anyway.',
       chronicle: chron('Orla keeps humming along with the abbey bells.', 'Glide to the drowned bell-loft and ring the boats home with Osk.', 'Orla sang from the bell-loft and the marsh sang back.'),
       discoverWhen: all(questIs('companion.orla.updraft', 'COMPLETED'), questIs(MAIN.mirefast, 'COMPLETED')),
-      activateWhen: always,
+      activateWhen: crossed('glide', GATE.abbeyGap),
       objectives: [
         obj('glideLoft', 'Glide across the collapsed stair (Orla).', crossed('glide', GATE.abbeyGap), P(90, 32)),
         obj('ring', 'Ring the boats home with Osk.', flagIs('orla.bellRung'), P(96, 16), crossed('glide', GATE.abbeyGap)),
@@ -265,7 +265,7 @@ export const mirefast: ChapterContent = {
       summary: 'Moss planted a willow in the marsh before Mirefast had a name. Someone has been living inside it.',
       chronicle: chron('Moss says a willow in the marsh is calling him.', 'Commune with the Willow-Knot and hear its keeper out.', 'Mother Mab told Moss what the first Hierophant was. He has not said much since.'),
       discoverWhen: questIs('companion.moss.heartGrove', 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('commune', GATE.willowKnot),
       objectives: [
         obj('open', 'Commune with the Willow-Knot (Moss).', crossed('commune', GATE.willowKnot), P(30, 116)),
         obj('hear', 'Hear Mother Mab.', flagIs('moss.willowHeard'), P(14, 112), crossed('commune', GATE.willowKnot)),
@@ -277,7 +277,7 @@ export const mirefast: ChapterContent = {
       summary: 'A Covenant war-machine stomps the east meres. Pim recognises the gait.',
       chronicle: chron('Dell says something clockwork is loose in the meres.', 'Bound back across the Mire Ford and unwind the Clockwork Hulk.', 'The hulk ran on Pim\'s stolen designs. Dell gave her the Pocketful of Cogs.'),
       discoverWhen: questIs('companion.pim.rapids', 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('leap', GATE.mireFord),
       objectives: [
         obj('ford', 'Spring-leap the Mire Ford (Pim).', crossed('leap', GATE.mireFord), P(120, 250)),
         obj('hulk', 'Unwind the Clockwork Hulk.', defeated('enc.clockworkHulk'), P(215, 175)),

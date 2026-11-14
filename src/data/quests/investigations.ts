@@ -1,73 +1,43 @@
 import type { QuestDef } from '@/types/contracts';
-import { accepted, all, flagIs, never, questAtLeast } from '../conditions';
-import { FLAG, NPC, QUEST } from '../ids';
+import { any, questIs } from '../conditions';
+import { chron, obj } from '../dsl';
+import { INV, MAIN, QUEST } from '../ids';
+import { clues } from '../story';
 
 /**
- * Act II — non-linear Hollow Covenant investigations. Defined as data; they stay
- * HIDDEN in the slice because nothing sets `act2.open`.
+ * Act II — non-linear Hollow Covenant investigations. Each discovers on a story beat OR the first
+ * of its clues, activates at once, and completes when all three of its clues are found (in any order).
  */
-const act2Gate = all(flagIs(FLAG.act2Open), questAtLeast(QUEST.ledger, 'COMPLETED'));
+function investigation(id: string, title: string, act: 1 | 2 | 3, summary: string, story: string, text: { d: string; a: string; c: string }, xp: number): QuestDef {
+  const mine = clues.filter((c) => c.investigationId === id);
+  return {
+    id, title, kind: 'investigation', act, summary,
+    chronicle: chron(text.d, text.a, text.c),
+    discoverWhen: any(questIs(story, 'COMPLETED'), ...mine.map((c) => c.foundWhen)),
+    activateWhen: any(...mine.map((c) => c.foundWhen)),
+    objectives: mine.map((c) => obj(c.id, c.title, c.foundWhen)),
+    rewards: [{ type: 'xp', amount: xp }, { type: 'coin', amount: Math.round(xp / 4) }, { type: 'flag', key: `${id}.solved`, value: true }],
+  };
+}
 
-export const saltLedgers: QuestDef = {
-  id: QUEST.saltLedgers,
-  title: 'Salt in the Ledgers',
-  kind: 'investigation',
-  act: 2,
-  giver: NPC.thessaly,
-  summary: 'Saltmarket\'s harbour tithes are recorded in two different inks. Someone is skimming twice.',
-  chronicle: {
-    HIDDEN: '',
-    DISCOVERED: 'Thessaly heard the harbour clerk weeping over his own ledgers.',
-    ACTIVE: 'Compare the harbour tithe-books against the Brinefolk manifests.',
-    COMPLETED: 'The Covenant\'s skim funds something called the Greyspire Works.',
-  },
-  discoverWhen: act2Gate,
-  activateWhen: accepted(QUEST.saltLedgers),
-  objectives: [
-    { id: 'harbourBooks', text: 'Get a look at the harbour tithe-books.', completeWhen: never },
-    { id: 'bargeManifest', text: 'Trade for a Brinefolk barge manifest.', completeWhen: never },
-  ],
-  rewards: [{ type: 'xp', amount: 150 }],
-};
+export const saltLedgers = investigation(INV.saltLedgers, 'Salt in the Ledgers', 2,
+  'Saltmarket\'s harbour tithes are recorded in two different inks. Someone is skimming twice.', QUEST.ledger,
+  { d: 'Thessaly says the harbour clerk weeps over his own books.', a: 'Follow the tithe money: harbour books, Brinefolk manifests, caravan scrip.', c: 'The skim pays for "fuel" at the Greyspire Works — by the Warden-weight.' }, 1200);
 
-export const stilledChoir: QuestDef = {
-  id: QUEST.stilledChoir,
-  title: 'The Stilled Choir',
-  kind: 'investigation',
-  act: 2,
-  summary: 'Every wisp in Mirror Tarn sings the same three notes — a Covenant hymn. Spirits do not sing hymns.',
-  chronicle: {
-    HIDDEN: '',
-    DISCOVERED: 'Mirelle refuses to speak near the tarn wisps.',
-    ACTIVE: 'Trace the hymn the stilled wisps repeat back to whoever taught it.',
-    COMPLETED: 'The hymn is a binding. The Covenant does not worship spirits; it harvests them.',
-  },
-  discoverWhen: act2Gate,
-  activateWhen: accepted(QUEST.stilledChoir),
-  objectives: [
-    { id: 'recordHymn', text: 'Listen to the wisps under Drake-Sight.', completeWhen: never },
-    { id: 'findCantor', text: 'Find the cantor who wrote the hymn.', completeWhen: never },
-  ],
-  rewards: [{ type: 'xp', amount: 150 }],
-};
+export const stilledChoir = investigation(INV.stilledChoir, 'The Stilled Choir', 2,
+  'Every stilled spirit sings the same three notes — a Covenant hymn. Spirits do not sing hymns.', MAIN.galecrest,
+  { d: 'Mirelle refuses to speak near stilled wisps.', a: 'Trace the hymn: the tarn wisps, Galecrest\'s chime-cages, Hollowroot\'s tagged stags.', c: 'The hymn is a binding. A spirit that sings it can be carried — to Greyspire.' }, 1400);
 
-export const ashenRoad: QuestDef = {
-  id: QUEST.ashenRoad,
-  title: 'The Ashen Road',
-  kind: 'investigation',
-  act: 2,
-  companion: 'kael',
-  summary: 'The night the Ashen Drake clan burned, a Covenant procession was seen on the old highland road.',
-  chronicle: {
-    HIDDEN: '',
-    DISCOVERED: 'Isolde remembers lanterns on the highland road that night.',
-    ACTIVE: 'Walk the Ashen Road and find who carried those lanterns.',
-    COMPLETED: 'The fire that took Kael\'s clan was lit by a Deacon\'s hand — on the Hierophant\'s word.',
-  },
-  discoverWhen: never,
-  activateWhen: accepted(QUEST.ashenRoad),
-  objectives: [
-    { id: 'walkRoad', text: 'Walk the Ashen Road to the burned hall.', completeWhen: never },
-  ],
-  rewards: [{ type: 'xp', amount: 180 }],
-};
+export const ashenRoad = investigation(INV.ashenRoad, 'The Ashen Road', 2,
+  'The night the Ashen Drake clan burned, a Covenant procession was seen on the highland road.', MAIN.prologue,
+  { d: 'Keeper Aldra spoke of lanterns that did not flicker.', a: 'Find who carried those lanterns: Ashfall\'s vault, Marrowgate\'s log, the frozen north.', c: 'Deacon Corvane lit the fire on the Hierophant\'s order — and carried Ashka\'s hearth north in a lantern.' }, 1600);
+
+export const greyspireWorks = investigation(INV.greyspireWorks, 'The Greyspire Works', 2,
+  'Carts, cages and crates all ship to something called the Greyspire Works. Nobody has seen it and come back.', MAIN.marrowgate,
+  { d: 'Quarrymen talk about carts that hum.', a: 'Follow the shipments: the quarry carts, the abbey sluice, the caldera kilns.', c: 'The Works are furnaces. They render stilled Wardens into fuel for the Still Flame.' }, 2000);
+
+export const hierophantsName = investigation(INV.hierophant, 'The Hierophant\'s Name', 2,
+  'Nobody alive has seen the Hierophant\'s face. Nobody remembers a name.', MAIN.mirefast,
+  { d: 'Ashka grows quiet whenever the Hierophant is mentioned.', a: 'Find out who — or what — the Hierophant is.', c: 'The first Hierophant was drake-blooded, and the Flame needs that blood to stay still.' }, 2000);
+
+export const investigations: readonly QuestDef[] = [saltLedgers, stilledChoir, ashenRoad, greyspireWorks, hierophantsName];

@@ -2,7 +2,7 @@ import type { EncounterZoneDef, FishingSpotDef, NpcDef, PropDef, RegionDef, Worl
 import {
   all, always, built, defeated, fieldDone, flagIs, liberated, not, obtained, questAtLeast, questIs, recruited,
 } from './conditions';
-import { BUILDING, ENC, FLAG, NPC, QUEST, REGION, SPECIES, SPOT } from './ids';
+import { BUILDING, ENC, FLAG, MAIN, NPC, QUEST, REGION, SPECIES, SPOT } from './ids';
 
 /*
  * One 250 × 250 m chunk. +x east, +z south.
@@ -105,6 +105,8 @@ export const npcs: readonly NpcDef[] = [
     dialogues: [
       { when: questIs(QUEST.ledger, 'COMPLETED'), dialogueId: 'dlg.maren.done' },
       { when: questIs(QUEST.ledger, 'ACTIVE'), dialogueId: 'dlg.maren.active' },
+      { when: questIs(MAIN.prologue, 'DISCOVERED'), dialogueId: 'dlg.maren.prologue' },
+      { when: questIs(MAIN.prologue, 'ACTIVE'), dialogueId: 'dlg.maren.prologueHint' },
       { when: always, dialogueId: 'dlg.maren.offer' },
     ],
   },
@@ -171,6 +173,7 @@ export const npcs: readonly NpcDef[] = [
   {
     id: NPC.odo, name: 'Odo', role: 'Harbormaster', sprite: 'npc.harbormaster', position: { x: 212, z: 110 },
     dialogues: [
+      { when: all(questIs(QUEST.ledger, 'COMPLETED'), not(flagIs('clue:harbourBooks'))), dialogueId: 'dlg.odo.books' },
       { when: obtained('item.fish.lanternEel'), dialogueId: 'dlg.odo.barge' },
       { when: always, dialogueId: 'dlg.odo.harbour' },
     ],
@@ -187,7 +190,10 @@ export const npcs: readonly NpcDef[] = [
   {
     id: NPC.barge, name: 'Brinefolk Trader', role: 'Barge merchant', sprite: 'npc.brinefolk', position: { x: 226, z: 100 },
     presentWhen: obtained('item.fish.lanternEel'),
-    dialogues: [{ when: always, dialogueId: 'dlg.barge.hello' }],
+    dialogues: [
+      { when: not(flagIs('clue:bargeManifest')), dialogueId: 'dlg.barge.manifest' },
+      { when: always, dialogueId: 'dlg.barge.hello' },
+    ],
   },
   {
     id: NPC.lark, name: 'Lark', role: 'Surveyor of Hearthstead', sprite: 'npc.surveyor', position: { x: 112, z: 196 },
@@ -232,14 +238,5 @@ export const fishingSpots: readonly FishingSpotDef[] = [
   },
 ];
 
-export const world: WorldMapDef = {
-  seed: 0x4e6b_3a17,
-  playerStart: { x: 82, z: 86 },
-  regions,
-  props,
-  npcs,
-  encounterZones,
-  fishingSpots,
-  paths,
-  water,
-};
+/** The Lanternwick frontier chunk (0, 0) as authored for the slice; `src/data/campaign` adds the rest of the continent. */
+export const sliceWorld = { seed: 0x4e6b_3a17, playerStart: { x: 82, z: 86 }, regions, props, npcs, encounterZones, fishingSpots, paths, water } as const;

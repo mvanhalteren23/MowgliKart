@@ -151,7 +151,7 @@ export const marrowgate: ChapterContent = {
     cragIbex: { id: 'cragIbex', name: 'Crag Ibex', sprite: 'animal.deer.cragIbex', speed: 8.5, wanderSpeed: 0.9, alertRadius: 18, scentSensitivity: 2.4,
       drops: [{ itemId: 'item.ibexHorn', chance: 0.75 }, { itemId: 'item.softHide', chance: 0.5 }], herd: { min: 2, max: 3 }, habitat: [{ center: P(45, 60), radius: 16 }] },
     heathGrouse: { id: 'heathGrouse', name: 'Heath Grouse', sprite: 'animal.bird.heathGrouse', speed: 10, wanderSpeed: 0.8, alertRadius: 11, scentSensitivity: 0.6,
-      drops: [{ itemId: 'item.heathPlume', chance: 0.9 }, { itemId: 'item.grouseFeather', chance: 0.4 }], herd: { min: 2, max: 3 }, habitat: [{ center: P(105, 225), radius: 12 }] },
+      drops: [{ itemId: 'item.heathPlume', chance: 0.9 }, { itemId: 'item.grouseFeather', chance: 0.4 }], herd: { min: 2, max: 2 }, habitat: [{ center: P(105, 225), radius: 12 }] },
   },
   fish: {
     'fish.moorChar': { id: 'fish.moorChar', name: 'Moor Char', itemId: 'item.fish.moorChar', rarity: 'common', fight: 0.24, weight: 40 },
@@ -292,7 +292,7 @@ export const marrowgate: ChapterContent = {
       summary: 'Holt\'s last words point Tobin to the moor warden of Cairnfield, who has something of Holt\'s — once Tobin proves he still hunts like a warden.',
       chronicle: chron('Tobin keeps glancing toward the high moor.', 'Shoot a crag ibex cleanly from downwind and drive off the moor poachers, then report to Ash Corrie.', 'Ash Corrie handed Tobin the Hearthwood Compass. Its needle points into the wind, as a warden\'s should.'),
       discoverWhen: all(questIs('companion.tobin.oath', 'COMPLETED'), questIs(MAIN.marrowgate, 'COMPLETED')),
-      activateWhen: always,
+      activateWhen: fieldDone('huntShot', 'cragIbex'),
       objectives: [
         obj('shootIbex', 'Take a crag ibex with Tobin\'s bowshot.', fieldDone('huntShot', 'cragIbex'), P(45, 60)),
         obj('poachers', 'Drive off the moor poachers.', defeated('enc.moorPoachers'), P(25, 200)),
@@ -305,7 +305,7 @@ export const marrowgate: ChapterContent = {
       summary: 'Marrowgate\'s yard pit has a champion who fights like someone Vesna used to know.',
       chronicle: chron('Vesna heard the bastion pit is open again.', 'Bring the pit-boss a crag ibex run down by hand, then beat Brannagh the Pit-Queen.', 'Brannagh fell laughing. The old champions, Rhonda says, went south to the Sunken Ring.'),
       discoverWhen: all(questIs(QUEST.debts, 'COMPLETED'), questIs(MAIN.marrowgate, 'COMPLETED')),
-      activateWhen: always,
+      activateWhen: fieldDone('huntDash', 'cragIbex'),
       objectives: [
         obj('dashIbex', 'Run down a crag ibex with a dash.', fieldDone('huntDash', 'cragIbex'), P(45, 60)),
         obj('winPit', 'Win the bout in the bastion pit.', defeated('enc.marrowPit'), P(150, 155), fieldDone('huntDash', 'cragIbex')),
@@ -318,7 +318,7 @@ export const marrowgate: ChapterContent = {
       summary: 'A shaft collapsed in the Quarry Cut the night Hadrik escaped. He has counted the men behind it every night since.',
       chronicle: chron('Hadrik won\'t stop looking at the collapsed shaft.', 'Roll through the collapsed quarry shaft and bring Jessup\'s crew out.', 'Six quarrymen saw daylight. Hadrik pretended there was dust in his eyes.'),
       discoverWhen: questIs(MAIN.marrowgate, 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('roll', GATE.quarryRubble),
       objectives: [
         obj('rollShaft', 'Roll through the collapsed shaft (Hadrik).', crossed('roll', GATE.quarryRubble), P(215, 58)),
         obj('freeCrew', 'Free Jessup\'s crew.', flagIs('hadrik.crewFreed'), P(226, 62), crossed('roll', GATE.quarryRubble)),
@@ -330,7 +330,7 @@ export const marrowgate: ChapterContent = {
       summary: 'The Covenant sent a new overseer to the Quarry Cut — the man who broke Hadrik\'s wrist the year he refused.',
       chronicle: chron('Word from the Cut: Overseer Grayle is back.', 'Return through the Fallen Pass and break Overseer Grayle\'s hold on the Quarry Cut.', 'Grayle is gone and the Cut is the quarrymen\'s. They gave Hadrik the gate-ward\'s pauldron.'),
       discoverWhen: questIs('companion.hadrik.rockfall', 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('roll', GATE.fallenPass),
       objectives: [
         obj('pass', 'Roll the Fallen Pass clear (Hadrik).', crossed('roll', GATE.fallenPass), P(0, 130)),
         obj('grayle', 'Defeat Overseer Grayle in the Quarry Cut.', defeated('enc.quarryOverseer'), P(175, 20)),

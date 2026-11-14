@@ -15,8 +15,19 @@ export function inWater(p: Vec2, water: WorldMapDef['water'], margin = 0): boole
   return water.some((w) => dist(p, w.center) < w.radius + margin);
 }
 
-/** Keep a point inside the chunk (with a small margin) and push it out of any water body. */
-export function constrain(p: Vec2, water: WorldMapDef['water'], margin = 1): Vec2 {
+/** Chunk (cx, cz) containing a world point. */
+export const chunkOf = (p: Vec2): { readonly cx: number; readonly cz: number } => ({ cx: Math.floor(p.x / CHUNK_SIZE), cz: Math.floor(p.z / CHUNK_SIZE) });
+
+/**
+ * Keep a point inside a chunk (with a small margin) and push it out of any water body.
+ * `anchor` picks the chunk (default: chunk (0, 0)); animals pass their home so they never leave it.
+ */
+export function constrain(p: Vec2, water: WorldMapDef['water'], margin = 1, anchor: Vec2 = { x: 0, z: 0 }): Vec2 {
+  const { cx, cz } = chunkOf(anchor);
+  const minX = cx * CHUNK_SIZE + margin;
+  const maxX = (cx + 1) * CHUNK_SIZE - margin;
+  const minZ = cz * CHUNK_SIZE + margin;
+  const maxZ = (cz + 1) * CHUNK_SIZE - margin;
   let x = p.x;
   let z = p.z;
   for (let pass = 0; pass < 3; pass++) {
@@ -34,8 +45,8 @@ export function constrain(p: Vec2, water: WorldMapDef['water'], margin = 1): Vec
         }
       }
     }
-    x = Math.min(CHUNK_SIZE - margin, Math.max(margin, x));
-    z = Math.min(CHUNK_SIZE - margin, Math.max(margin, z));
+    x = Math.min(maxX, Math.max(minX, x));
+    z = Math.min(maxZ, Math.max(minZ, z));
   }
   return { x, z };
 }

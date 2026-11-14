@@ -5,7 +5,8 @@ import { constrain, dist, wrapAngle } from './geometry';
 import { RngCursor, mix } from './rng';
 
 /**
- * Wind / scent hunting.
+ * Wind / scent hunting. Habitats span every authored chunk; each animal stays inside the
+ * chunk of its home (and out of water) for its whole life.
  *
  * Angle convention everywhere (wind direction, animal heading, shot facing):
  * radians, `atan2(dz, dx)` — 0 = +x (east), π/2 = +z (south).
@@ -48,11 +49,11 @@ export function createHunting(db: GameDatabase): WorldSystems['hunting'] {
         const count = r.int(sp.herd.min, sp.herd.max);
         const ha = r.range(0, TAU);
         const hr = r.range(0, hab.radius * 0.4);
-        const herdCenter = constrain({ x: hab.center.x + Math.cos(ha) * hr, z: hab.center.z + Math.sin(ha) * hr }, water, 2);
+        const herdCenter = constrain({ x: hab.center.x + Math.cos(ha) * hr, z: hab.center.z + Math.sin(ha) * hr }, water, 2, hab.center);
         for (let i = 0; i < count; i++) {
           const a = r.range(0, TAU);
           const d = r.range(1, Math.min(6, hab.radius * 0.5));
-          const pos = constrain({ x: herdCenter.x + Math.cos(a) * d, z: herdCenter.z + Math.sin(a) * d }, water, 2);
+          const pos = constrain({ x: herdCenter.x + Math.cos(a) * d, z: herdCenter.z + Math.sin(a) * d }, water, 2, hab.center);
           out.push({
             id: `${sp.id}:${hi}:${i}`,
             speciesId: sp.id,
@@ -145,7 +146,7 @@ export function createHunting(db: GameDatabase): WorldSystems['hunting'] {
 
       heading = wrapAngle(heading);
       const moved = speed > 0
-        ? constrain({ x: animal.position.x + Math.cos(heading) * speed * step, z: animal.position.z + Math.sin(heading) * speed * step }, water, 1)
+        ? constrain({ x: animal.position.x + Math.cos(heading) * speed * step, z: animal.position.z + Math.sin(heading) * speed * step }, water, 1, animal.home)
         : animal.position;
       nextAnimals.push({ ...animal, position: moved, heading, mood, alertness });
     });

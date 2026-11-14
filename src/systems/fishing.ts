@@ -18,19 +18,25 @@ export const BITE_WINDOW = 1.4;
 export const MAX_REEL = 45;
 /** Weight multiplier for fish whose preferred lure is used. */
 export const LURE_BONUS = 3;
+/** Max weight bonus for non-common fish at castQuality 1 (+50 %). */
+export const RARE_CAST_BONUS = 0.5;
 const HOOK_TENSION = 0.2;
 const HOOK_PROGRESS = 0.1;
 
 export function createFishing(db: GameDatabase): WorldSystems['fishing'] {
   const fishOf = (id: string): FishDef | undefined => db.fish[id];
 
-  function cast(spotId: string, lureId: ItemId | null, seed: number): FishingSession {
+  function cast(spotId: string, lureId: ItemId | null, seed: number, castQuality = 0.5): FishingSession {
+    const q = Number.isFinite(castQuality) ? Math.min(1, Math.max(0, castQuality)) : 0.5;
     const spot = db.world.fishingSpots.find((s) => s.id === spotId);
     if (!spot) throw new Error(`Unknown fishing spot: ${spotId}`);
     const pool = spot.fish.map((id) => fishOf(id)).filter((f): f is FishDef => f !== undefined);
     if (pool.length === 0) throw new Error(`Fishing spot ${spotId} has no fish`);
     const r = new RngCursor(seed);
-    const weights = pool.map((f) => f.weight * (lureId !== null && f.preferredLure === lureId ? LURE_BONUS : 1));
+    // A good cast reaches deeper water: uncommon-and-rarer fish gain up to +50 % weight at quality 1.
+    const weights = pool.map(
+      (f) => f.weight * (lureId !== null && f.preferredLure === lureId ? LURE_BONUS : 1) * (f.rarity === 'common' ? 1 : 1 + RARE_CAST_BONUS * q),
+    );
     const total = weights.reduce((a, b) => a + b, 0);
     let roll = r.float() * total;
     let chosen = pool[pool.length - 1];
@@ -45,7 +51,8 @@ export function createFishing(db: GameDatabase): WorldSystems['fishing'] {
     }
     // Rarer fish keep you waiting a little longer.
     const rarityDelay = { common: 0, uncommon: 0.5, rare: 1.2, legend: 2 }[chosen.rarity];
-    const biteAt = 2 + r.float() * 3.5 + rarityDelay;
+    // Better casts land where the fish are: ×1.3 wait at quality 0, ×1 at 0.5, ×0.7 at 1.
+    const biteAt = (2 + r.float() * 3.5 + rarityDelay) * (1.3 - 0.6 * q);
     return {
       spotId, fishId: chosen.id, lureId, phase: 'waiting', timer: 0, biteAt, tension: 0, progress: 0, rng: r.state,
     };

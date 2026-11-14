@@ -11,7 +11,7 @@ const rich = { 'item.softHide': 5, 'item.wolfPelt': 2, 'item.covenantIron': 3, '
 
 describe('township system', () => {
   it('starts empty', () => {
-    expect(township.initial()).toEqual({ recruited: [], built: {} });
+    expect(township.initial()).toEqual({ recruited: [], built: {}, levels: {} });
   });
 
   it('canRecruit checks the recruit table, duplicates and requirements', () => {
@@ -56,6 +56,7 @@ describe('township system', () => {
     expect(b.ok).toBe(true);
     if (!b.ok) return;
     expect(b.state.built).toEqual({ 'plot.hearthNorth': 'building.carpentry' });
+    expect(b.state.levels).toEqual({ 'plot.hearthNorth': 1 });
     expect(s1.built).toEqual({});
     expect(b.events).toEqual([
       { type: 'build', buildingId: 'building.carpentry' },
@@ -86,5 +87,58 @@ describe('township system', () => {
     const hs = db.world.regions.find((x) => x.id === db.township.regionId);
     if (!hs) throw new Error('no region');
     expect(Math.hypot(pos.x - hs.center.x, pos.z - hs.center.z)).toBeLessThan(hs.radius);
+  });
+
+  describe('upgrades', () => {
+    const plenty = Object.fromEntries(Object.keys(db.items).map((k) => [k, 99]));
+    const built = () => {
+      const r = township.recruit(NPC.bram, township.initial());
+      if (!r.ok) throw new Error('recruit failed');
+      const b = township.build('plot.hearthNorth', 'building.carpentry', r.state, 999, plenty);
+      if (!b.ok) throw new Error('build failed');
+      return b.state;
+    };
+    const carpentry = db.township.buildings.find((x) => x.id === 'building.carpentry')!;
+
+    it('needs a building, coin, materials and (for level 3) the story', () => {
+      const s0 = township.initial();
+      expect(township.canUpgrade('plot.hearthNorth', s0, 9999, plenty, {}, yes, {}).reason).toMatch(/Nothing is built/);
+      expect(township.canUpgrade('plot.nowhere', s0, 9999, plenty, {}, yes, {}).ok).toBe(false);
+      const s1 = built();
+      expect(township.canUpgrade('plot.hearthNorth', s1, 0, plenty, {}, yes, {}).reason).toMatch(/coin/);
+      expect(township.canUpgrade('plot.hearthNorth', s1, 9999, {}, {}, yes, {}).reason).toMatch(/Needs/);
+      expect(township.canUpgrade('plot.hearthNorth', s1, 9999, plenty, {}, no, {}).ok).toBe(true); // level 2 has no story gate
+      const u2 = township.upgrade('plot.hearthNorth', s1, 9999, plenty, {}, yes, {});
+      if (!u2.ok) throw new Error(u2.reason);
+      expect(township.canUpgrade('plot.hearthNorth', u2.state, 9999, plenty, {}, no, {}).reason).toBe(carpentry.upgrades[1]?.requirementText);
+    });
+
+    it('raises the level one step at a time with flag events and spend, never mutating', () => {
+      const s1 = built();
+      const u2 = township.upgrade('plot.hearthNorth', s1, 9999, plenty, {}, yes, {});
+      if (!u2.ok) throw new Error(u2.reason);
+      expect(s1.levels['plot.hearthNorth']).toBe(1);
+      expect(u2.state.levels['plot.hearthNorth']).toBe(2);
+      expect(u2.state.built).toEqual(s1.built);
+      expect(u2.events).toEqual([{ type: 'setFlag', key: carpentry.upgrades[0]!.unlocksFlag, value: true }]);
+      expect(u2.spend.coin).toBe(carpentry.upgrades[0]!.cost.coin);
+      expect(u2.spend.items).toEqual(carpentry.upgrades[0]!.cost.items.map((i) => ({ itemId: i.itemId, qty: i.qty })));
+      const u3 = township.upgrade('plot.hearthNorth', u2.state, 9999, plenty, {}, yes, {});
+      if (!u3.ok) throw new Error(u3.reason);
+      expect(u3.state.levels['plot.hearthNorth']).toBe(3);
+      expect(u3.events).toEqual([{ type: 'setFlag', key: carpentry.upgrades[1]!.unlocksFlag, value: true }]);
+      const u4 = township.upgrade('plot.hearthNorth', u3.state, 9999, plenty, {}, yes, {});
+      expect(u4.ok).toBe(false);
+      if (!u4.ok) expect(u4.reason).toMatch(/fully upgraded/);
+    });
+
+    it('passes the real story condition to the evaluator', () => {
+      const s1 = built();
+      const u2 = township.upgrade('plot.hearthNorth', s1, 9999, plenty, {}, yes, {});
+      if (!u2.ok) throw new Error(u2.reason);
+      const seen: Condition[] = [];
+      township.canUpgrade('plot.hearthNorth', u2.state, 9999, plenty, {}, (c) => (seen.push(c), true), {});
+      expect(seen).toEqual([carpentry.upgrades[1]!.requires]);
+    });
   });
 });

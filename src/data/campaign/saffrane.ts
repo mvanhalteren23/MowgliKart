@@ -130,7 +130,7 @@ export const saffrane: ChapterContent = {
   },
   species: {
     duneHare: { id: 'duneHare', name: 'Dune Hare', sprite: 'animal.hare.dune', speed: 11, wanderSpeed: 1.5, alertRadius: 9, scentSensitivity: 1.6,
-      drops: [{ itemId: 'item.hareFoot', chance: 0.7 }, { itemId: 'item.duneHide', chance: 0.4 }], herd: { min: 2, max: 3 }, habitat: [{ center: P(150, 230), radius: 12 }] },
+      drops: [{ itemId: 'item.hareFoot', chance: 0.7 }, { itemId: 'item.duneHide', chance: 0.4 }], herd: { min: 2, max: 2 }, habitat: [{ center: P(150, 230), radius: 12 }] },
     sandGazelle: { id: 'sandGazelle', name: 'Sand Gazelle', sprite: 'animal.deer.sandGazelle', speed: 11, wanderSpeed: 1.2, alertRadius: 20, scentSensitivity: 2,
       drops: [{ itemId: 'item.duneHide', chance: 0.85 }, { itemId: 'item.smokedVenison', chance: 0.4 }], herd: { min: 2, max: 3 }, habitat: [{ center: P(40, 90), radius: 14 }] },
   },
@@ -264,7 +264,7 @@ export const saffrane: ChapterContent = {
       summary: 'Quill\'s old colleague was walled into the hall\'s vault with the one ledger the Covenant could not burn.',
       chronicle: chron('Quill keeps tapping the vault wall.', 'Unseal the Ledger Vault and find Orrin.', 'Orrin handed over the Unburned Ledger. It is warm, and it is right.'),
       discoverWhen: questIs(MAIN.saffrane, 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('unseal', GATE.duneVault),
       objectives: [
         obj('unseal', 'Unseal the Ledger Vault (Quill).', crossed('unseal', GATE.duneVault), P(32, 150)),
         obj('orrin', 'Find Orrin and the ledger.', flagIs('quill.ledgerFound'), P(20, 152), crossed('unseal', GATE.duneVault)),
@@ -276,7 +276,7 @@ export const saffrane: ChapterContent = {
       summary: 'Pim\'s uncle keeps a clock-shop on an island in Saffrane\'s oasis, across a channel too fast to swim.',
       chronicle: chron('Pim wants to visit family in Saffrane.', 'Bound across the Oasis Channel and visit Tib.', 'Tib gave Pim the Everwound Mainspring. It has opinions.'),
       discoverWhen: questIs(MAIN.mirefast, 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('leap', GATE.oasisChannel),
       objectives: [
         obj('channel', 'Spring-leap the Oasis Channel (Pim).', crossed('leap', GATE.oasisChannel), P(212, 92)),
         obj('tib', 'Visit Uncle Tib.', flagIs('pim.tibMet'), P(214, 106), crossed('leap', GATE.oasisChannel)),
@@ -288,7 +288,7 @@ export const saffrane: ChapterContent = {
       summary: 'A choir of stilled wisps sings the Covenant hymn by the Dust Gorge, and the desert winds go flat.',
       chronicle: chron('Orla says the desert wind sounds wrong.', 'Ride the Dust Gorge winds, then out-sing and break the Still Choir.', 'The Still Choir broke on Orla\'s last verse. Yev gave her the Echoing Conch.'),
       discoverWhen: all(questIs('companion.orla.bellLoft', 'COMPLETED'), questIs(MAIN.saffrane, 'COMPLETED')),
-      activateWhen: always,
+      activateWhen: crossed('glide', GATE.dustGorge),
       objectives: [
         obj('gorge', 'Glide the Dust Gorge (Orla).', crossed('glide', GATE.dustGorge), P(250, 120)),
         obj('choir', 'Break the Still Choir.', defeated('enc.stillChoir'), P(235, 165)),
@@ -301,7 +301,7 @@ export const saffrane: ChapterContent = {
       summary: 'Vesna\'s sister trained in the Sunken Ring before her marker was sold. Its champion is waiting.',
       chronicle: chron('Vesna keeps looking south toward the dunes.', 'Run down a dune hare by hand, then win the bout of the Sunken Ring.', 'Ysolde yielded. Vesna wears the Ashen Laurel where Greyspire can see it.'),
       discoverWhen: all(questIs('companion.vesna.ringSister', 'COMPLETED'), questIs(MAIN.saffrane, 'COMPLETED')),
-      activateWhen: always,
+      activateWhen: fieldDone('huntDash', 'duneHare'),
       objectives: [
         obj('dashHare', 'Run down a dune hare with a dash.', fieldDone('huntDash', 'duneHare'), P(150, 230)),
         obj('bout', 'Win the bout of the Sunken Ring.', defeated('enc.sunkenRing'), P(190, 228), fieldDone('huntDash', 'duneHare')),

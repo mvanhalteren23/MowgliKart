@@ -98,3 +98,53 @@ describe('tick', () => {
     expect(fishing.result(herring)?.summonsMerchant).toBe(false);
   });
 });
+
+describe('castQuality', () => {
+  it('defaults to 0.5 and is deterministic', () => {
+    expect(fishing.cast(SPOT.pier, null, 7)).toEqual(fishing.cast(SPOT.pier, null, 7, 0.5));
+    expect(fishing.cast(SPOT.pier, null, 7, 0.9)).toEqual(fishing.cast(SPOT.pier, null, 7, 0.9));
+  });
+
+  it('a better cast bites sooner (×0.7 at 1, ×1.3 at 0) for the same fish roll', () => {
+    for (let seed = 1; seed < 50; seed++) {
+      const poor = fishing.cast(SPOT.tarnShore, null, seed, 0);
+      const mid = fishing.cast(SPOT.tarnShore, null, seed, 0.5);
+      const good = fishing.cast(SPOT.tarnShore, null, seed, 1);
+      if (poor.fishId === good.fishId && mid.fishId === good.fishId) {
+        expect(good.biteAt).toBeCloseTo((mid.biteAt / 1) * 0.7);
+        expect(poor.biteAt).toBeCloseTo(mid.biteAt * 1.3);
+      }
+      expect(good.biteAt).toBeGreaterThan(1);
+    }
+  });
+
+  it('shifts weight toward rarer fish, by at most +50 %', () => {
+    const rareShare = (q: number) => {
+      let n = 0;
+      for (let seed = 0; seed < 4000; seed++) if (db.fish[fishing.cast(SPOT.pier, null, seed * 2654435761, q).fishId]?.rarity !== 'common') n++;
+      return n / 4000;
+    };
+    const low = rareShare(0);
+    const high = rareShare(1);
+    expect(high).toBeGreaterThan(low * 1.15);
+    // Analytic bound: odds of a non-common fish can grow at most 1.5×.
+    expect(high / (1 - high)).toBeLessThan((low / (1 - low)) * 1.5 * 1.15);
+  });
+
+  it('clamps silly qualities', () => {
+    expect(fishing.cast(SPOT.pier, null, 3, 7)).toEqual(fishing.cast(SPOT.pier, null, 3, 1));
+    expect(fishing.cast(SPOT.pier, null, 3, -2)).toEqual(fishing.cast(SPOT.pier, null, 3, 0));
+  });
+});
+
+describe('campaign fishing spots', () => {
+  it('every spot can be cast at and lands its common fish with the simple strategy', () => {
+    for (const spot of db.world.fishingSpots) {
+      const s = fishing.cast(spot.id, null, 11, 0.8);
+      expect(spot.fish).toContain(s.fishId);
+      const common = spot.fish.find((f) => db.fish[f]?.rarity === 'common');
+      if (!common) continue;
+      expect(play({ ...s, fishId: common }, naive).phase, spot.id).toBe('landed');
+    }
+  });
+});

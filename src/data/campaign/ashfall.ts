@@ -103,10 +103,10 @@ export const ashfall: ChapterContent = {
   },
   species: {
     ashhare: { id: 'ashhare', name: 'Ash Hare', sprite: 'animal.hare.ash', speed: 10.5, wanderSpeed: 1.4, alertRadius: 8, scentSensitivity: 1.4,
-      drops: [{ itemId: 'item.ashHareFur', chance: 0.85 }, { itemId: 'item.hareFoot', chance: 0.3 }], herd: { min: 2, max: 3 },
+      drops: [{ itemId: 'item.ashHareFur', chance: 0.85 }, { itemId: 'item.hareFoot', chance: 0.3 }], herd: { min: 2, max: 2 },
       habitat: [{ center: P(175, 210), radius: 14 }] },
     cinderjay: { id: 'cinderjay', name: 'Cinderjay', sprite: 'animal.bird.cinderjay', speed: 12, wanderSpeed: 1, alertRadius: 14, scentSensitivity: 0.5,
-      drops: [{ itemId: 'item.cinderjayPlume', chance: 0.9 }], herd: { min: 2, max: 3 },
+      drops: [{ itemId: 'item.cinderjayPlume', chance: 0.9 }], herd: { min: 2, max: 2 },
       habitat: [{ center: P(40, 40), radius: 12 }] },
   },
   fish: {
@@ -209,7 +209,7 @@ export const ashfall: ChapterContent = {
       summary: 'With the Wyrm\'s Lament in hand, Ashka remembers a second spring at Ashfall — the hearth-spring the clan fed with its own fire.',
       chronicle: chron('Ashka stirs whenever Kael thinks of Ashfall.', 'Find the glamoured hearth-spring at Ashfall and fish what the clan left in it.', 'A hearth carp rose from the clan\'s spring, and Henna gave Kael the clan hearthstone. Ashka burns brighter.'),
       discoverWhen: all(questIs(QUEST.embers, 'COMPLETED'), questIs(MAIN.prologue, 'COMPLETED')),
-      activateWhen: always,
+      activateWhen: fieldDone('drakeSight', 'spot.hearthSpring'),
       objectives: [
         obj('revealSpring', 'Use Drake-Sight beside the Weeping Spring to reveal the hearth-spring.', fieldDone('drakeSight', 'spot.hearthSpring'), P(55, 161)),
         obj('fishSpring', 'Fish the hearth-spring (Kael).', fieldDone('fish', 'spot.hearthSpring'), P(55, 161), fieldDone('drakeSight', 'spot.hearthSpring')),
@@ -222,7 +222,7 @@ export const ashfall: ChapterContent = {
       summary: 'Quill is certain the Covenant kept a record of the night Ashfall burned. Covenant record-keepers always do. She means to read it.',
       chronicle: chron('Quill keeps asking about Ashfall\'s cellars.', 'Unseal the vault under Ashfall Hollow and read what the Covenant wrote there.', 'The vault\'s memory confessed: Ashka was "delivered" to the Greyspire Works. Quill copied every word.'),
       discoverWhen: questIs('companion.quill.duneVault', 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('unseal', GATE.ashfallVault),
       objectives: [
         obj('unsealVault', 'Unseal the vault door at Ashfall (Quill).', crossed('unseal', GATE.ashfallVault), P(72, 140)),
         obj('readVault', 'Let Quill read the vault-warden\'s memory.', flagIs('quill.vaultRead'), P(63, 146), crossed('unseal', GATE.ashfallVault)),

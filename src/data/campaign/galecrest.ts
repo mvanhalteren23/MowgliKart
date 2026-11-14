@@ -116,7 +116,7 @@ export const galecrest: ChapterContent = {
   },
   species: {
     galeSwift: { id: 'galeSwift', name: 'Gale Swift', sprite: 'animal.bird.galeSwift', speed: 13, wanderSpeed: 1.2, alertRadius: 15, scentSensitivity: 0.3,
-      drops: [{ itemId: 'item.galeFeather', chance: 0.9 }], herd: { min: 2, max: 3 }, habitat: [{ center: P(205, 120), radius: 12 }] },
+      drops: [{ itemId: 'item.galeFeather', chance: 0.9 }], herd: { min: 2, max: 2 }, habitat: [{ center: P(205, 120), radius: 12 }] },
     mistDeer: { id: 'mistDeer', name: 'Mist Deer', sprite: 'animal.deer.mist', speed: 9.5, wanderSpeed: 1, alertRadius: 17, scentSensitivity: 2.8,
       drops: [{ itemId: 'item.mistVelvet', chance: 0.7 }, { itemId: 'item.softHide', chance: 0.6 }], herd: { min: 2, max: 3 }, habitat: [{ center: P(40, 210), radius: 14 }] },
   },
@@ -237,7 +237,7 @@ export const galecrest: ChapterContent = {
       summary: 'Fenn says the hermit Saro kept every hymn the Covenant forbade — on a terrace only a glider can reach.',
       chronicle: chron('Orla wants to visit an old friend across the Updraft Gulf.', 'Glide the Updraft Gulf and find Saro on the top terrace.', 'Saro gave Orla the Hymnal of the High Wind: every forbidden verse, written in the dark.'),
       discoverWhen: questIs(MAIN.galecrest, 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('glide', GATE.galecrestUpdraft),
       objectives: [
         obj('glideGulf', 'Glide across the Updraft Gulf (Orla).', crossed('glide', GATE.galecrestUpdraft), P(178, 168)),
         obj('meetSaro', 'Find Saro on the top terrace.', flagIs('orla.hymnFound'), P(198, 194), crossed('glide', GATE.galecrestUpdraft)),
@@ -249,7 +249,7 @@ export const galecrest: ChapterContent = {
       summary: 'Sable heard a bell-founder hides on a cliff-ledge in Galecrest with one chime-cage the Covenant never collected.',
       chronicle: chron('Sable is asking about Galecrest\'s cliffs.', 'Grapple up to the chime-ledge, find the bell-founder and cut the last cage open. Bring a gale swift down by hand on the way.', 'The last chime-cage is cut and its voice is free. Sable says it sang her a thank-you; Orla says it was flat.'),
       discoverWhen: questIs('companion.sable.crevasse', 'COMPLETED'),
-      activateWhen: always,
+      activateWhen: crossed('grapple', GATE.galecrestLedge),
       objectives: [
         obj('climbLedge', 'Grapple up the chime-ledge cliff (Sable).', crossed('grapple', GATE.galecrestLedge), P(40, 112)),
         obj('cutCage', 'Cut the last chime-cage open.', flagIs('sable.chimesCut'), P(26, 114), crossed('grapple', GATE.galecrestLedge)),

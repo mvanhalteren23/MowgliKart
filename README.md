@@ -6,20 +6,25 @@ Vite · TypeScript (strict) · React Three Fiber · Three.js · Zustand · Minip
 ```
 npm install
 npm run dev        # play at the printed URL (landscape; touch or keyboard)
-npm test           # 242 tests
+npm test           # 432 tests
 npm run build      # typecheck + bundle
 ```
 
 Keyboard: WASD/arrows move · Space/Enter context action · Q/E or 1–3 swap leader · F field action ·
 C chronicle · I inspector · T township.
 
-## The slice
-- One 250 m × 250 m frontier biome: Lanternwick, Saltmarket and the Cinder Ring, the Hearthstead township plot.
-- Swappable leaders: **Kael** (fishing, Drake-Sight, dragon forms), **Tobin** (hunting shot), **Vesna** (hunting dash).
-- Warden fusions **Ashka** (fire) and **Mirelle** (water), with Armor Break instead of permanent loss.
-- Main quest *The Lanternwick Ledger*; companion quests *Embers of the Clan* (relic **Wyrm's Lament**, scales
-  with level and liberated regions) and *Debts of the Cinder Ring* (signature **Cinder Ring Talon**, counter-attack hook).
-- Township: recruit the carpenter and blacksmith and raise their workshops.
+## The campaign
+- Ten connected 250 m × 250 m chunks across three acts: Ashfall Reach (prologue), the Lanternwick Frontier,
+  Galecrest Heights, Marrowgate March, the Mirefast Marshes, the Glass Dunes of Saffrane, Hollowroot Weald,
+  the Rimefold, the Emberdeep Caldera and Greyspire.
+- Nine heroes. Kael, Tobin and Vesna start; Orla (glide), Hadrik (roll), Sable (grapple), Pim (leap),
+  Moss (commune) and Quill (unseal) join through the story and clear the traversal gates that open the world.
+- A ten-chapter story graph, Hollow Covenant investigations with 15 clues, and three endings.
+- Three-stage personal quest lines for all nine heroes, each awarding a bound scaling relic and a
+  build-altering signature item.
+- Kael's dragon forms: a hatchling, cinder, rime and storm forms, and an apex form unlocked in Act III.
+- Gesture mini-games: drag-to-aim hunting with wind and scent; flick-to-cast, crank-to-reel fishing.
+- Hearthstead township: six residents, six buildings, each upgradable to level 3.
 
 ## Layout
 | Path | What |

@@ -13,7 +13,7 @@ import { FLAG } from './ids';
  */
 export const dragonForms = {
   'form.emberWhelp': {
-    id: 'form.emberWhelp', name: 'Ember Whelp', element: 'fire', sprite: 'dragon.emberWhelp',
+    id: 'form.emberWhelp', name: 'Ember Whelp', element: 'fire', sprite: 'dragon.emberwhelp',
     syncRequired: 40, apCostToEnter: 8, apDrainPerTurn: 4, maxTurns: 3,
     statMultipliers: { atk: 1.3, mag: 1.3, def: 1.15, spd: 1.1 },
     affinities: { fire: 0.5, water: 1.25 },

@@ -192,3 +192,33 @@ describe('shoot & dash', () => {
     expect(hides / N).toBeLessThan(0.97);
   });
 });
+
+describe('campaign habitats', () => {
+  const chunkOf = (p: Vec2) => `${Math.floor(p.x / 250)},${Math.floor(p.z / 250)}`;
+
+  it('spawns every habitat on the continent, ≤ 60 animals, each inside its habitat chunk', () => {
+    const animals = hunting.spawn(db.world.seed);
+    expect(animals.length).toBeLessThanOrEqual(60);
+    const chunks = new Set(animals.map((a) => chunkOf(a.position)));
+    expect(chunks.size).toBe(db.world.chunks.length);
+    for (const a of animals) {
+      const sp = db.species[a.speciesId]!;
+      expect(sp.habitat.some((h) => chunkOf(h.center) === chunkOf(a.position)), a.id).toBe(true);
+      expect(chunkOf(a.home)).toBe(chunkOf(a.position));
+      expect(inWater(a.position), a.id).toBe(false);
+    }
+  });
+
+  it('a fleeing animal never leaves its chunk, even when chased toward the edge', () => {
+    const rim = db.species.rimeElk!;
+    const home = rim.habitat[0]!.center;
+    const elk: AnimalState = { id: 'elk', speciesId: rim.id, position: { x: home.x, z: home.z }, heading: 0, mood: 'fleeing', alertness: 1, home };
+    let s = { animals: [elk] as readonly AnimalState[], rng: 9 };
+    const hunter = { x: home.x + 10, z: home.z };
+    for (let i = 0; i < 400; i++) {
+      s = hunting.update(s.animals, hunter, { direction: Math.PI, speed: 6 }, 0, 0.2, s.rng);
+      expect(chunkOf(s.animals[0]!.position)).toBe(chunkOf(home));
+      expect(inWater(s.animals[0]!.position)).toBe(false);
+    }
+  });
+});
