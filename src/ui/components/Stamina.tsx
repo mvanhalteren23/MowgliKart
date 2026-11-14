@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { runtime } from '@/app/runtime';
 import { useGame } from '@/app/store';
-import { FALLBACK_SIZE, STAMINA_FILL_ASSET, STAMINA_FRAME_ASSET } from '../assetIds';
+import { FALLBACK_SIZE, STAMINA_EXHAUSTED_ASSET, STAMINA_FILL_ASSET, STAMINA_FRAME_ASSET } from '../assetIds';
 import { gaugeMode, staminaFraction, staminaPercent } from '../logic/stamina';
 import { AssetSprite } from './AssetSprite';
 
@@ -52,6 +52,7 @@ export function StaminaGauge() {
       <span ref={fillRef} className="ew-stamina__fill">
         <AssetSprite assetId={STAMINA_FILL_ASSET} fallback={FALLBACK_SIZE.staminaFill} fit={{ maxW: 120, maxH: 16 }} />
       </span>
+      <AssetSprite className="ew-stamina__exhausted" assetId={STAMINA_EXHAUSTED_ASSET} fallback={FALLBACK_SIZE.staminaFrame} fit={{ maxW: 128, maxH: 24 }} />
       <span ref={pctRef} className="ew-stamina__pct" />
     </div>
   );

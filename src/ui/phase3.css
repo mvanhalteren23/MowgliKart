@@ -186,14 +186,20 @@
   position: absolute;
   inset: 0;
   z-index: 45;
-  background: #fff;
+  display: grid;
+  place-items: center;
   pointer-events: none;
   opacity: 0;
   animation: ew-hitflash ease-out forwards;
 }
+.ew-flash .ew-asset[data-ready='1'] {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
 @keyframes ew-hitflash {
   0% {
-    opacity: 0.55;
+    opacity: 0.9;
   }
   100% {
     opacity: 0;
@@ -314,6 +320,14 @@
 }
 .ew-stamina[data-mode='exhausted'] .ew-asset--fallback {
   border-color: var(--bad);
+}
+.ew-stamina__exhausted {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.ew-stamina[data-mode='exhausted'] .ew-stamina__exhausted {
+  display: inline-flex;
 }
 .ew-stamina__frame {
   position: absolute;

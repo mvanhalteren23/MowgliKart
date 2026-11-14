@@ -1,28 +1,24 @@
 /**
- * HUD asset ids requested from the external pipeline (Phase 3). The manifest
- * entries live in `src/assets/manifests` (world-lore); sizes here are only the
- * debug-fallback frame size used until an entry/record is available.
+ * HUD asset ids — re-exported from the shared asset manifests (`@/assets/manifests`).
+ * Sizes here are only the debug-fallback frame size used when a record has no manifest entry.
  */
+import { ASSET, QTE_PROMPT_ASSET as MANIFEST_QTE_PROMPT } from '@/assets/manifests';
 import type { QteGrade, QteInput } from '@/types/contracts';
 import type { FrameSize } from './logic/assetView';
 
-export const QTE_PROMPT_ASSET: Readonly<Record<QteInput, string>> = {
-  up: 'hud.qte.prompt.up',
-  down: 'hud.qte.prompt.down',
-  left: 'hud.qte.prompt.left',
-  right: 'hud.qte.prompt.right',
-  tap: 'hud.qte.prompt.tap',
-};
-export const QTE_RING_ASSET = 'hud.qte.ring';
+export const QTE_PROMPT_ASSET: Readonly<Record<QteInput, string>> = MANIFEST_QTE_PROMPT;
+export const QTE_RING_ASSET: string = ASSET.qteRing;
 export const QTE_GRADE_ASSET: Readonly<Record<QteGrade, string>> = {
-  perfect: 'hud.qte.grade.perfect',
-  good: 'hud.qte.grade.good',
-  miss: 'hud.qte.grade.miss',
+  perfect: ASSET.qtePerfect,
+  good: ASSET.qteGood,
+  miss: ASSET.qteMiss,
 };
-export const STAMINA_FRAME_ASSET = 'hud.stamina.frame';
-export const STAMINA_FILL_ASSET = 'hud.stamina.fill';
+export const STAMINA_FRAME_ASSET: string = ASSET.staminaFrame;
+export const STAMINA_FILL_ASSET: string = ASSET.staminaFill;
+export const STAMINA_EXHAUSTED_ASSET: string = ASSET.staminaExhausted;
+export const HITSTOP_FLASH_ASSET: string = ASSET.hitStopFlash;
 
-/** Debug-fallback frame sizes (CSS px) when the manifest has no entry yet. */
+/** Debug-fallback frame sizes (CSS px) when the manifest has no entry. */
 export const FALLBACK_SIZE = {
   qtePrompt: { width: 128, height: 128 },
   qteRing: { width: 192, height: 192 },
@@ -31,4 +27,5 @@ export const FALLBACK_SIZE = {
   staminaFill: { width: 120, height: 16 },
   hazardIcon: { width: 32, height: 32 },
   mountIcon: { width: 48, height: 48 },
+  flash: { width: 64, height: 64 },
 } as const satisfies Record<string, FrameSize>;

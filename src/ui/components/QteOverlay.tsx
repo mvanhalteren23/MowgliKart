@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { getServices, useGame } from '@/app/store';
 import type { CombatState, QteGrade, QteInput, QteWindow } from '@/types/contracts';
-import { FALLBACK_SIZE, QTE_GRADE_ASSET, QTE_PROMPT_ASSET, QTE_RING_ASSET } from '../assetIds';
+import { FALLBACK_SIZE, HITSTOP_FLASH_ASSET, QTE_GRADE_ASSET, QTE_PROMPT_ASSET, QTE_RING_ASSET } from '../assetIds';
 import {
   answer,
   classifyRelease,
@@ -210,7 +210,11 @@ export function QteFeedback({ combat }: { combat: CombatState }) {
   const label = banner ? (banner.grade === 'perfect' ? 'PERFECT' : banner.grade === 'good' ? 'GOOD' : 'MISS') : '';
   return (
     <>
-      {flash && <div key={flash.key} className="ew-flash" data-testid="hitstop-flash" style={{ animationDuration: `${flash.ms}ms` }} />}
+      {flash && (
+        <div key={flash.key} className="ew-flash" data-testid="hitstop-flash" style={{ animationDuration: `${flash.ms}ms` }}>
+          <AssetSprite assetId={HITSTOP_FLASH_ASSET} fallback={FALLBACK_SIZE.flash} />
+        </div>
+      )}
       {banner && (
         <div key={banner.key} className={cx('ew-qte-banner', `is-${banner.grade}`)} data-testid="qte-grade" data-grade={banner.grade} role="status">
           <AssetSprite assetId={QTE_GRADE_ASSET[banner.grade]} fallback={FALLBACK_SIZE.qteGrade} fit={{ maxW: 260, maxH: 96 }} fallbackText={label} alt={label} />
