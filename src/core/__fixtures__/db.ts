@@ -3,7 +3,12 @@
  * Numbers are chosen for readable assertions, not balance.
  */
 import type {
+  AssetManifestEntry,
   DragonFormDef,
+  ElementalReactionDef,
+  HazardDef,
+  MountDef,
+  StaminaTuning,
   EnemyDef,
   FieldActionDef,
   FieldActionId,
@@ -69,6 +74,21 @@ const skills: Record<string, SkillDef> = {
   'skill.hex': { id: 'skill.hex', name: 'Hollow Hex', description: '', apCost: 5, target: 'enemy', element: 'shadow', kind: 'magical', power: 1.2 },
   'skill.spark': { id: 'skill.spark', name: 'Wick Spark', description: '', apCost: 2, target: 'enemy', element: 'fire', kind: 'magical', power: 1 },
   'skill.cinderRain': { id: 'skill.cinderRain', name: 'Cinder Rain', description: '', apCost: 3, target: 'allEnemies', element: 'fire', kind: 'magical', power: 0.6 },
+  // Phase 3 — elemental skills and quick-time heavy skills.
+  'skill.tideBolt': { id: 'skill.tideBolt', name: 'Tide Bolt', description: '', apCost: 0, target: 'enemy', element: 'water', kind: 'magical', power: 1 },
+  'skill.stormNeedle': { id: 'skill.stormNeedle', name: 'Storm Needle', description: '', apCost: 0, target: 'enemy', element: 'lightning', kind: 'magical', power: 1 },
+  'skill.rimeShard': { id: 'skill.rimeShard', name: 'Rime Shard', description: '', apCost: 0, target: 'enemy', element: 'ice', kind: 'magical', power: 1 },
+  'skill.emberDart': { id: 'skill.emberDart', name: 'Ember Dart', description: '', apCost: 0, target: 'enemy', element: 'fire', kind: 'magical', power: 1 },
+  'skill.galeCut': { id: 'skill.galeCut', name: 'Gale Cut', description: '', apCost: 0, target: 'enemy', element: 'wind', kind: 'magical', power: 1 },
+  'skill.tideWave': { id: 'skill.tideWave', name: 'Tide Wave', description: '', apCost: 0, target: 'allEnemies', element: 'water', kind: 'magical', power: 1 },
+  'skill.ringBreaker': {
+    id: 'skill.ringBreaker', name: 'Ring Breaker', description: '', apCost: 0, target: 'enemy', element: 'physical', kind: 'physical', power: 2,
+    qte: { prompts: 3, windowMs: 600, pool: ['up', 'down', 'left', 'right', 'tap'], goodMultiplier: 1.5, perfectMultiplier: 2, perfectWithin: 0.5, hitStopMs: 90 },
+  },
+  'skill.cinderStorm': {
+    id: 'skill.cinderStorm', name: 'Cinder Storm', description: '', apCost: 0, target: 'allEnemies', element: 'fire', kind: 'magical', power: 1,
+    qte: { prompts: 5, windowMs: 500, pool: ['tap', 'up'], goodMultiplier: 1.25, perfectMultiplier: 1.5, perfectWithin: 0.4, hitStopMs: 60 },
+  },
   'skill.stunBite': {
     id: 'skill.stunBite', name: 'Numbing Bite', description: '', apCost: 2, target: 'enemy', element: 'physical', kind: 'physical', power: 0.5,
     inflicts: { status: 'stun', chance: 1, turns: 1, potency: 0 },
@@ -143,6 +163,9 @@ const enemies: Record<string, EnemyDef> = {
   'en.sweeper': enemy('en.sweeper', { name: 'Chain Warden', stats: stats({ maxHp: 5000, atk: 40, spd: 50, maxAp: 999 }), skills: ['skill.sweep'], skillBias: 1 }),
   'en.glass': enemy('en.glass', { name: 'Glass Moth', stats: stats({ maxHp: 1, def: 0, spd: 1 }), xp: 3, coin: 2 }),
   'en.mage': enemy('en.mage', { name: 'Stillflame Cantor', stats: stats({ maxHp: 5000, mag: 40, spd: 50, maxAp: 999 }), skills: ['skill.cinderRain'], skillBias: 1 }),
+  'en.smasher': enemy('en.smasher', { name: 'Ring Bruiser', stats: stats({ maxHp: 5000, atk: 30, spd: 50, maxAp: 999 }), skills: ['skill.ringBreaker'], skillBias: 1 }),
+  'en.stormcaller': enemy('en.stormcaller', { name: 'Tempest Vicar', stats: stats({ maxHp: 5000, mag: 30, spd: 50, maxAp: 999 }), skills: ['skill.stormNeedle'], skillBias: 1 }),
+  'en.wisp': enemy('en.wisp', { name: 'Ash Wisp', stats: stats({ maxHp: 200, def: 0, res: 0, spd: 1 }), affinities: { water: 0 } }),
   'en.biter': enemy('en.biter', { name: 'Numbing Eel', stats: stats({ maxHp: 5000, atk: 10, spd: 50, maxAp: 999 }), skills: ['skill.stunBite'], skillBias: 1 }),
 };
 
@@ -238,6 +261,52 @@ const quests: QuestDef[] = [
   }),
 ];
 
+/* ── Phase 3: hazards, reactions, stamina, mounts, asset requests ─────── */
+
+const hz = (o: Omit<HazardDef, 'name' | 'description' | 'iconAssetId' | 'fxAssetId'>): HazardDef => ({
+  name: o.id, description: '', iconAssetId: `icon.${o.id}`, fxAssetId: `fx.${o.id}`, ...o,
+});
+
+export const hazards: Record<string, HazardDef> = {
+  'hz.waterPuddle': hz({ id: 'hz.waterPuddle', durationRounds: 3, amplifies: { lightning: 1.5 } }),
+  'hz.steamVent': hz({ id: 'hz.steamVent', durationRounds: 2, dot: { element: 'water', fraction: 0.05 }, obscures: 0.3 }),
+  'hz.electrifiedWater': hz({ id: 'hz.electrifiedWater', durationRounds: 2, dot: { element: 'lightning', fraction: 0.1 }, inflicts: { status: 'stun', chance: 0, turns: 1, potency: 0 } }),
+  'hz.frozenLake': hz({ id: 'hz.frozenLake', durationRounds: 2, inflicts: { status: 'soak', chance: 1, turns: 2, potency: 0.3 }, amplifies: { physical: 1.25 } }),
+  'hz.smokeCloud': hz({ id: 'hz.smokeCloud', durationRounds: 2, dot: { element: 'fire', fraction: 0.02 }, obscures: 0.5 }),
+  'hz.galeScar': hz({ id: 'hz.galeScar', durationRounds: 3 }),
+  'hz.cinderPyre': hz({ id: 'hz.cinderPyre', durationRounds: 1, dot: { element: 'fire', fraction: 0.5 } }),
+};
+
+export const reactions: ElementalReactionDef[] = [
+  // Listed out of priority order on purpose: the resolver must sort by priority.
+  { id: 'rx.puddle', name: 'Puddle', element: 'water', when: {}, spawns: 'hz.waterPuddle', priority: 90 },
+  { id: 'rx.steam', name: 'Steam Burst', element: 'water', when: { targetStatus: 'burn' }, consumes: { status: 'burn' }, spawns: 'hz.steamVent', bonusDamage: 0.5, priority: 10 },
+  { id: 'rx.electro', name: 'Galvanic Surge', element: 'lightning', when: { sideHazard: 'hz.waterPuddle' }, consumes: { hazard: 'hz.waterPuddle' }, spawns: 'hz.electrifiedWater', bonusDamage: 0.25, inflicts: { status: 'stun', chance: 1, turns: 1, potency: 0 }, priority: 10 },
+  { id: 'rx.freeze', name: 'Flash Freeze', element: 'ice', when: { sideHazard: 'hz.waterPuddle' }, consumes: { hazard: 'hz.waterPuddle' }, spawns: 'hz.frozenLake', priority: 10 },
+  { id: 'rx.smokeSteam', name: 'Smother', element: 'fire', when: { sideHazard: 'hz.steamVent' }, consumes: { hazard: 'hz.steamVent' }, spawns: 'hz.smokeCloud', priority: 20 },
+  { id: 'rx.smokeGale', name: 'Wind-fed Smoke', element: 'fire', when: { sideHazard: 'hz.galeScar' }, spawns: 'hz.smokeCloud', priority: 30 },
+  { id: 'rx.gale', name: 'Gale Scar', element: 'wind', when: {}, spawns: 'hz.galeScar', priority: 50 },
+];
+
+export const staminaTuning: StaminaTuning = {
+  max: 100, regenPerSec: 20, regenDelaySec: 1, sprintDrainPerSec: 25, sprintSpeedMultiplier: 1.6, recoverFraction: 0.5,
+};
+
+const mounts: Record<string, MountDef> = {
+  'mount.emberwing': {
+    id: 'mount.emberwing', name: 'Emberwing', description: '', kind: 'flight', hero: 'kael', speed: 20, boostSpeed: 30,
+    staminaDrainPerSec: 2, boostDrainPerSec: 10, ignoresCollision: true, altitude: 30,
+    camera: { distance: 20, pitchDeg: 30, lookHeight: 2 }, unlockWhen: { kind: 'always' }, unlockText: '',
+    assetId: 'mount.emberwing.sheet', iconAssetId: 'icon.mount.emberwing',
+  },
+};
+
+const assetRequests: AssetManifestEntry[] = [{
+  asset_id: 'mount.emberwing.sheet', type: 'spritesheet', target_path: 'public/assets/generated/mounts/emberwing.png',
+  resolution: { width: 512, height: 512 }, grid: { columns: 4, rows: 4, frame_width: 128, frame_height: 128 }, fps: 8, loop: true,
+  alpha_channel: true, prompt_spec: 'Fixture-only request: a small ember-scaled wyrm mount, original design.', status: 'pending', category: 'mount',
+}];
+
 const CLUE_FLAGS = ['clue:tithe', 'clue:ash', 'clue:bell'].map((key) => ({ kind: 'flag' as const, key }));
 
 const fieldActions = Object.fromEntries(
@@ -260,8 +329,14 @@ export const fixtureDb: GameDatabase = {
     tobin: hero('tobin', { playable: true, baseStats: stats({ spd: 11 }), fusionAffinity: ['mirelle'] }),
     vesna: hero('vesna', { playable: true, baseStats: stats({ maxHp: 200, atk: 30, spd: 14 }), skills: [{ skillId: 'skill.sweep', level: 1 }], fusionAffinity: ['ashka'] }),
     orla: hero('orla', { baseStats: stats({ mag: 30, spd: 13 }), skills: [{ skillId: 'skill.spark', level: 1 }, { skillId: 'skill.cinderRain', level: 1 }], joinQuest: 'q.inquiry' }),
-    hadrik: hero('hadrik'),
-    pim: hero('pim'),
+    hadrik: hero('hadrik', {
+      baseStats: stats({ maxHp: 300, atk: 40, spd: 20 }),
+      skills: [{ skillId: 'skill.ringBreaker', level: 1 }, { skillId: 'skill.cinderStorm', level: 1 }, { skillId: 'skill.claw', level: 1 }],
+    }),
+    pim: hero('pim', {
+      baseStats: stats({ maxHp: 300, mag: 30, spd: 21 }),
+      skills: ['skill.tideBolt', 'skill.stormNeedle', 'skill.rimeShard', 'skill.emberDart', 'skill.galeCut', 'skill.tideWave', 'skill.flameLash'].map((skillId) => ({ skillId, level: 1 })),
+    }),
     quill: hero('quill'),
     moss: hero('moss'),
     sable: hero('sable'),
@@ -282,6 +357,9 @@ export const fixtureDb: GameDatabase = {
     'enc.glass': { id: 'enc.glass', name: 'Moths', enemies: ['en.glass', 'en.glass'], canFlee: true },
     'enc.mage': { id: 'enc.mage', name: 'Cantor', enemies: ['en.mage'], canFlee: true },
     'enc.pair': { id: 'enc.pair', name: 'Pair', enemies: ['en.dummy', 'en.dummy'], canFlee: true },
+    'enc.smasher': { id: 'enc.smasher', name: 'Bruiser', enemies: ['en.smasher'], canFlee: true },
+    'enc.storm': { id: 'enc.storm', name: 'Vicar', enemies: ['en.stormcaller'], canFlee: true },
+    'enc.wisps': { id: 'enc.wisps', name: 'Wisps', enemies: ['en.wisp', 'en.dummy'], canFlee: true },
     'enc.fast': { id: 'enc.fast', name: 'Fast', enemies: ['en.fast'], canFlee: true },
   },
   gear,
@@ -309,6 +387,11 @@ export const fixtureDb: GameDatabase = {
     { id: 'end.ember', title: 'A Banked Ember', summary: '', priority: 1, when: { kind: 'count', atLeast: 2, of: CLUE_FLAGS } },
     { id: 'end.still', title: 'The Still Flame', summary: '', priority: 0, when: { kind: 'always' } },
   ],
+  hazards,
+  reactions,
+  mounts,
+  stamina: staminaTuning,
+  assetRequests,
   world: {
     seed: 1, playerStart: { x: 0, z: 0 }, regions: [], props: [], npcs: [], encounterZones: [], fishingSpots: [], paths: [], water: [],
     chunks: [{ cx: 0, cz: 0, name: 'Frontier', biome: 'frontier', act: 1, scatterProps: ['lantern'], foliageDensity: 0.5 }],

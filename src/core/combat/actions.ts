@@ -102,6 +102,9 @@ export function validate(ctx: CombatCtx, state: CombatState, action: CombatActio
       if (actor.side !== 'party') return fail('Only the party can flee.');
       if (!state.canFlee) return fail('There is no escape from this battle.');
       return OK;
+    case 'qte':
+      // Quick-time answers are handled by the QTE combat modifier before the core sees them.
+      return fail('No quick-time window is open.');
   }
 }
 
@@ -167,6 +170,8 @@ function resolve(ctx: CombatCtx, state: CombatState, actor: Combatant, action: C
       if (!success) return s;
       return emit({ ...s, phase: 'fled', activeId: null }, { type: 'end', outcome: 'fled' });
     }
+    case 'qte':
+      return state; // unreachable: rejected by validate
   }
 }
 
