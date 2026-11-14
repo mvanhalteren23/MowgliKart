@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QuestLog, WorldEvent, WorldFlags } from '@/types/contracts';
+import { fixtureDb } from './__fixtures__/db';
 import { core } from './__fixtures__/helpers';
 import { foldEvent } from './quests';
 
@@ -199,5 +200,45 @@ describe('quest state machine', () => {
     const r = dispatch({}, {}, { type: 'talk', npcId: 'npc.elder' });
     expect(r.log['q.ledger']?.status).toBe('DISCOVERED');
     expect(r.log['q.chain']?.status).toBe('HIDDEN');
+  });
+});
+
+describe('count conditions', () => {
+  const clues = ['clue:tithe', 'clue:ash', 'clue:bell'].map((key) => ({ kind: 'flag' as const, key }));
+  const found = (n: number): WorldFlags => Object.fromEntries(clues.slice(0, n).map((c) => [c.key, true]));
+
+  it('holds when at least `atLeast` sub-conditions hold, and nests', () => {
+    const log = initialLog();
+    expect(evaluate({ kind: 'count', of: clues, atLeast: 2 }, found(1), log)).toBe(false);
+    expect(evaluate({ kind: 'count', of: clues, atLeast: 2 }, found(2), log)).toBe(true);
+    expect(evaluate({ kind: 'count', of: clues, atLeast: 2 }, found(3), log)).toBe(true);
+    expect(evaluate({ kind: 'count', of: [], atLeast: 0 }, {}, log)).toBe(true);
+    expect(evaluate({ kind: 'count', of: [], atLeast: 1 }, {}, log)).toBe(false);
+    expect(evaluate({ kind: 'not', of: { kind: 'count', of: clues, atLeast: 1 } }, {}, log)).toBe(true);
+    expect(evaluate({ kind: 'all', of: [{ kind: 'always' }, { kind: 'count', of: [...clues, { kind: 'quest', questId: 'q.ledger', status: 'HIDDEN' }], atLeast: 2 }] }, found(1), log)).toBe(true);
+  });
+
+  it('drives an investigation HIDDEN → DISCOVERED → ACTIVE → COMPLETED, collecting a hero reward', () => {
+    const a = play([{ type: 'setFlag', key: 'clue:ash', value: true }]);
+    expect(a.log['q.inquiry']).toEqual({ status: 'ACTIVE', objectives: { 'o.two': false } });
+    expect(a.notes).toEqual(['q.inquiry:discovered', 'q.inquiry:activated']);
+    const b = play([{ type: 'setFlag', key: 'clue:bell', value: true }], a.flags, a.log);
+    expect(b.log['q.inquiry']).toEqual({ status: 'COMPLETED', objectives: { 'o.two': true } });
+    expect(b.rewards).toEqual([{ type: 'hero', heroId: 'orla' }, { type: 'flag', key: 'inquiry.done', value: true }]);
+    expect(b.flags['inquiry.done']).toBe(true);
+    expect(b.flags['quest:q.inquiry']).toBe('COMPLETED');
+    // un-finding a clue never moves the quest backwards
+    const c = play([{ type: 'setFlag', key: 'clue:bell', value: false }, { type: 'setFlag', key: 'clue:ash', value: false }], b.flags, b.log);
+    expect(c.log['q.inquiry']?.status).toBe('COMPLETED');
+    expect(c.rewards).toEqual([]);
+  });
+
+  it('resolves ending-style thresholds (highest priority whose count holds)', () => {
+    const resolve = (flags: WorldFlags) =>
+      [...fixtureDb.endings].sort((x, y) => y.priority - x.priority).find((e) => evaluate(e.when, flags, initialLog()))?.id;
+    expect(resolve(found(0))).toBe('end.still');
+    expect(resolve(found(1))).toBe('end.still');
+    expect(resolve(found(2))).toBe('end.ember');
+    expect(resolve(found(3))).toBe('end.dawn');
   });
 });

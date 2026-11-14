@@ -81,7 +81,7 @@ describe('dragonSurge (onTurnStart while transformed)', () => {
     expect(hook).toBeGreaterThan(drain);
     expect(ev[hook]).toMatchObject({ ownerId: KAEL, sourceGear: 'gear.surgeScale', note: expect.stringContaining('surges') });
     expect(ev[hook + 1]).toEqual({ type: 'apChange', targetId: KAEL, amount: 4 });
-    expect(get(s, KAEL)).toMatchObject({ sync: 60, ap: 50 - 5 + 4 });
+    expect(get(s, KAEL)).toMatchObject({ sync: 50 + 8 + 10, ap: 50 - 5 + 4 }); // +8 for being hit by the dummy
     expect(s.activeId).toBe(KAEL);
   });
 
@@ -106,7 +106,8 @@ describe('markedQuarry (onAttackLanded)', () => {
     expect(ev[i - 1]).toMatchObject({ type: 'damage', targetId: DUMMY });
     expect(ev[i]).toMatchObject({ type: 'hook', ownerId: TOBIN, hookId: HOOK_IDS.markedQuarry, sourceGear: 'gear.quarryFletch' });
     expect(ev[i + 1]).toEqual({ type: 'status', targetId: DUMMY, status: 'defDown', applied: true });
-    expect(get(s1, DUMMY).statuses).toContainEqual({ id: 'defDown', turns: 2, potency: 0.5 });
+    // applied with 2 turns; the dummy's own turn start has already ticked it once
+    expect(get(s1, DUMMY).statuses).toContainEqual({ id: 'defDown', turns: 1, potency: 0.5 });
   });
 
   it('never with chance 0; only for the wearer; not on hook-generated hits', () => {
@@ -167,8 +168,8 @@ describe('bulwark (onGuard)', () => {
     expect(ev[i - 1]).toEqual({ type: 'guard', actorId: KAEL });
     expect(ev[i]).toMatchObject({ ownerId: KAEL, hookId: HOOK_IDS.bulwark, sourceGear: 'gear.bulwarkPlate' });
     expect(get(s, KAEL).fusion?.armor).toBe(50);
-    expect(get(s, KAEL).statuses).toContainEqual({ id: 'guardUp', turns: 2, potency: 0.5 });
-    expect(get(s, TOBIN).statuses).toContainEqual({ id: 'guardUp', turns: 2, potency: 0.5 });
+    expect(ofType(ev, 'status').filter((x) => x.status === 'guardUp' && x.applied).map((x) => x.targetId)).toEqual([KAEL, TOBIN]);
+    expect(get(s, TOBIN).statuses).toContainEqual({ id: 'guardUp', turns: 1, potency: 0.5 }); // ticked at tobin's turn start
     expect(get(s, DUMMY).statuses).toEqual([]);
   });
 
@@ -248,9 +249,8 @@ describe('spellEcho (onAttackLanded, once per magical cast)', () => {
     expect(hooksOf(z, core.combat.step(z, { type: 'skill', skillId: 'skill.spark', targetId: DUMMY }))).toEqual([]);
     const a = core.combat.start(setup('enc.dummy', [wearing('orla', 'gear.echoLens')]), 9);
     expect(hooksOf(a, core.combat.step(a, { type: 'attack', targetId: DUMMY }))).toEqual([]);
-    let w = core.combat.start(setup('enc.dummy', [wearing('orla', 'gear.echoLens'), member('kael', { level: 5 })]), 9);
-    w = core.combat.step(w, { type: 'guard' }); // orla
-    expect(w.activeId).toBe(KAEL);
+    const w = core.combat.start(setup('enc.dummy', [wearing('orla', 'gear.echoLens'), member('kael', { level: 5 })]), 9);
+    expect(w.activeId).toBe(KAEL); // spd 14 at Lv 5, ahead of orla
     expect(hooksOf(w, core.combat.step(w, { type: 'skill', skillId: 'skill.flameLash', targetId: DUMMY }))).toEqual([]);
   });
 

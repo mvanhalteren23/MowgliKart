@@ -162,7 +162,7 @@ describe('the continent', () => {
     const key = (x: number, z: number) => `${x},${z}`;
     const set = new Set(chunks.map((c) => key(c.cx, c.cz)));
     const seen = new Set<string>([key(0, 0)]);
-    const queue = [[0, 0] as const];
+    const queue: [number, number][] = [[0, 0]];
     while (queue.length) {
       const [x, z] = queue.shift()!;
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {

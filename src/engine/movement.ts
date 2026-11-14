@@ -54,3 +54,70 @@ export function resolveMove(fromX: number, fromZ: number, dx: number, dz: number
   if (dz !== 0 && canStand(fromX, fromZ + dz)) return { x: fromX, z: fromZ + dz, blocked: true };
   return { x: fromX, z: fromZ, blocked: true };
 }
+
+/** Bounding radius of a collider around its centre. */
+export function colliderRadius(c: Collider): number {
+  return c.kind === 'circle' ? c.r : Math.hypot(c.hx, c.hz);
+}
+
+/**
+ * Spatial hash of colliders in named groups (static props, per-chunk dressing,
+ * gates, township). Groups can be replaced or removed as chunks stream.
+ */
+export class ColliderGrid {
+  private readonly cells = new Map<string, Set<Collider>>();
+  private readonly groups = new Map<string, readonly Collider[]>();
+
+  constructor(readonly cell: number = 24) {}
+
+  private keysFor(c: Collider): string[] {
+    const r = colliderRadius(c) + BODY_RADIUS;
+    const out: string[] = [];
+    const x0 = Math.floor((c.x - r) / this.cell);
+    const x1 = Math.floor((c.x + r) / this.cell);
+    const z0 = Math.floor((c.z - r) / this.cell);
+    const z1 = Math.floor((c.z + r) / this.cell);
+    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) out.push(`${i},${j}`);
+    return out;
+  }
+
+  /** Replace (or with an empty list, clear) a named group. */
+  setGroup(tag: string, colliders: readonly Collider[]): void {
+    const old = this.groups.get(tag);
+    if (old) {
+      for (const c of old) for (const k of this.keysFor(c)) this.cells.get(k)?.delete(c);
+    }
+    if (colliders.length === 0) {
+      this.groups.delete(tag);
+      return;
+    }
+    this.groups.set(tag, colliders);
+    for (const c of colliders) {
+      for (const k of this.keysFor(c)) {
+        let set = this.cells.get(k);
+        if (!set) {
+          set = new Set();
+          this.cells.set(k, set);
+        }
+        set.add(c);
+      }
+    }
+  }
+
+  hasGroup(tag: string): boolean {
+    return this.groups.has(tag);
+  }
+
+  get size(): number {
+    let n = 0;
+    for (const g of this.groups.values()) n += g.length;
+    return n;
+  }
+
+  blocked(x: number, z: number, radius: number = BODY_RADIUS): boolean {
+    const set = this.cells.get(`${Math.floor(x / this.cell)},${Math.floor(z / this.cell)}`);
+    if (!set) return false;
+    for (const c of set) if (hitsCollider(c, x, z, radius)) return true;
+    return false;
+  }
+}

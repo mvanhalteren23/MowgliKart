@@ -516,6 +516,8 @@ export interface CombatState {
   readonly liberatedRegions: number;
   /** Present once `phase === 'victory'`. */
   readonly rewards: CombatRewards | null;
+  /** World flags captured at encounter start (gates apex dragon forms). Never rebuild state field-by-field or these are lost. */
+  readonly flags?: WorldFlags;
 }
 
 /* ════════════════════════════════════════════════════════════════════════

@@ -467,7 +467,7 @@ export function upgradeTimeline(building: BuildingDef, level: number): readonly 
   const cur = Math.max(1, level);
   const mark = (l: number): UpgradeStepState => (l < cur ? 'done' : l === cur ? 'current' : l === cur + 1 ? 'next' : 'future');
   const base: UpgradeStep = { level: 1, name: building.name, perk: building.perk, description: building.description, propScale: 1, state: mark(1) };
-  const ups = [...building.upgrades]
+  const ups = [...(building.upgrades ?? [])]
     .sort((a, b) => a.level - b.level)
     .map((u) => ({
       level: u.level,
@@ -484,11 +484,11 @@ export function upgradeTimeline(building: BuildingDef, level: number): readonly 
 
 /** Prop scale at a level (largest upgrade ≤ level, 1 when none). */
 export function propScaleAt(building: BuildingDef, level: number): number {
-  const reached = building.upgrades.filter((u) => u.level <= level).sort((a, b) => b.level - a.level)[0];
+  const reached = (building.upgrades ?? []).filter((u) => u.level <= level).sort((a, b) => b.level - a.level)[0];
   return reached?.propScale ?? 1;
 }
 
-export const maxLevelOf = (building: BuildingDef): number => Math.max(1, ...building.upgrades.map((u) => u.level));
+export const maxLevelOf = (building: BuildingDef): number => Math.max(1, ...(building.upgrades ?? []).map((u) => u.level));
 
 /** Rank used to colour statuses consistently. */
 export const statusRank = (s: QuestStatus): number => QUEST_STATUS_ORDER.indexOf(s);

@@ -2,9 +2,10 @@
  * Deterministic foliage scatter per chunk (pure, three-free — uses only the
  * bootstrapper's analytic terrain sampling, which is safe in node).
  */
-import { fbm, hashString, pathDistance, sampleHeight, seededRandom, WATER_LEVEL, type FoliageKind } from '@/engine/bootstrapAssets';
+import { biomeAt, chunkAt, fbm, hashString, pathDistance, sampleHeight, seededRandom, WATER_LEVEL, type FoliageKind } from '@/engine/bootstrapAssets';
 import { CHUNK_SIZE, type WorldMapDef } from '@/types/contracts';
-import { distanceToPlayable, type FoliageDensity } from './streaming';
+import { FOLIAGE_PROFILES, foliageDensityFor, pickBigFoliage, pickSmallFoliage } from './biomes';
+import type { FoliageDensity } from './streaming';
 
 export interface FoliageInstance {
   readonly kind: FoliageKind;
@@ -56,6 +57,7 @@ export function scatterFoliage(world: WorldMapDef, cx: number, cz: number, opts:
   const ox = cx * CHUNK_SIZE;
   const oz = cz * CHUNK_SIZE;
   const seed = world.seed | 0;
+  const chunkDensity = foliageDensityFor(chunkAt(world, ox + CHUNK_SIZE / 2, oz + CHUNK_SIZE / 2));
 
   const push = (kind: FoliageKind, x: number, y: number, z: number, scale: number): void => {
     out.push({ kind, x, y, z, scale, phase: rnd() * Math.PI * 2, variation: rnd() * 2 - 1 });
@@ -69,26 +71,20 @@ export function scatterFoliage(world: WorldMapDef, cx: number, cz: number, opts:
       const z = oz + (j + rnd()) * BIG_CELL;
       const roll = rnd();
       const sizeRoll = rnd();
+      const pineRoll = rnd();
       const h = sampleHeight(world, x, z);
       if (h < WATER_LEVEL + 0.35) continue;
-      const pd = pathDistance(world, x, z);
-      if (pd < 3.5) continue;
+      if (pathDistance(world, x, z) < 3.5) continue;
       if (excluded(ex, x, z, 3)) continue;
-      const town = settled(world, x, z);
-      const forest = fbm(x / 60, z / 60, seed + 404, 3);
-      const treeChance = (forest > 0.55 ? 0.75 : forest > 0.45 ? 0.25 : 0.06) * (1 - town * 0.9);
-      if (roll < treeChance) {
-        const pine = h > 4.5 || fbm(x / 35, z / 35, seed + 9, 2) > 0.6;
-        push(pine ? 'pine' : 'tree', x, h, z, 0.8 + sizeRoll * 0.45);
-      } else if (roll < treeChance + 0.12 * (1 - town * 0.5)) {
-        push('bush', x, h, z, 0.75 + sizeRoll * 0.5);
-      } else if (roll < treeChance + 0.12 + (h > 5 ? 0.14 : 0.04)) {
-        push('rock', x, h, z, 0.6 + sizeRoll * 0.9);
-      }
+      const profile = FOLIAGE_PROFILES[biomeAt(world, x, z)];
+      const kind = pickBigFoliage(profile, roll, pineRoll, fbm(x / 60, z / 60, seed + 404, 3), settled(world, x, z), chunkDensity, h > 4.5);
+      if (!kind) continue;
+      const base = kind === 'rock' ? 0.6 + sizeRoll * 0.9 : kind === 'bush' ? 0.75 + sizeRoll * 0.5 : 0.8 + sizeRoll * 0.45;
+      push(kind, x, h, z, base);
     }
   }
 
-  // Small cells: grass tufts, flowers, reeds. Sparse chunks only get detail near the playable area.
+  // Small cells: grass tufts, flowers, reeds. Sparse (mid-ring) chunks keep ~15 % of the detail.
   const smallN = Math.floor(CHUNK_SIZE / SMALL_CELL);
   for (let j = 0; j < smallN; j++) {
     for (let i = 0; i < smallN; i++) {
@@ -96,10 +92,8 @@ export function scatterFoliage(world: WorldMapDef, cx: number, cz: number, opts:
       const z = oz + (j + rnd()) * SMALL_CELL;
       const roll = rnd();
       const sizeRoll = rnd();
-      if (opts.density === 'sparse') {
-        const d = distanceToPlayable(x, z);
-        if (d > 70 || rnd() < d / 70) continue;
-      }
+      const keep = rnd();
+      if (opts.density === 'sparse' && keep > 0.15) continue;
       const h = sampleHeight(world, x, z);
       if (h < WATER_LEVEL + 0.05) {
         if (h > WATER_LEVEL - 0.45 && roll < 0.35 && !excluded(ex, x, z, 1)) push('reed', x, Math.max(h, WATER_LEVEL - 0.25), z, 0.8 + sizeRoll * 0.4);
@@ -107,14 +101,12 @@ export function scatterFoliage(world: WorldMapDef, cx: number, cz: number, opts:
       }
       if (pathDistance(world, x, z) < 0.8) continue;
       if (excluded(ex, x, z, 0.5)) continue;
-      const town = settled(world, x, z);
       if (h < WATER_LEVEL + 0.5 && roll < 0.2) {
         push('reed', x, h, z, 0.7 + sizeRoll * 0.4);
         continue;
       }
-      const grassChance = 0.6 * (1 - town * 0.55);
-      if (roll < grassChance) push('grass', x, h, z, 0.75 + sizeRoll * 0.6);
-      else if (roll < grassChance + 0.09) push('flower', x, h, z, 0.8 + sizeRoll * 0.4);
+      const kind = pickSmallFoliage(FOLIAGE_PROFILES[biomeAt(world, x, z)], roll, settled(world, x, z), chunkDensity);
+      if (kind) push(kind, x, h, z, kind === 'reed' ? 0.7 + sizeRoll * 0.4 : kind === 'flower' ? 0.8 + sizeRoll * 0.4 : 0.75 + sizeRoll * 0.6);
     }
   }
   return out;
